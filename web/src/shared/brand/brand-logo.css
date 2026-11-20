@@ -1,18 +1,21 @@
 /*
  * Colour hooks of the Docklet Next logo, ported from logo-next/src/docklet-logo.css
- * (first-party study, same project). Deviation: the defaults map to the app's
- * palette roles instead of fixed cyan steps. The mark and "Docklet" use the
- * saturated primary (--control), "Next" the saturated secondary (--highlight):
- * the chosen colours as they are, shifted in lightness only where a scheme
- * needs it for 3:1 graphic contrast.
+ * (first-party study, same project). The logo keeps its brand colours in every
+ * palette: violet mark and "Docklet", cyan "Next" (DEFAULT_SECONDARY of the
+ * study renderer), one value per scheme with at least 3:1 graphic contrast.
  */
 .brand-logo {
-  --docklet-logo-primary: var(--control);
-  --docklet-logo-secondary: var(--highlight);
+  --docklet-logo-primary: #7f22fe;
+  --docklet-logo-secondary: #0092b8;
   display: inline-flex;
   align-items: center;
   height: var(--brand-logo-size, 32px);
   line-height: 0;
+}
+
+.dark .brand-logo {
+  --docklet-logo-primary: #8e51ff;
+  --docklet-logo-secondary: #00d3f2;
 }
 
 .brand-logo > .dln-logo {

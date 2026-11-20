@@ -9,99 +9,174 @@ package project
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"path/filepath"
+	"slices"
+	"strconv"
 
-	projectsync "github.com/florianfinn/docklet-next/backend/internal/project/children/sync"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	kit "go.getarcane.app/kit/pkg"
-	"strconv"
 )
 
-// ResolveRuntimeProjectIdentity finds one persisted owner using current files,
-// environment and the executable Compose model. The boolean is identity
-// evidence, not a permission or an archived-project mutability decision.
 func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, projectID, composeName string) (projecttypes.Reference, bool, error) {
+	ref, found, _, err := s.ResolveRuntimeProjectIdentityAcknowledged(ctx, projectID, composeName, "")
+	return ref, found, err
+}
+
+// Every persisted row contributes fresh evidence before duplicate precedence or
+// an acknowledgement is evaluated. Archived rows retain ownership too.
+func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.Context, projectID, composeName, acknowledgement string) (projecttypes.Reference, bool, *imageDTO.RuntimePeerOverrides, error) {
+	empty := projecttypes.Reference{}
 	if projectID == "" && composeName == "" {
-		return projecttypes.Reference{}, false, nil
+		return empty, false, nil, nil
 	}
 	var rows []Project
 	if err := s.db.WithContext(ctx).Find(&rows).Error; err != nil {
-		return projecttypes.Reference{}, false, fmt.Errorf("list runtime project identities: %w", err)
+		return empty, false, nil, fmt.Errorf("list runtime project identities: %w", err)
 	}
-	var match projecttypes.Reference
-	owners := make(map[string]int, len(rows))
+	type evidence struct {
+		row        *Project
+		name, file string
+		err        error
+	}
+	all := make([]evidence, 0, len(rows))
+	owners := map[string][]int{}
+	match := -1
+	var targetErr error
+	var unknown []imageDTO.RuntimeIdentityPeer
 	for i := range rows {
 		row := &rows[i]
-		// A requested ID must be checked, even when the name lookup would not
-		// otherwise select it. Unreadable peers, including archived rows, can
-		// conceal duplicate ownership and therefore block every successful lookup.
-		name, err := s.runtimeComposeName(ctx, row)
-		if err != nil && row.ID != projectID {
+		name, file, err := s.runtimeComposeEvidence(ctx, row)
+		all = append(all, evidence{row, name, file, err})
+		if err == nil && name != "" {
+			owners[name] = append(owners[name], i)
+			if projectID != "" && row.ID == projectID || projectID == "" && name == composeName {
+				match = i
+			}
+		}
+		if err != nil {
+			if row.ID == projectID {
+				targetErr = err
+			}
 			reason := "compose.identity-unreadable"
+			var missing *projects.MissingServiceEnvironmentError
+			if errors.As(err, &missing) {
+				reason = "compose.env-file-missing"
+			}
 			if UnsupportedUpdateLayout(err) != nil {
 				reason = "compose.selection-unsupported"
 			}
-			problem := imageDTO.Failure("runtime.target-unavailable", 409)
-			blocker := &imageDTO.RuntimeIdentityBlocker{Name: cmp.Or(row.Name, row.ID), Reason: reason, Archived: row.IsArchived}
-			problem.Problem.Blocker = imageDTO.SafeRuntimeIdentityBlocker(problem.Problem.Code, blocker)
-			if problem.Problem.Blocker == nil {
-				blocker.Name = row.ID
-				problem.Problem.Blocker = imageDTO.SafeRuntimeIdentityBlocker(problem.Problem.Code, blocker)
-			}
-			return projecttypes.Reference{}, false, problem
-		}
-		if err != nil {
-			return projecttypes.Reference{}, false, fmt.Errorf("read runtime project identity: %w", err)
-		}
-		if name == "" {
-			continue
-		}
-		owners[name]++
-		if projectID != "" {
-			if row.ID == projectID {
-				match = projecttypes.Reference{ID: row.ID, Name: name}
-			}
-		} else if name == composeName {
-			match = projecttypes.Reference{ID: row.ID, Name: name}
+			unknown = append(unknown, imageDTO.RuntimeIdentityPeer{PeerID: row.ID, Name: imageDTO.RuntimeDisplayName(row.Name, row.ID), Reason: reason, Archived: row.IsArchived, File: runtimeIdentityDisplayFile(file)})
 		}
 	}
-	if match.ID == "" || (composeName != "" && match.Name != composeName) || owners[match.Name] != 1 {
-		return projecttypes.Reference{}, false, nil
+	if targetErr != nil {
+		return empty, false, nil, fmt.Errorf("read runtime project identity: %w", targetErr)
 	}
-	return match, match.ID != "", nil
+	if match < 0 {
+		return empty, false, nil, nil
+	}
+	current := all[match]
+	// A recovered peer name is useful evidence but never authorizes that row as a target.
+	if current.file != "" && projectID != "" {
+		return empty, false, nil, fmt.Errorf("target service environment unavailable")
+	}
+	if composeName != "" && current.name != composeName {
+		return empty, false, nil, nil
+	}
+	if len(owners[current.name]) != 1 {
+		peer := current
+		for _, i := range owners[current.name] {
+			if i != match {
+				peer = all[i]
+				break
+			}
+		}
+		blocker := &imageDTO.RuntimeIdentityBlocker{Name: imageDTO.RuntimeDisplayName(peer.row.Name, peer.row.ID), PeerID: peer.row.ID, Archived: peer.row.IsArchived, Reason: "compose.duplicate", File: runtimeIdentityDisplayFile(peer.file)}
+		return empty, false, nil, runtimeIdentityProblem(blocker)
+	}
+	if current.file != "" {
+		return empty, false, nil, fmt.Errorf("target service environment unavailable")
+	}
+	uncertainty := imageDTO.NewRuntimeUncertainty(unknown)
+	if uncertainty != nil && uncertainty.Digest != acknowledgement {
+		first := uncertainty.Peers[0]
+		blocker := &imageDTO.RuntimeIdentityBlocker{Name: first.Name, PeerID: first.PeerID, Archived: first.Archived, Reason: "compose.name-undeterminable", Confirmable: true, Uncertainty: uncertainty}
+		return empty, false, nil, runtimeIdentityProblem(blocker)
+	}
+	var used *imageDTO.RuntimePeerOverrides
+	if uncertainty != nil {
+		slices.SortFunc(unknown, func(a, b imageDTO.RuntimeIdentityPeer) int { return cmp.Compare(a.PeerID, b.PeerID) })
+		used = &imageDTO.RuntimePeerOverrides{Count: len(unknown), Peers: slices.Clone(unknown[:min(len(unknown), 64)])}
+	}
+	return projecttypes.Reference{ID: current.row.ID, Name: current.name}, true, used, nil
 }
 
-func (s *ProjectService) runtimeComposeName(ctx context.Context, row *Project) (string, error) {
+func runtimeIdentityProblem(blocker *imageDTO.RuntimeIdentityBlocker) error {
+	problem := imageDTO.Failure("runtime.target-unavailable", 409)
+	problem.Problem.Blocker = imageDTO.SafeRuntimeIdentityBlocker(problem.Problem.Code, blocker)
+	return problem
+}
+
+// Both metadata discovery and executable selection use the same strict identity
+// loader. Neither path uses a cache, prepares binds, or writes project files.
+func (s *ProjectService) runtimeComposeEvidence(ctx context.Context, row *Project) (string, string, error) {
 	selected, err := s.ResolveProjectComposeFile(ctx, row)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	settings := s.settingsService.GetSettingsOrDefaults(ctx)
-	projectsDirectory, err := projects.GetProjectsDirectory(ctx, settings.ProjectsDirectory.Value)
+	root, err := projects.GetProjectsDirectory(ctx, settings.ProjectsDirectory.Value)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	autoInject := kit.ParseOrDefault(settings.AutoInjectEnv.Value, false, strconv.ParseBool)
-	dirName := cmp.Or(derefRuntimeDirName(row.DirName), row.Name)
-	metadata, err := projectsync.LoadComposeMetadata(ctx, row.Path, dirName, projectsDirectory, &row.Name, autoInject, s.projectPathMapper(ctx))
+	discovered, err := projects.DetectComposeFile(ctx, root, row.Path)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	model, executablePath, err := s.loadComposeProjectForProject(ctx, row, nil)
+	name := projects.NormalizeProjectName(row.Name)
+	metadata, missing, err := projects.LoadComposeIdentity(ctx, discovered, name, root, autoInject)
 	if err != nil {
-		return "", err
+		return "", runtimeMissingIdentityFile(row.Path, missing), err
 	}
-	if executablePath != selected || model.Name == "" || metadata.ResolvedProjectName == "" || model.Name != metadata.ResolvedProjectName {
-		return "", fmt.Errorf("project Compose identity differs between metadata and executable model")
+	model, executableMissing, err := projects.LoadComposeIdentity(ctx, selected, name, root, autoInject)
+	if err != nil {
+		return "", runtimeMissingIdentityFile(row.Path, executableMissing), err
 	}
-	return model.Name, nil
+	if selected != discovered || model.Name == "" || metadata.Name == "" || model.Name != metadata.Name {
+		return "", "", fmt.Errorf("project Compose identity differs between metadata and executable model")
+	}
+	missing = append(missing, executableMissing...)
+	slices.Sort(missing)
+	for _, path := range missing {
+		relative, err := filepath.Rel(row.Path, path)
+		if err == nil && imageDTO.SafeRuntimeFile(filepath.ToSlash(relative)) {
+			return model.Name, filepath.ToSlash(relative), nil
+		}
+	}
+	// An empty display path must not turn an unreadable target into an executable one.
+	if len(missing) != 0 {
+		return model.Name, "\x00", nil
+	}
+	return model.Name, "", nil
 }
 
-func derefRuntimeDirName(name *string) string {
-	if name == nil {
-		return ""
+func runtimeIdentityDisplayFile(file string) string {
+	if imageDTO.SafeRuntimeFile(file) {
+		return file
 	}
-	return *name
+	return ""
+}
+
+func runtimeMissingIdentityFile(root string, paths []string) string {
+	for _, path := range paths {
+		relative, err := filepath.Rel(root, path)
+		if err == nil && imageDTO.SafeRuntimeFile(filepath.ToSlash(relative)) {
+			return filepath.ToSlash(relative)
+		}
+	}
+	return ""
 }

@@ -31,23 +31,27 @@ that external Compose version. Updates require the supported layout described in
 
 | Boundary | This release |
 | --- | --- |
-| Agent contract advertised by hub and agent (`AgentHubVersion`) | `19` |
+| Agent contract advertised by hub and agent (`AgentHubVersion`) | `20` |
 | Minimum accepted agent contract (`MinimumAgentVersion`) | `18` |
 | Edge protocol marker | `edge-protocol/1` |
 | Minimum Edge marker value | `1` |
 
 Contract numbers are wire-contract versions, not product SemVer. Agents with
 contracts older than 18 cannot become compatible hosts; the hub reports
-`update-required` and `agent.update-required`. Contracts 18 and 19 must also have
+`update-required` and `agent.update-required`. Contracts 18, 19 and 20 must also have
 their expected schema fingerprints. Health/version reads and the agent update
 recovery routes remain available with authentication. This is the first release
 compatibility boundary for both Direct and Edge agents.
 
 A contract-18 agent stays usable for all host functions except optional
-modules. Modules need contract 19; on an older host, or an Edge agent that does
-not advertise the module commands, the module shows as unavailable for that host
-(`agent.update-required`) and receives no module call. Use **Update agent** to
-bring the host to the hub's version.
+modules and peer-stack confirmations. Modules need contract 19; on an older host,
+or an Edge agent that does not advertise the module commands, the module shows as
+unavailable for that host (`agent.update-required`) and receives no module call.
+
+Contract 20 adds the confirmation for runtime actions while another stack's
+Compose name cannot be determined. Agents on contract 18 or 19 keep all ordinary
+actions; such an action is refused there with "update the agent" and nothing
+runs. Use **Update agent** to bring the host to the hub's version.
 
 Each Edge peer advertises its own protocol marker. A missing, malformed or
 duplicate marker counts as protocol 1. This release records the marker without

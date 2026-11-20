@@ -124,6 +124,7 @@ func (c *RuntimeRemoteCoordinator) Start(ctx context.Context, ref RuntimeRunRefe
 			snapshot, final, err = runtimeHubDispositionTxInternal(tx, now, row, runtimeDispositionInternal{Disposition: "cancelled", By: *row.CallerID, Reason: "Runtime cancelled before dispatch"})
 			return err
 		}
+		options.AcknowledgedUncertainty = row.AcknowledgedUncertainty
 		canonical, err := runtimeCanonicalizeSemanticInternal(RuntimeCommand{Store: ref.Store, ProposedRunID: row.RunID, Operation: RuntimeOperation(*row.OperationID), Target: RuntimeTarget{Kind: *row.TargetKind, ID: *row.TargetID, Name: row.TargetName, ParentProjectID: row.ParentProjectID}, Options: options, Actor: usertypes.Actor{ID: *row.CallerID, Username: *row.CallerName}})
 		if err != nil {
 			return err

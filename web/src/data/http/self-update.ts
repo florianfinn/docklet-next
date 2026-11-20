@@ -5,10 +5,10 @@
 // Deviations: Original self-update intake and identity-owned activity/version following.
 
 import { CancelledError } from "@tanstack/react-query";
-import type { components } from "@/api/generated/schema";
+import type { HubUpdateSession } from "./hub-update-session";
 import type { CodedActionRun } from "../message-code";
-import { unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
-import { sameProductVersion, selfUpdateRef, validSelfUpdateCheck, selfUpdateCodeKey, type SelfUpdateCheck, type SelfUpdateInput, type SelfUpdateResponse } from "@/domain/self-update";
+import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
+import { selfUpdateRef, validSelfUpdateCheck, selfUpdateCodeKey, type SelfUpdateCheck, type SelfUpdateInput, type SelfUpdateResponse } from "@/domain/self-update";
 import { SELF_UPDATE_PHASE_KEYS } from "../wire-catalogue-self-update";
 import { wireKey } from "../wire-catalogue";
 import { object, runtimeError } from "./runtime-mapping";
@@ -22,11 +22,11 @@ interface Options {
   capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>;
   generation: () => number;
   readRun: (host: string, id: string, signal: AbortSignal) => Promise<CodedActionRun>;
-  reload?: () => void;
+  hubSession?: HubUpdateSession;
 }
 
-export function createSelfUpdates({ baseUrl, client, capability, generation, readRun, reload = () => window.location.reload() }: Options) {
-  let epoch = 0, reloaded = false;
+export function createSelfUpdates({ baseUrl, client, capability, generation, readRun, hubSession }: Options) {
+  let epoch = 0;
   const controllers = new Set<AbortController>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const following = new Set<string>();
@@ -57,7 +57,9 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
       return body;
     } catch (error) {
       current();
-      if (input && !(error instanceof Error && "outcome" in error)) throw runtimeError("update.outcome-unknown");
+      const gateway = error instanceof AdapterOutcomeError && error.outcome.kind === "error"
+        && error.outcome.code === "http.error" && (error.outcome.status ?? 0) >= 500;
+      if (input && (!(error instanceof Error && "outcome" in error) || path.startsWith("/environments/0/") && gateway)) throw runtimeError("update.outcome-unknown");
       throw error;
     } finally { stopTimer(); controllers.delete(controller); parent?.removeEventListener("abort", abort); }
   }
@@ -68,8 +70,8 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
     if (owner !== generation() || version !== epoch) throw new CancelledError();
     if (!cap.available) throw unavailable("selfUpdate", selfUpdateRef(host), cap.disabledReasonCode);
   }
-  function follow(host: string, id: string, target: string) {
-    if (following.has(id)) return;
+  function follow(host: string, id: string) {
+    if (host === "0" || following.has(id)) return;
     following.add(id);
     const owner = generation(), version = epoch, deadline = Date.now() + 21 * 60_000;
     let delay = 1000;
@@ -81,21 +83,9 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
       const stopTimer = pausableTimeout(15_000, () => controller.abort());
       let done = false;
       try {
-        const [run, app] = await Promise.allSettled([
-          readRun(host, id, controller.signal),
-          host === "0" ? request("/app-version", undefined, controller.signal) : Promise.resolve(undefined),
-        ]);
+        const run = await readRun(host, id, controller.signal).catch(() => undefined);
         if (!current()) return;
-        if (run.status === "fulfilled" && run.value.id === id && run.value.hostId === host) {
-          const status = run.value.status;
-          const active = status === "running" || status === "queued";
-          done = !active && status !== "succeeded" || host !== "0" && !active;
-          const info = (app.status === "fulfilled" ? app.value : undefined) as components["schemas"]["VersionInfo"] | undefined;
-          if (host === "0" && status === "succeeded" && sameProductVersion(info?.currentVersion, target)) {
-            done = true;
-            if (!reloaded) { reloaded = true; reload(); }
-          }
-        }
+        if (run?.id === id && run.hostId === host) done = run.status !== "running" && run.status !== "queued";
       } finally {
         stopTimer(); controllers.delete(controller);
         if (current() && !done && Date.now() < deadline) {
@@ -112,20 +102,21 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
       const value = await request(`/environments/${encodeURIComponent(host)}/system/upgrade/check`) as SelfUpdateCheck;
       if (!validSelfUpdateCheck(value)) throw runtimeError("update.check-unavailable");
       // Recover following after navigation or a browser refresh from the durable operation.
-      if (value.operation?.runId && value.operation.phase !== "settled") follow(host, value.operation.runId, value.operation.targetVersion);
+      if (host === "0") hubSession?.observe(value.operation);
+      else if (value.operation?.runId && value.operation.phase !== "settled") follow(host, value.operation.runId);
       return value;
     },
     selfUpdate(host: string, input: SelfUpdateInput): Promise<string> {
       const existing = pending.get(host); if (existing) return existing;
-      const task = (async () => {
+      const submit = async () => {
         await allowed(host);
         if (!input.targetVersion?.trim()) throw runtimeError("update.invalid-target");
         const row = await request(`/environments/${encodeURIComponent(host)}/system/upgrade`, input) as SelfUpdateResponse;
         if (row?.accepted !== true) throw runtimeError(selfUpdateCodeKey(row?.code) ? row.code! : "update.check-unavailable");
         if (!row.opId || !row.runId || !wireKey(SELF_UPDATE_PHASE_KEYS, row.phase)) throw runtimeError("update.check-unavailable");
-        follow(host, row.runId, input.targetVersion);
-        return row.runId;
-      })();
+        return row;
+      };
+      const task = host === "0" && hubSession ? hubSession.start(input.targetVersion ?? "", submit) : submit().then(row => { follow(host, row.runId!); return row.runId!; });
       pending.set(host, task);
       void task.finally(() => { if (pending.get(host) === task) pending.delete(host); }).catch(() => {});
       return task;

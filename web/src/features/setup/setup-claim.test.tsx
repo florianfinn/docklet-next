@@ -57,27 +57,25 @@ const routes = [
 const entries = (["local", "proxy", "none"] as const).flatMap((mode) => ["/dashboard", "/login", "/setup"].map((entry) => ({ mode, entry })));
 it.each(entries)("a pending $mode hub opens the claim from $entry without a sign-in screen", async ({ mode, entry }) => {
   const { router } = renderRoutes(routes, [entry], hubAdapter({ pending: true, mode, forced: mode !== "local", claims: [] }));
-  expect(await screen.findByLabelText("Setup-Code") !== null).toBe(true);
+  expect(await screen.findByLabelText("Benutzername des Administrators") !== null).toBe(true);
+  expect(screen.queryByLabelText("Setup-Code") === null).toBe(true);
   expect(router.state.location.pathname).toBe("/setup");
   expect(screen.queryByLabelText("Benutzername") === null).toBe(true);
 });
 
-it("claims with code, mode and administrator, then continues in the wizard", async () => {
-  const hub: Hub = { pending: true, claims: [], refuse: { status: 403, code: "setup.code-invalid" } };
+it("claims with mode and administrator, without a setup code, then continues in the wizard", async () => {
+  const hub: Hub = { pending: true, claims: [], refuse: { status: 409, code: "auth.password-required" } };
   renderRoutes(routes, ["/setup"], hubAdapter(hub));
-  await userEvent.type(await screen.findByLabelText("Setup-Code"), "WRON-GCOD-E000");
-  await userEvent.type(screen.getByLabelText("Benutzername des Administrators"), "owner");
+  await userEvent.type(await screen.findByLabelText("Benutzername des Administrators"), "owner");
   await userEvent.type(screen.getByLabelText("Neues Passwort"), "Example-Setup-Password1!");
   await userEvent.type(screen.getByLabelText("Passwort wiederholen"), "Example-Setup-Password1!");
   await userEvent.click(screen.getByRole("button", { name: "Administrator anlegen" }));
-  expect((await screen.findByRole("alert")).textContent).toContain("Der Setup-Code stimmt nicht");
+  expect((await screen.findByRole("alert")) !== null).toBe(true);
 
   hub.refuse = undefined;
-  await userEvent.clear(screen.getByLabelText("Setup-Code"));
-  await userEvent.type(screen.getByLabelText("Setup-Code"), "ABCD-EFGH-JKMN");
   await userEvent.click(screen.getByRole("button", { name: "Administrator anlegen" }));
-  await waitFor(() => expect(screen.queryByLabelText("Setup-Code") === null).toBe(true));
-  expect(hub.claims.at(-1)).toEqual({ code: "ABCD-EFGH-JKMN", mode: "local", username: "owner", password: "Example-Setup-Password1!" });
+  await waitFor(() => expect(screen.queryByLabelText("Benutzername des Administrators") === null).toBe(true));
+  expect(hub.claims.at(-1)).toEqual({ mode: "local", username: "owner", password: "Example-Setup-Password1!" });
   // The wizard continues with the hub step; the access step is complete.
   expect(await screen.findByLabelText("IP-Adresse") !== null).toBe(true);
 });
@@ -86,8 +84,7 @@ it("shows no validation error while a successful claim hands over to the wizard"
   let release!: () => void;
   const hub: Hub = { pending: true, claims: [], hold: new Promise<void>((r) => { release = r; }) };
   renderRoutes(routes, ["/setup"], hubAdapter(hub));
-  await userEvent.type(await screen.findByLabelText("Setup-Code"), "ABCD-EFGH-JKMN");
-  await userEvent.type(screen.getByLabelText("Benutzername des Administrators"), "owner");
+  await userEvent.type(await screen.findByLabelText("Benutzername des Administrators"), "owner");
   await userEvent.type(screen.getByLabelText("Neues Passwort"), "Example-Setup-Password1!");
   await userEvent.type(screen.getByLabelText("Passwort wiederholen"), "Example-Setup-Password1!");
   await userEvent.click(screen.getByRole("button", { name: "Administrator anlegen" }));
@@ -100,8 +97,7 @@ it("shows no validation error while a successful claim hands over to the wizard"
 it("sends no password outside local mode and needs trusted proxies for proxy mode", async () => {
   const hub: Hub = { pending: true, claims: [] };
   renderRoutes(routes, ["/setup"], hubAdapter(hub));
-  await userEvent.type(await screen.findByLabelText("Setup-Code"), "ABCD-EFGH-JKMN");
-  await userEvent.type(screen.getByLabelText("Benutzername des Administrators"), "owner");
+  await userEvent.type(await screen.findByLabelText("Benutzername des Administrators"), "owner");
   await userEvent.click(screen.getByRole("radio", { name: /Reverse Proxy/ }));
   await userEvent.click(screen.getByRole("button", { name: "Administrator anlegen" }));
   expect(screen.getByText("IP-Adressen oder CIDRs des Proxys eingeben") !== null).toBe(true);
@@ -110,7 +106,7 @@ it("sends no password outside local mode and needs trusted proxies for proxy mod
   expect(screen.queryByLabelText("Neues Passwort") === null).toBe(true);
   await userEvent.click(screen.getByRole("button", { name: "Administrator anlegen" }));
   await waitFor(() => expect(hub.claims).toHaveLength(1));
-  expect(hub.claims[0]).toEqual({ code: "ABCD-EFGH-JKMN", mode: "none", username: "owner" });
+  expect(hub.claims[0]).toEqual({ mode: "none", username: "owner" });
 });
 
 it("shows a forced mode locked and claims with it", async () => {
@@ -118,7 +114,6 @@ it("shows a forced mode locked and claims with it", async () => {
   renderRoutes(routes, ["/setup"], hubAdapter(hub));
   expect((await screen.findByText(/AUTH_MODE legt die Anmeldung/)).textContent).toContain("Kein Login");
   expect(screen.queryByRole("radio", { name: /Lokaler Admin/ }) === null).toBe(true);
-  await userEvent.type(screen.getByLabelText("Setup-Code"), "ABCD-EFGH-JKMN");
   await userEvent.type(screen.getByLabelText("Benutzername des Administrators"), "owner");
   await userEvent.click(screen.getByRole("button", { name: "Administrator anlegen" }));
   await waitFor(() => expect(hub.claims).toHaveLength(1));

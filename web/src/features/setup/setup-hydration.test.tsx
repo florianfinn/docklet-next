@@ -104,7 +104,7 @@ it("late discovery fills the untouched domain beside a typed IP but never a clea
     const domain = screen.getByLabelText("Domain") as HTMLInputElement;
     if (clearDomain) { await userEvent.type(domain, "x"); await userEvent.clear(domain); }
     release(domainOnly);
-    await screen.findByRole("list", { name: "Erkannte Adressen" });
+    await screen.findByRole("group", { name: "Erkannte Adressen" });
     expect([ip.value, domain.value]).toEqual(["192.0.2.25:3552", clearDomain ? "" : "https://hub.example.com"]);
     view.unmount();
     restartSetup();

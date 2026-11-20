@@ -2,7 +2,7 @@
 // Revision: 462df7e945082b44e1d90532d8296aa9743c4b6e
 // Retrieved: 2026-11-18
 // License: Apache-2.0
-// Deviations: Original first-run identity claim: setup code, sign-in mode and first administrator.
+// Deviations: Original first-run identity claim: sign-in mode and first administrator (M30: no setup code).
 
 import { KeyRound, Lock, ShieldOff, Waypoints } from "lucide-react";
 import { useState } from "react";
@@ -25,7 +25,7 @@ import { patchSetup } from "./setup-draft";
 
 type Configuration = components["schemas"]["AuthSignInConfiguration"];
 
-const CLAIM_ERRORS = ["setup.code-invalid", "setup.rate-limited", "setup.not-pending", "auth.mode-forced", "auth.proxy-unverified", "auth.password-required", "user.username-taken"] as const;
+const CLAIM_ERRORS = ["setup.not-pending", "auth.mode-forced", "auth.proxy-unverified", "auth.password-required", "user.username-taken"] as const;
 type ClaimError = (typeof CLAIM_ERRORS)[number];
 
 function claimError(cause: unknown): ClaimError | "invalid" | "unavailable" {
@@ -37,18 +37,17 @@ function claimError(cause: unknown): ClaimError | "invalid" | "unavailable" {
   return "unavailable";
 }
 
-/** Catalogue keys cannot contain dots: setup.code-invalid → setupCodeInvalid. */
+/** Catalogue keys cannot contain dots: setup.not-pending → setupNotPending. */
 function errorKey(code: string) {
-  return code.replace(/[.-](\w)/g, (_, c: string) => c.toUpperCase()) as "setupCodeInvalid";
+  return code.replace(/[.-](\w)/g, (_, c: string) => c.toUpperCase()) as "setupNotPending";
 }
 
-/** First step of a pending hub: proves server access with the logged code and creates the administrator. */
+/** First step of a pending hub: chooses the sign-in mode and creates the first administrator. */
 export default function SetupClaimPage({ configuration }: { configuration: Configuration }) {
   const t = useTranslations("setup.claim");
   const ta = useTranslations("settings.auth");
   const adapter = useAdapter();
   const client = useQueryClient();
-  const [code, setCode] = useState("");
   const [mode, setMode] = useState<AuthMode>(configuration.mode);
   const [proxyHeader, setProxyHeader] = useState(configuration.proxyHeader || "Remote-User");
   const [trustedProxies, setTrustedProxies] = useState(configuration.trustedProxies ?? "");
@@ -61,7 +60,6 @@ export default function SetupClaimPage({ configuration }: { configuration: Confi
   const forced = configuration.forced;
   const effective = forced ? configuration.mode : mode;
   const errors = {
-    code: code.trim() ? undefined : t("codeRequired"),
     username: username.trim() ? undefined : t("usernameRequired"),
     password: effective !== "local" ? undefined : password.length < 12 ? (password ? ta("passwordShort") : t("passwordRequired")) : undefined,
     confirm: effective === "local" && confirm !== password ? ta("passwordMismatch") : undefined,
@@ -76,7 +74,6 @@ export default function SetupClaimPage({ configuration }: { configuration: Confi
     setError(null);
     try {
       const signedIn = await adapter.claimSetup({
-        code: code.trim(),
         mode: effective,
         username: username.trim(),
         ...(effective === "proxy" && !forced ? { proxyHeader: proxyHeader.trim(), trustedProxies: trustedProxies.trim() } : {}),
@@ -104,7 +101,6 @@ export default function SetupClaimPage({ configuration }: { configuration: Confi
           <p className="text-sm text-muted-foreground">{t("lead")}</p>
         </div>
         <form className="flex flex-col gap-5 p-5" noValidate onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-          <TextField id="setup-code" label={t("code")} value={code} onChange={setCode} description={t("codeHint")} error={show("code")} autoComplete="one-time-code" mono className="sm:max-w-sm" />
           {forced ? (
             <Alert>
               <Lock />

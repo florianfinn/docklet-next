@@ -57,7 +57,7 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       throw new AdapterOutcomeError({ kind: "error", code: "http.error" });
     }
     if (response.status === 403) {
-      // Proxy refusals (access.not-registered, access.disabled) and the setup code refusal carry their code.
+      // Proxy refusals (access.not-registered, access.disabled) and setup claim refusals carry their code.
       const problem = await response.json().catch(() => undefined) as { code?: unknown } | undefined;
       const code = typeof problem?.code === "string" && (problem.code.startsWith("access.") || /^(?:setup|auth|user)\.[a-z-]+$/.test(problem.code)) ? problem.code : "http.error";
       throw new AdapterOutcomeError({ kind: "error", code, status: 403 });

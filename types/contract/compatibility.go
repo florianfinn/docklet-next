@@ -15,7 +15,7 @@ const AgentHubV19Fingerprint = "cd658728da4e2de1b4d1c625544b9ef2e48bad0bfba685f7
 // AgentCompatible rejects older contracts and a changed schema at the same version.
 func AgentCompatible(version int, fingerprint string) bool {
 	if version == 19 {
-		return version >= MinimumAgentVersion && fingerprint == AgentHubV19Fingerprint
+		return fingerprint == AgentHubV19Fingerprint
 	}
 	if version == 18 {
 		return version >= MinimumAgentVersion && fingerprint == AgentHubV18Fingerprint
@@ -39,5 +39,7 @@ func AgentRecoveryRoute(method, path string) bool {
 
 // ModuleCompatible is stricter than the baseline v18 host surface.
 func ModuleCompatible(version int, fingerprint string) bool {
+	// Proxy module requests changed in contract 20 (M28: resolvers, certificate check,
+	// operation kind), so v19 agents get update-required for every module request.
 	return version >= 20 && fingerprint == AgentHubFingerprint
 }

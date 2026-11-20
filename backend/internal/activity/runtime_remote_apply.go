@@ -193,6 +193,16 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 			if m.Code == string(activitytypes.CodeRunStarted) || (terminal && m.Code == d.Activity.MessageCode) {
 				continue
 			}
+			// Hub admission already stored the same peer audit under the same evidence-derived ID.
+			if m.Code == string(activitytypes.CodeRuntimePeerAcknowledged) {
+				var held int64
+				if err := tx.Model(&ActivityMessage{}).Where("id = ? AND activity_id = ? AND runtime_remote = ?", m.ID, row.RunID, false).Count(&held).Error; err != nil {
+					return err
+				}
+				if held != 0 {
+					continue
+				}
+			}
 			remote := &ActivityMessage{BaseModel: database.BaseModel{ID: m.ID, CreatedAt: m.CreatedAt, UpdatedAt: new(now)}, ActivityID: row.RunID, Level: m.Level, Code: m.Code, Message: m.Message, Step: m.Step, Payload: database.JSON(m.Payload), RuntimeRemote: true}
 			if err := runtimeReceiverCreateTxInternal(tx, remote); err != nil {
 				return err

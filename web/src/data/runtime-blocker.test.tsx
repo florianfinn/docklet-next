@@ -54,3 +54,11 @@ it.each([
  expect(view.container.textContent).not.toContain(problem.blocker.name);
  expect(view.container.textContent).not.toContain(problem.blocker.reason);
 });
+
+it.each(["en-US", "de"] as const)("renders invalid confirmations through the command error consumer in %s", (locale) => {
+ const error = runtimeResponseError({ success: false, error: { code: "runtime.invalid-acknowledgement" } }, 400);
+ const view = render(<IntlProvider locale={locale} messages={catalogs[locale]}><Refusal error={error}/></IntlProvider>);
+ expect(view.container.textContent).toContain(catalogs[locale].common.runtimePeers.invalid);
+ expect(view.container.textContent).not.toContain("runtime.invalid-acknowledgement");
+ view.unmount();
+});

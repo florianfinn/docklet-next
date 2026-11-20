@@ -4,9 +4,9 @@
 // License: Apache-2.0
 // Deviations: Original capability-gated Compose self-update controls and confirmation; M21 R1 host-named controls and settled-state polling.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 
 export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?: string }) {
   const adapter = useAdapter(), all = useTranslations(), t = useTranslations("settings.updates.selfUpdate"), errorText = useImageError();
+  const location = useLocation(), heading = useRef<HTMLHeadingElement>(null), button = useRef<HTMLButtonElement>(null), focusedFor = useRef<string>(undefined);
   const cap = useCapability("selfUpdate", selfUpdateRef(hostId));
   const query = useQuery({ queryKey: ["settings", "self-update", hostId], queryFn: () => adapter.getSelfUpdate(hostId), enabled: cap.available,
     // A live check reaches the agent; repeat it only while an operation is unsettled.
@@ -32,11 +33,18 @@ export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?:
   const state = selfUpdateState(query.data), op = query.data?.operation;
   const running = !!op && op.phase !== "settled";
   const enabled = cap.available && !query.isError && canSelfUpdate(state) && !action.busy && !running;
+  useEffect(() => {
+    if (hostId !== "0" || location.hash !== "#hub-update" || cap.pending || cap.available && query.isPending || focusedFor.current === location.key) return;
+    // Focus once per navigation to the anchor, not again on later state changes.
+    focusedFor.current = location.key;
+    const target = button.current && !button.current.disabled ? button.current : heading.current;
+    target?.scrollIntoView?.({ block: "center" }); target?.focus();
+  }, [hostId, location.hash, location.key, query.isPending, enabled, cap.pending, cap.available]);
   const codeKey = selfUpdateCodeKey(state.code), opCodeKey = selfUpdateCodeKey(op?.code);
   const runId = started ?? op?.runId;
   const title = hostId === "0" ? t("hub") : name ? t("agentOn", { name }) : t("agent");
-  return <section className="flex flex-col gap-3" aria-label={title}>
-    <h4 className="font-semibold">{title}</h4>
+  return <section id={hostId === "0" ? "hub-update" : undefined} className="flex scroll-mt-24 flex-col gap-3" aria-label={title}>
+    <h4 ref={heading} tabIndex={-1} className="font-semibold">{title}</h4>
     {!cap.available ? <p role="status">{cap.reason}</p> : <>
       {query.data && <p>{t("currentVersion", { version: query.data.version })}</p>}
       <p role="status">{all(SELF_UPDATE_STATE_KEYS[query.isError ? "unavailable" : state.state])}</p>
@@ -45,7 +53,7 @@ export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?:
       {state.candidate && <p>{t("targetVersion", { version: state.candidate.version })}</p>}
       {op && <p>{all(SELF_UPDATE_PHASE_KEYS[op.phase])}{op.outcome && <> · {all(SELF_UPDATE_OUTCOME_KEYS[op.outcome])}</>}{opCodeKey && <> · {all(opCodeKey)}</>}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" disabled={!enabled} aria-label={title} onClick={() => setConfirm(state.candidate!.version)}>{t(hostId === "0" ? "hub" : "agent")}</Button>
+        <Button ref={button} type="button" variant="outline" disabled={!enabled} aria-label={title} onClick={() => setConfirm(state.candidate!.version)}>{t(hostId === "0" ? "hub" : "agent")}</Button>
         <Button type="button" variant="outline" disabled={query.isFetching} aria-label={name ? t("checkFor", { name }) : undefined} onClick={() => { void query.refetch(); }}>{t("check")}</Button>
         {runId && <Button type="button" variant="outline" onClick={() => openActivity(runId)}>{t("viewRun")}</Button>}
       </div>
@@ -63,7 +71,9 @@ export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?:
           <Button type="button" variant="outline" onClick={() => setConfirm(undefined)}>{t("cancel")}</Button>
           <Button type="button" disabled={!enabled || !confirm || confirm !== state.candidate?.version} onClick={() => {
             if (!enabled || !confirm || confirm !== state.candidate?.version) return;
-            void action.run(() => adapter.selfUpdate(hostId, { targetVersion: confirm }), (id) => { setStarted(id); setConfirm(undefined); void query.refetch(); });
+            const targetVersion = confirm;
+            if (hostId === "0") setConfirm(undefined);
+            void action.run(() => adapter.selfUpdate(hostId, { targetVersion }), (id) => { setStarted(id); setConfirm(undefined); void query.refetch(); });
           }}>{t("confirm")}</Button>
         </DialogFooter>
       </DialogContent>

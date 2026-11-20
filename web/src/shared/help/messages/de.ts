@@ -18,14 +18,14 @@ export const deHelp: typeof enHelp = {
       hubAddress: {
         title: "IP-Adresse",
         short: "Adresse, unter der Agents den Hub erreichen.",
-        full: "IP-Adresse oder interne URL des Hubs im LAN oder in einem bestehenden VPN. Edge-Agents bauen ihre Verbindung zu dieser Adresse auf; Links in Benachrichtigungen nutzen sie, wenn keine Domain gewählt ist.",
-        impact: "Eine falsche Adresse trennt Edge-Agents vom Hub. Eine Freigabe ins Internet ist nicht nötig.",
+        full: "IP des Hosts im LAN oder in einem bestehenden VPN, mit optionalem Port. Edge-Agents bauen ihre Verbindung zu dieser Adresse auf; Links in Benachrichtigungen nutzen sie, wenn keine Domain gewählt ist.",
+        impact: "Eine falsche Adresse trennt Edge-Agents vom Hub.",
       },
       domainUrl: {
         title: "Domain",
-        short: "Optionale zusätzliche Adresse, z. B. hinter einem Reverse Proxy.",
-        full: "Nur nötig, wenn der Hub zusätzlich über eine Domain erreichbar ist. Docklet nutzt sie für Links in Benachrichtigungen, öffnet dafür aber keine Ports und richtet keinen Proxy ein.",
-        impact: "Links in Nachrichten funktionieren dann auch außerhalb des LANs, sofern der Proxy das erlaubt.",
+        short: "Optionaler lokaler Name des Hubs.",
+        full: "Lokalen Hostnamen oder seine Root-URL ohne Pfad eingeben. Docklet nutzt sie für Links in Benachrichtigungen.",
+        impact: "Empfänger der Nachrichten müssen diesen lokalen Namen erreichen können.",
       },
       linkBase: {
         title: "Links in Benachrichtigungen",

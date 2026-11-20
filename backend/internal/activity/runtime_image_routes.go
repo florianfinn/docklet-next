@@ -12,6 +12,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"net/http"
@@ -23,7 +24,7 @@ type runtimeImageInput struct {
 	ProjectID     string `path:"projectId"`
 	Key           string `header:"Idempotency-Key" format:"uuid" required:"true"`
 	Prefer        string `header:"Prefer"`
-	Body          updaterDTO.LifecycleRequest
+	Body          activitytypes.RuntimeLifecycleAdmissionRequest
 }
 type runtimeRestoreInput struct {
 	EnvironmentID string `path:"id"`
@@ -32,7 +33,7 @@ type runtimeRestoreInput struct {
 	PointID       string `path:"pointId" format:"uuid"`
 	Key           string `header:"Idempotency-Key" format:"uuid" required:"true"`
 	Prefer        string `header:"Prefer"`
-	Body          updaterDTO.LifecycleRequest
+	Body          activitytypes.RuntimeLifecycleAdmissionRequest
 }
 
 func RegisterImageLifecycle(api huma.API, service *ActivityService) {
@@ -42,7 +43,7 @@ func RegisterImageLifecycle(api huma.API, service *ActivityService) {
 			if in.Body.PointID != "" {
 				return nil, huma.Error400BadRequest("Invalid update intent")
 			}
-			return runtimeLegacyResponse(ctx, service, in.EnvironmentID, in.Key, in.Prefer, RuntimeUpdateProject, RuntimeTarget{Kind: "stack", ID: in.ProjectID}, RuntimeOptions{Lifecycle: &updaterDTO.LifecycleIntent{Request: in.Body}})
+			return runtimeLegacyResponse(ctx, service, in.EnvironmentID, in.Key, in.Prefer, RuntimeUpdateProject, RuntimeTarget{Kind: "stack", ID: in.ProjectID}, RuntimeOptions{AcknowledgedUncertainty: in.Body.AcknowledgedUncertainty, Lifecycle: &updaterDTO.LifecycleIntent{Request: in.Body.LifecycleRequest}})
 		})
 	middleware.RegisterWithPermission(api, imageAdmissionOperation(api, RuntimeRestoreProject, "restore-update", "/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore"), authz.PermProjectsDeploy,
 		func(ctx context.Context, in *runtimeRestoreInput) (*huma.StreamResponse, error) {
@@ -53,7 +54,7 @@ func RegisterImageLifecycle(api huma.API, service *ActivityService) {
 				return nil, huma.Error400BadRequest("autoRestore is only valid for updates")
 			}
 			in.Body.PointID = in.PointID
-			return runtimeLegacyResponse(ctx, service, in.EnvironmentID, in.Key, in.Prefer, RuntimeRestoreProject, RuntimeTarget{Kind: "stack", ID: in.TargetID}, RuntimeOptions{Lifecycle: &updaterDTO.LifecycleIntent{Request: in.Body}})
+			return runtimeLegacyResponse(ctx, service, in.EnvironmentID, in.Key, in.Prefer, RuntimeRestoreProject, RuntimeTarget{Kind: "stack", ID: in.TargetID}, RuntimeOptions{AcknowledgedUncertainty: in.Body.AcknowledgedUncertainty, Lifecycle: &updaterDTO.LifecycleIntent{Request: in.Body.LifecycleRequest}})
 		})
 }
 

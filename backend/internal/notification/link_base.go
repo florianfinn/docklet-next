@@ -2,12 +2,13 @@
 // Revision: 8696c990fba68be0dd3ca9ac4de61434f6c56131
 // Retrieved: 2026-11-06
 // License: Apache-2.0
-// Deviations: Original notification link base resolver.
+// Deviations: Original notification link base resolver; M30 bracketed bare IPv6 addresses.
 
 package notification
 
 import (
 	"context"
+	"net"
 	"regexp"
 	"strings"
 )
@@ -30,6 +31,10 @@ func resolveLinkBase(linkBase, domainURL, hubAddress, appURL string) string {
 	}
 	if address := strings.TrimRight(strings.TrimSpace(hubAddress), "/"); address != "" {
 		if !schemePattern.MatchString(address) {
+			// A bare IPv6 literal (stored without port) needs brackets inside a URL.
+			if net.ParseIP(address) != nil && strings.Contains(address, ":") {
+				address = "[" + address + "]"
+			}
 			address = "http://" + address
 		}
 		return address

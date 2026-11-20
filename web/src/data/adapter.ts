@@ -119,6 +119,8 @@ export interface RuntimeReleaseInput {
  */
 export interface DockletAdapter extends VulnerabilityCandidatesApi, VulnerabilityAdvisoryApi, UpdatesApi, AuthApi, UsersApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi, HistoryApi, UiPreferencesApi, ServiceWidgetsApi {
   readonly kind: "demo" | "http" | "disconnected";
+  readonly hubUpdateSession?: import("./http/hub-update-session").HubUpdateSession;
+  getHubVersionHint(signal?: AbortSignal): Promise<{ version?: string }>;
   readonly mappedOperations?: ReadonlySet<string>;
 
   getCapability(operationId: string, resourceRef?: ResourceRef): Promise<CapabilityDescriptor>;

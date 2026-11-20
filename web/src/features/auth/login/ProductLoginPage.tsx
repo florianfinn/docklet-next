@@ -12,30 +12,34 @@ import { useTranslations } from "use-intl";
 import { useAuthMode, useCurrentUser, useSignInConfiguration } from "@/data/queries";
 import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
+import { useHubRetry } from "@/shared/components/hub-update/gate-retry";
+import { GateScreen, UnreachableGate } from "@/shared/components/gate-screen";
 import { AdapterOutcomeError } from "@/data/capability";
 import { TextField } from "@/shared/components/form-field";
-import { DotField } from "@/shared/visual/DotField";
 import { Button } from "@/shared/ui/button";
-import { Card } from "@/shared/ui/card";
 
 export default function ProductLoginPage() {
   const t = useTranslations("login");
   const mode = useAuthMode();
   const configuration = useSignInConfiguration();
   const currentUser = useCurrentUser();
+  const retry = useHubRetry([mode, configuration, currentUser]);
   const adapter = useAdapter();
   const client = useQueryClient();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  if (retry.unreachable) return <UnreachableGate {...retry} />;
+  if (configuration.isError) return <GateScreen message={t("settingsError")} action={<Button onClick={() => void configuration.refetch()}>{t("retry")}</Button>} />;
   if (configuration.data?.setupPending) return <Navigate to="/setup" replace />;
-  if (mode.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
-  if (mode.isError) return <main className="p-6"><p>{t("settingsError")}</p><Button onClick={() => void mode.refetch()}>{t("retry")}</Button></main>;
+  if (mode.isError) return <GateScreen message={t("settingsError")} action={<Button onClick={() => void mode.refetch()}>{t("retry")}</Button>} />;
+  const rejected = currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401;
+  if (currentUser.isError && !rejected) return <GateScreen message={t("sessionError")} action={<Button onClick={() => void currentUser.refetch()}>{t("retry")}</Button>} />;
+  if (mode.isPending || configuration.isPending) return <GateScreen busy message={t("loading")} />;
   if (currentUser.data?.isAdmin === false || mode.data === "none" || (currentUser.isSuccess && !!currentUser.data && mode.data === "local")) return <Navigate to="/dashboard" replace />;
-  if (mode.data === "proxy") return <main className="mx-auto max-w-md p-6" role="alert">{currentUser.isError || (currentUser.isSuccess && !currentUser.data) ? t("proxyRejected") : t("loading")}</main>;
-  return <main className="dot-grid grid min-h-svh place-items-center p-4" data-slot="login-page"><DotField fixed /><Card className="w-full max-w-md p-6">
-    <h1 className="text-xl font-semibold">{t("title", { hub: "Docklet" })}</h1>
+  if (mode.data === "proxy") return <GateScreen busy={currentUser.isPending} message={currentUser.isError || (currentUser.isSuccess && !currentUser.data) ? t("proxyRejected") : t("loading")} />;
+  return <GateScreen slot="login-page" title={t("title", { hub: "Docklet" })}>
     <form className="flex flex-col gap-4" onSubmit={(event) => {
       event.preventDefault();
       if (!username.trim() || !password || busy) return;
@@ -56,5 +60,5 @@ export default function ProductLoginPage() {
       {error && <p role="alert">{error}</p>}
       <Button type="submit" disabled={busy || !username.trim() || !password}>{busy ? t("submitting") : t("submit")}</Button>
     </form>
-  </Card></main>;
+  </GateScreen>;
 }

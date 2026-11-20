@@ -3,7 +3,7 @@
 Docker and Compose management for a small number of hosts, with a Go hub and
 agent core and a React interface. Built for one operator and a few users.
 
-**Status: 1.1.0.** A fresh or upgraded hub opens first-run setup with a setup code from its log. Release images target linux/amd64.
+**Status: 1.1.0.** A fresh or upgraded hub opens first-run setup; complete it right after the first start. Release images target linux/amd64.
 The hub uses SQLite on local persistent storage; no database service or import of
 earlier docklet-hub, Arcane or pre-release data is supported.
 
@@ -110,7 +110,7 @@ Serve the hub through a TLS reverse proxy that forwards WebSockets to
 `127.0.0.1:3552` (see the [reverse-proxy guide](docs/deployment/reverse-proxy.md)).
 Without a proxy on this host, publish `3552:3552` and set `APP_URL` to the address
 you open in the browser.
-Open the hub and complete setup: enter the setup code from `docker compose logs hub`,
+Open the hub and complete setup right away, before others can reach it:
 choose how to sign in (local accounts, a trusted reverse proxy, or no sign-in) and
 create your administrator account. Docklet hides its own directory and
 containers, as described at the label above. Then use **Hosts** › **Add host**;

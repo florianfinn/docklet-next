@@ -134,6 +134,10 @@ func runtimeMetadataHTTPInternal(receiver *RuntimeReceiver, ctx huma.Context) {
 			runtimeHTTPErrorInternal(ctx, 400, "Invalid runtime target")
 			return
 		}
+		if request.AcknowledgedUncertainty != "" && !runtimePeerHubCapable(ctx) {
+			runtimeHTTPErrorInternal(ctx, 409, "Hub update required")
+			return
+		}
 		result, err = receiver.Resolve(ctx.Context(), request)
 	}
 	if err != nil {
@@ -141,6 +145,9 @@ func runtimeMetadataHTTPInternal(receiver *RuntimeReceiver, ctx huma.Context) {
 		if errors.As(err, &problem) {
 			ctx.SetHeader("Content-Type", "application/json")
 			ctx.SetStatus(problem.Status)
+			if !runtimePeerHubCapable(ctx) {
+				problem = runtimePeerLegacyProblem(problem)
+			}
 			_ = json.MarshalWrite(ctx.BodyWriter(), problem)
 			return
 		}
@@ -170,14 +177,18 @@ func (r *RuntimeReceiver) Resolve(ctx context.Context, request activitytypes.Run
 	if !runtimeTargetValidInternal(request.Target) || (request.Target.Kind != "stack" && request.Target.Kind != "container") {
 		return activitytypes.RuntimeTargetMetadata{}, errRuntimeInvalidInternal
 	}
-	resolved, err := r.prepare.ResolveRuntimeTarget(ctx, request.Target)
+	digest, err := runtimeAcknowledgement(request.AcknowledgedUncertainty)
+	if err != nil {
+		return activitytypes.RuntimeTargetMetadata{}, err
+	}
+	resolved, err := resolveRuntimeAcknowledged(ctx, r.prepare, request.Target, digest)
 	if err != nil {
 		if problem := runtimeLayoutProblem(request.Target.Kind, err); problem != nil {
 			return activitytypes.RuntimeTargetMetadata{}, problem
 		}
 		return activitytypes.RuntimeTargetMetadata{}, err
 	}
-	out := activitytypes.RuntimeTargetMetadata{Target: resolved.Target, ComposeManaged: resolved.ComposeManaged, Origin: resolved.Origin, ComposeProjectLabel: resolved.ComposeProjectLabel, Protected: resolved.Protected}
+	out := activitytypes.RuntimeTargetMetadata{PeerOverrides: resolved.PeerOverrides, Target: resolved.Target, ComposeManaged: resolved.ComposeManaged, Origin: resolved.Origin, ComposeProjectLabel: resolved.ComposeProjectLabel, Protected: resolved.Protected}
 	if request.Lifecycle != nil {
 		adapter, ok := r.service.localExecution.Executor.(*RuntimeServiceAdapter)
 		if !ok || resolved.Target.Kind != "stack" {

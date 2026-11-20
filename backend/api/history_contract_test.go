@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original v13 producer allowlist and typed metadata schema contract tests. M23 #435: current agent contract v19 and minimum v18; optional-module foundation (#472).
+// Deviations: Original v13 producer allowlist and typed metadata schema contract tests. M23 #435: current agent contract v19 and minimum v18; optional-module foundation (#472). M30 contract v20 (#531).
 
 package api
 

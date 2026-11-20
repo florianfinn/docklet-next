@@ -173,6 +173,8 @@ export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule
 
 export interface Stack {
   definitionHint?: "definition-invalid";
+ definitionReason?: "compose.identity-unreadable" | "compose.selection-unsupported" | "compose.env-file-missing";
+ definitionFile?: string;
   path?: string;
   reportedStatus?: string;
   serviceCount?: number;
@@ -280,6 +282,8 @@ export interface ActionRun {
   finishedAt?: string;
   error?: string;
   log: string[];
+  /** Peer stacks this run was confirmed to run despite (#531 audit). */
+  peerAudit?: string;
   /** Raw, chronological operation output. */
   output: RunOutputLine[];
   outputTruncated?: boolean;

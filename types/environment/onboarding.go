@@ -2,7 +2,7 @@
 // Revision: 81439fab6a8ec5232161dc933fbd41bec41885fa
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original hub discovery and installation metadata; M29 container detection and classified address candidates.
+// Deviations: Original hub discovery and installation metadata; M29 container detection and classified address candidates; M30 candidate origins.
 
 package environment
 
@@ -13,7 +13,9 @@ type HubAddressCandidate struct {
 	URL    string `json:"url"`
 	Reach  string `json:"reach" enum:"unknown,same-host"`
 	Source string `json:"source" enum:"configured,interface,published,request"`
-	Kind   string `json:"kind" enum:"ip,domain"`
+	// Origins lists every place this exact URL came from, in ranking order; Source stays the first origin's class.
+	Origins []string `json:"origins" enum:"settingsDomain,appUrl,settingsAddress,published,interface,request" doc:"Where this address came from, in ranking order"`
+	Kind    string   `json:"kind" enum:"ip,domain"`
 }
 
 type HubContainerNetwork struct {

@@ -27,8 +27,6 @@ type SignInConfiguration struct {
 const (
 	CodeSetupPending     = "setup.pending"
 	CodeSetupNotPending  = "setup.not-pending"
-	CodeSetupCodeInvalid = "setup.code-invalid"
-	CodeSetupRateLimited = "setup.rate-limited"
 	CodeModeForced       = "auth.mode-forced"
 	CodeProxyUnverified  = "auth.proxy-unverified"
 	CodePasswordRequired = "auth.password-required"
@@ -45,7 +43,6 @@ type SignInPolicyInput struct {
 // SetupIdentityRequest claims a pending hub: it stores the sign-in mode and creates the first administrator.
 type SetupIdentityRequest struct {
 	SignInPolicyInput
-	Code        string  `json:"code" minLength:"1" maxLength:"64" doc:"One-time setup code from the hub log"`
 	Username    string  `json:"username" minLength:"1" maxLength:"255" doc:"Username of the first administrator"`
 	DisplayName *string `json:"displayName,omitempty" maxLength:"255" doc:"Display name of the first administrator"`
 	Password    *string `json:"password,omitempty" maxLength:"1024" doc:"Password; required in local mode"`

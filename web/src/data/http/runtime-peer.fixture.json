@@ -1,0 +1,19 @@
+{
+  "name": "peer",
+  "reason": "compose.name-undeterminable",
+  "archived": false,
+  "peerId": "example-peer",
+  "confirmable": true,
+  "uncertainty": {
+    "digest": "9561a395afe264f2fb76b1e32e0c03970161b20ca1912005beaf350df222a6de",
+    "count": 1,
+    "peers": [
+      {
+        "peerId": "example-peer",
+        "name": "peer",
+        "reason": "compose.identity-unreadable",
+        "archived": false
+      }
+    ]
+  }
+}

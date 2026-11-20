@@ -15,7 +15,8 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Backup completion](backup-completion.md) | M16 decision: hub archive copies to targets, draft target test, per-host delivery state, registration revision, backups overview |
 | [Volume backups and recovery](volume-backups.md) | Owning-host lifecycle, immutable targets, recovery keys, observed availability, archive validation and transport limits |
 | [Identity](identity.md) | Sign-in modes, direct-peer proxy trust, session boundaries and recovery |
-| [First-run setup](first-run-setup.md) | M29 decision: setup code, first administrator claim, stored sign-in policy with AUTH_MODE override, runtime mode change and lockout guard |
+| [First-run setup](first-run-setup.md) | M29 decision (M30: without setup code): first administrator claim, stored sign-in policy with AUTH_MODE override, runtime mode change and lockout guard |
+| [Hub update experience](hub-update-experience.md) | M30 decision: hub update view and its terminal decision, navigation hint, gate screens, brand logo colours, local hub addresses with candidate origins |
 | [Core adoption](core-adoption.md) | One-time Go adoption, scope boundaries, evaluation gates and the dated decision ledger |
 | [API contract and UI mapping](api-contract.md) | Reproducible OpenAPI export, generated types and owned DTO/UI gaps |
 | [HTTP adapter, live channel and capabilities](adapter-live-capabilities.md) | M3 adapter outcomes, server capabilities, run/event refresh and contract matrix |

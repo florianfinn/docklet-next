@@ -5,7 +5,7 @@
 // Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected first-run identity flow. Review #95: preserve cached rows during refetches and fall back to stack IDs when names are absent. Issue #77: session-bound closure and identity generation cleanup. M9 #204: preserve partial topology observations. M10 #231: production stack updates and lifecycle UI. Held-host security recovery for #263. Simple-user management, assigned-stack access and mode-aware self-service. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. M23 #425: shared start-up auth reads. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { keepPreviousData, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocale } from "use-intl";
 
 import type { ContainerHistoryRef, HistoryRange } from "@/domain/history";
@@ -18,6 +18,8 @@ import { renderEvent, renderStackDetail, type CodedEvent, type CodedStackDetail 
 import { useIsUser } from "./use-principal";
 import { useAdapter } from "./use-adapter";
 import type { RecentEvents } from "./adapter";
+import { identityLifetime } from "./identity-lifetime";
+import { useHubUpdate } from "@/shared/components/hub-update/use-hub-update";
 import { queryKeys } from "./query-keys";
 
 // Initial reads stream host batches; refetches retain the complete cached result.
@@ -212,4 +214,15 @@ export function useNetworkSummaries() {
   const adapter = useAdapter();
   const recovery = useInventoryRecovery();
   return useQuery({ ...recovery, queryKey: queryKeys.networks, queryFn: ({ signal }) => adapter.listNetworkSummaries(signal, INVENTORY_READ_TAG) });
+}
+
+/** The public endpoint is requested only for an explicitly confirmed HTTP administrator. */
+export function useHubVersionHint() {
+  const adapter = useAdapter(), client = useQueryClient();
+  const user = useCurrentUser(adapter.kind === "http"), { state } = useHubUpdate();
+  const enabled = adapter.kind === "http" && user.data?.isAdmin === true;
+  useEffect(() => identityLifetime(adapter).listen(() => client.removeQueries({ queryKey: ["hub", "version-hint"], exact: true })), [adapter, client]);
+  const query = useQuery({ queryKey: ["hub", "version-hint"], queryFn: ({ signal }) => adapter.getHubVersionHint(signal), enabled,
+    staleTime: 30 * 60_000, refetchInterval: 30 * 60_000, refetchOnWindowFocus: "always" });
+  return enabled && state.phase === "idle" ? query.data?.version : undefined;
 }

@@ -15,26 +15,27 @@ function lch(value: string): Lch {
 }
 
 describe("logo colours", () => {
-  it("use the saturated palette roles, not the lightened text variants", () => {
-    expect(/--docklet-logo-primary: var\(--control\);/.test(brandCss) && /--docklet-logo-secondary: var\(--highlight\);/.test(brandCss)).toBe(true);
-    expect(/--docklet-logo-(primary|secondary): var\(--(primary-text|brand-accent-text)\)/.test(brandCss)).toBe(false);
+  const scheme = (selector: string) => {
+    const block = new RegExp(`(?:^|\\n)${selector.replace(".", "\\.")} \\{([^}]*)\\}`).exec(brandCss)?.[1] ?? "";
+    const value = (name: string) => new RegExp(`--docklet-logo-${name}: (#[0-9a-f]{6});`).exec(block)?.[1];
+    return { primary: value("primary"), secondary: value("secondary") };
+  };
+
+  it("keeps violet and cyan brand colours independent of the palette", () => {
+    expect(scheme(".brand-logo")).toEqual({ primary: "#7f22fe", secondary: "#0092b8" });
+    expect(scheme(".dark .brand-logo")).toEqual({ primary: "#8e51ff", secondary: "#00d3f2" });
+    expect(/--docklet-logo-(primary|secondary): var\(--/.test(brandCss)).toBe(false);
   });
 
-  it("stay the chosen colours where they already read, keep at least 3:1 and are more saturated than the text variants", () => {
+  it("reads with at least 3:1 on every preset surface in both schemes", () => {
     for (const { id, palette } of PALETTE_PRESETS) {
       for (const theme of ["dark", "light"] as const) {
-        const { vars, report } = paletteTokens(palette, theme);
-        const surfaces = ["--background", "--card", "--sidebar"].map((v) => lch(vars[v]!));
-        for (const [role, logo, text, ratio] of [
-          ["primary", "--control", "--primary-text", report.controlContrast],
-          ["secondary", "--highlight", "--brand-accent-text", report.highlightContrast],
-        ] as const) {
-          const raw = hexToOklch(palette[role]);
-          const colour = lch(vars[logo]!);
-          const label = `${id}/${theme}/${role}`;
-          expect(ratio >= 3, label).toBe(true);
-          if (surfaces.every((s) => contrast(raw, s) >= 3)) expect(vars[logo], label).toBe(palette[role]);
-          expect(colour.c >= lch(vars[text]!).c - 0.002, label).toBe(true);
+        const { vars } = paletteTokens(palette, theme);
+        const colours = scheme(theme === "dark" ? ".dark .brand-logo" : ".brand-logo");
+        for (const surface of ["--background", "--card", "--sidebar"]) {
+          for (const [role, hex] of Object.entries(colours)) {
+            expect(contrast(hexToOklch(hex!), lch(vars[surface]!)) >= 3, `${id}/${theme}/${surface}/${role}`).toBe(true);
+          }
         }
       }
     }

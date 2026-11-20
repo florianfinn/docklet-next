@@ -185,15 +185,37 @@ environment parse error and expands paths using only the process allowlist;
 lifecycle loading still refuses the malformed primary file.
 
 Authoritative project and managed-parent lookup scans every persisted row,
-including archived projects, and requires unique current effective Compose
-ownership even for an exact ID. A failed peer read can conceal a duplicate, so
-it blocks otherwise healthy ID and name/parent lookup. Availability and read
-cost are consequently coupled to all persisted projects; repairing the peer's
-files restores lookup. Retained names and caches cannot exclude unknown owners.
-Archived identity remains usable as a parent while the existing archived stack
-mutation guard remains in force. Identity reads do not prepare bind directories
-or persist metadata. The pre-effect recheck refuses changed or uncertain identity;
-external edits after that read remain outside atomic application control.
+including archived projects, with fresh strict Compose identity reads. Only a
+verified missing required service `env_file` permits an identity-only degraded
+read: the strict skipped-environment model must identify the absent active-service
+entry, then resolve every remaining service environment successfully. Missing
+Compose/include/label inputs, malformed environment files and permission errors
+remain undeterminable. Metadata and executable selection and names must agree.
+No bind preparation, cache authority or project writes participate.
+
+A known distinct degraded peer passes automatically. Proven duplicates take
+precedence after the full scan and cannot be acknowledged. Undeterminable peers
+produce a confirmable refusal with a SHA-256 digest of all sorted `peerId:reason`
+lines, total count and up to sixteen display peers. A deliberate confirmation
+resends the original intent with `acknowledgedUncertainty`; the fresh resolver
+accepts only an equal digest. Target read failures remain non-overridable.
+Stack start, stop, restart, down, deploy, redeploy and stack update/restore carry the
+confirmation. Container recreate, container image update and container image restore
+requests have no acknowledgement member, so the web shows their refusal without a
+confirm control; extending those three bodies is the way to add it later.
+Archived identity remains usable as a parent while the archived stack mutation
+guard remains in force. The existing definition-invalid marker gains a concrete
+reason and a safe project-relative missing filename; live/unknown rows retain
+its existing coverage limit.
+
+The admitted digest participates in request and gate identity only when nonempty,
+and survives admission, receiver intake, retained reconstruction and the pre-effect
+recheck. Receipts own the digest and actual-use override snapshot independently
+of history; catalogue-backed activity audit records only overrides freshly used.
+New uncertainty, a changed target or a proven duplicate at the pre-effect seam
+settles with zero effects. External edits after that read remain outside atomic
+application control. See [the agent contract](api-contract.md#peer-identity-confirmation-agent-contract-v20)
+for Direct/Edge announcements and mixed-version behavior.
 
 | Target | Stored primary scope | Conflict predicate in the same environment |
 | --- | --- | --- |

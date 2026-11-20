@@ -70,6 +70,12 @@ export function agentFixture(spec, fixture) {
     recovery: summary.properties.recovery,
     recoveryProperties: recovery.properties,
   };
+  manifest.runtimePeerIdentity = {
+    minimumConfirmationContract: 20, hubHeader: "X-Docklet-Hub-Contract",
+    acknowledgement: "SHA-256 of sorted complete peerId:reason lines; empty preserves legacy semantic digest",
+    displayPeers: 16, receiptPeers: 64,
+    schemas: Object.fromEntries(["ImageRuntimeIdentityBlocker", "ImageRuntimeUncertainty", "ImageRuntimeIdentityPeer", "ActivityRuntimePeerAdmissionRequest", "ActivityRuntimeDeployAdmissionRequest", "ActivityRuntimeLifecycleAdmissionRequest"].map((name) => [name, { sha256: createHash("sha256").update(JSON.stringify(schemas[name])).digest("hex") }])),
+  };
   manifest.imageSafety.errorCodes = schemas.ImageProblem.properties.code.enum;
   const update = document.paths["/environments/{id}/updater/projects/{projectId}/update"]?.post;
   if (update) {

@@ -15,13 +15,14 @@ export interface MessageCode {
 
 export type CodedStep = Omit<ActionStep, "label" | "detail"> & { label: MessageCode; detail?: MessageCode };
 export type CodedOutputLine = Omit<RunOutputLine, "text"> & { text: string | MessageCode };
-export type CodedActionRun = Omit<ActionRun, "title" | "target" | "error" | "steps" | "log" | "output"> & {
+export type CodedActionRun = Omit<ActionRun, "title" | "target" | "error" | "steps" | "log" | "peerAudit" | "output"> & {
   title: MessageCode;
   backupOutcome?: { status: string; errorCode?: string; reason?: string };
   target: MessageCode;
   error?: MessageCode;
   steps: CodedStep[];
   log: MessageCode[];
+  peerAudit?: MessageCode;
   output: CodedOutputLine[];
 };
 export type CodedEvent = Omit<OpsEvent, "title"> & { title: MessageCode };
@@ -42,7 +43,13 @@ export function renderMessage(message: MessageCode, locale: AppLocale): string {
     values[key] = typeof value === "object" ? renderMessage(value, locale) : value;
   }
   const translate = translators[locale] as unknown as (key: string, values: Record<string, string | number>) => string;
-  const key = guardedKey ?? message.code;
+  if (message.code === "runtime.peer-acknowledged") {
+ const count = Number(values.count);
+ const peers = Array.from({ length: Math.min(count,16) }, (_,i) => values[`peer${i}`]).filter((v): v is string => typeof v === "string");
+ values.peers = peers.join(", ");
+ if (count > 16) values.peers += `; ${translate("common.runtimePeers.more", { count: count - 16 })}`;
+ }
+ const key = guardedKey ?? message.code;
   if (!guardedKey && !translators[locale].has(key as never)) return message.sourceText ?? message.code;
   try {
     return translate(key, values);
@@ -65,6 +72,7 @@ export function renderRun(run: CodedActionRun, locale: AppLocale): ActionRun {
     error: run.error === undefined ? undefined : renderMessage(run.error, locale),
     steps: run.steps.map((step) => ({ ...step, label: renderMessage(step.label, locale), detail: step.detail === undefined ? undefined : renderMessage(step.detail, locale) })),
     log: run.log.map((line) => renderMessage(line, locale)),
+    peerAudit: run.peerAudit === undefined ? undefined : renderMessage(run.peerAudit, locale),
     output: run.output.map((line) => ({ ...line, text: typeof line.text === "string" ? line.text : renderMessage(line.text, locale) })),
   };
   cache.set(run, result);

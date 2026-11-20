@@ -4,10 +4,7 @@ export const enSetup = {
   forcedChange: { heading: "Set a new password", newLabel: "New password", confirmationLabel: "Confirm new password" },
   claim: {
     title: "Access",
-    lead: "Prove that you run this server and create the first administrator.",
-    code: "Setup code",
-    codeHint: "Shown in the hub log at startup (docker compose logs hub). A restart creates a new code.",
-    codeRequired: "Enter the setup code",
+    lead: "Choose how people sign in and create the first administrator.",
     mode: "How people sign in",
     forced: "AUTH_MODE fixes the sign-in to “{mode}”. Remove the variable to choose here or later in Settings.",
     proxyCheck: "Docklet accepts the proxy only if this page already reaches it through that proxy with your identity, so a wrong value cannot lock you out.",
@@ -20,8 +17,6 @@ export const enSetup = {
     create: "Create administrator",
     creating: "Creating …",
     errors: {
-      setupCodeInvalid: "The setup code is not correct. Copy it from the current hub log.",
-      setupRateLimited: "Too many wrong codes. Wait a minute and try again.",
       setupNotPending: "Setup has already created an administrator. Reload the page to sign in.",
       authModeForced: "AUTH_MODE fixes the sign-in mode; reload the page.",
       authProxyUnverified: "This page does not reach Docklet through the trusted proxy with an identity. Check the proxy addresses and header, or open the page through the proxy.",
@@ -43,7 +38,7 @@ export const enSetup = {
   exit: "Leave preview",
   railLabel: "First-run setup steps",
   steps: {
-    access: { title: "Access", description: "Setup code, sign-in, administrator" },
+    access: { title: "Access", description: "Sign-in, administrator" },
     hub: { title: "Hub", description: "Name, address, time zone" },
     projects: { title: "Projects", description: "Directories and file IDs" },
     modules: { title: "Modules", description: "Optional functions" },
@@ -64,7 +59,7 @@ export const enSetup = {
   finishing: "Finishing …",
   fixErrors: "{count, plural, one {Check # field} other {Check # fields}}",
   discovery: {
-    title: "Internal address from hub discovery",
+    title: "Detected addresses",
     lead: "The hub inspects its container and its Docker networks on the server. The browser itself cannot see Docker addresses.",
     simulated: "Simulated",
     loading: "Hub is discovering its networks …",
@@ -82,6 +77,9 @@ export const enSetup = {
     use: "Apply",
     useAria: "Apply {address}",
     inUse: "In field",
+    candidateList: "Detected addresses: {field}",
+    fields: { ip: "IP address", domain: "Domain" },
+    origins: { settingsDomain: "Domain in settings", settingsAddress: "IP address in settings", appUrl: "APP_URL", published: "Published port", interface: "Hub interface", request: "Address of this session", configured: "Configured address" },
     reach: { lan: "reachable from the LAN", "same-host": "only on this host", unknown: "reachability unclear" },
     kinds: {
       "lan-interface": "Network {via}",
@@ -94,7 +92,7 @@ export const enSetup = {
     explain: {
       "lan-interface": "the hub container’s own LAN address (macvlan/ipvlan)",
       "host-address": "address of the Docker host with the hub’s port",
-      request: "how your browser reached the hub, e.g. via a proxy",
+      request: "how your browser reached the hub",
       "bridge-local": "agents on other hosts cannot reach this address",
       configured: "from the hub settings or APP_URL",
       interface: "an address of the hub’s own network interface",

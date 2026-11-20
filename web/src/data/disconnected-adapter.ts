@@ -103,6 +103,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     subscribeChanges: subscribe,
     updateHost: unavailable,
     restartAgent: unavailable,
+    getHubVersionHint: unavailable,
     getSelfUpdate: unavailable,
     selfUpdate: unavailable,
     registerHost: unavailable,

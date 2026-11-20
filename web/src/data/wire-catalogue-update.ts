@@ -12,6 +12,7 @@ type Schema = components["schemas"];
 
 // Update admission accepts this contract family, independently of other image-error consumers.
 export const UPDATE_REASON_KEYS = {
+ "runtime.invalid-acknowledgement": IMAGE_ERROR_KEYS["runtime.invalid-acknowledgement"],
   "update.unstable": IMAGE_ERROR_KEYS["update.unstable"],
   "update.auto-restored": IMAGE_ERROR_KEYS["update.auto-restored"],
   "update.auto-restore-failed": IMAGE_ERROR_KEYS["update.auto-restore-failed"],

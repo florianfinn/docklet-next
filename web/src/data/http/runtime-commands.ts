@@ -18,6 +18,7 @@ import { splitInventoryId } from "./inventory-mapping";
 import { isRuntimeTokenReadError } from "./runtime-token-read";
 import { mapRuntime, object, runtimeError, runtimeResponseError, type RuntimeDetail, type RuntimeRun } from "./runtime-mapping";
 import { pausableTimeout } from "./deadline-pause";
+import { confirmRuntimePeers } from "../runtime-peer-confirmation";
 import { MAINTENANCE_CODE } from "./problem-code";
 
 export const COMMAND_RETRY_MS = 10 * 60_000;
@@ -196,13 +197,14 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       })).then(() => { if (version === generation) schedule(); });
     }, 2_000);
   }
-  function admit(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">, verified?: { expectedManifest?: string; autoRestore?: boolean }): Promise<RuntimeAdmission> {
+  function admit(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">, verified?: { expectedManifest?: string; autoRestore?: boolean }, acknowledgedUncertainty = "", frozenSuffix?: string): Promise<RuntimeAdmission> {
     let host: string, raw: string;
     try { [host, raw] = splitInventoryId(target); } catch { return Promise.reject(runtimeError("runtime.invalid-target")); }
     const imageOperation = kind === "stack" && (command === "update" || command === "restore");
     const suffix = imageOperation || command === "recreate" || (kind === "container" && (command === "update" || command === "restore")) ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
     if (!suffix) return Promise.reject(runtimeError("runtime.invalid-command"));
-    const scope = `${kind}:${target}`, key = `${scope}:${command}:${service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : verified ? JSON.stringify(verified) : ""}`;
+    let refusedSuffix: string | undefined;
+ const scope = `${kind}:${target}`, key = `${scope}:${command}:${acknowledgedUncertainty}:${service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : verified ? JSON.stringify(verified) : ""}`;
     if (ambiguous.has(scope) && (!recreate?.key || recreateKeys.get(scope) !== recreate.key)) return Promise.reject(runtimeError("runtime.admission-unknown"));
     const existing = pending.get(key); if (existing) return existing.then((result) => ({ ...result, outcome: "joined" }));
     if (ambiguous.size + pending.size + [...runs.values()].filter(active).length >= LIMIT) return Promise.reject(runtimeError("runtime.pending-limit"));
@@ -215,7 +217,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       }
       const descriptor = await capability(operation, { kind, id: target }); check(version);
       if (!descriptor.available) throw unavailable(operation, descriptor.resourceRef, descriptor.disabledReasonCode);
-      const commandSuffix = kind === "container" && command === "restore" ? "previous-image/restore" : kind === "stack" && command === "stop" ? (await readStackStopMode(baseUrl, client) === "stop" ? "stop" : "down") : suffix;
+      const commandSuffix = frozenSuffix ?? (kind === "container" && command === "restore" ? "previous-image/restore" : kind === "stack" && command === "stop" ? (await readStackStopMode(baseUrl, client) === "stop" ? "stop" : "down") : suffix);
+      refusedSuffix = commandSuffix;
       check(version);
       let idempotencyKey: string;
       try { idempotencyKey = recreate?.key ?? uuid();
@@ -245,8 +248,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
             const path = imageOperation ? command === "update" ? `updater/projects/${encodeURIComponent(raw)}/update` : `updater/project/${encodeURIComponent(raw)}/restore-points/${encodeURIComponent(lifecycle!.pointId!)}/restore` : `${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${commandSuffix}${service ? `?${new URLSearchParams(service.restartServices?.map((name) => ["services", name]) ?? [])}` : ""}`;
             response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/${path}`, {
               method: "POST", signal: controller.signal,
-              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation || recreate || verified ? { "Content-Type": "application/json" } : {}) },
-              ...(recreate ? { body: JSON.stringify({ edit: recreate.edit }) } : imageOperation ? { body: JSON.stringify(lifecycle) } : verified ? { body: JSON.stringify(verified) } : {}),
+              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation || recreate || verified || acknowledgedUncertainty ? { "Content-Type": "application/json" } : {}) },
+              ...(recreate ? { body: JSON.stringify({ edit: recreate.edit }) } : imageOperation ? { body: JSON.stringify({ ...lifecycle, ...(acknowledgedUncertainty ? { acknowledgedUncertainty } : {}) }) } : verified ? { body: JSON.stringify(verified) } : acknowledgedUncertainty ? { body: JSON.stringify({ acknowledgedUncertainty }) } : {}),
             });
           } catch (error) {
             check(version);
@@ -266,6 +269,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           check(version);
           if (!response.ok) {
             const error = runtimeResponseError(body, response.status);
+ if (error.outcome.kind === "error" && error.outcome.blocker && typeof object(object(body).data).activityId === "string") { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
             if ((imageOperation || command === "update" || command === "restore") && error.outcome.kind === "error" && error.outcome.code === "runtime.outcome-unknown") { ambiguous.add(scope); const runId = object(object(body).data).activityId; if (typeof runId === "string" && runId.trim()) void detail(host, runId).catch(() => undefined); }
             if ((imageOperation || command === "update" || command === "restore") && (response.status === 502 || response.status === 504) && error.outcome.kind === "error" && error.outcome.code === "agent.unavailable") { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
             if (response.status === 401) { unauthorized(); throw error; }
@@ -297,7 +301,21 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     })();
     pending.set(key, task);
     void task.finally(() => { if (pending.get(key) === task) pending.delete(key); }).catch(() => undefined);
-    return task;
+    return task.catch(async (error: unknown) => {
+      check(version);
+      if (!(error instanceof AdapterOutcomeError) || error.outcome.kind !== "error" || error.outcome.code !== "runtime.target-unavailable" || error.outcome.status !== 409 || !error.outcome.blocker) throw error;
+      // Recreate and container image update/restore admissions carry no acknowledgement; they stay refused.
+      if (kind === "container" && (recreate || command === "update" || command === "restore")) throw error;
+      const blocker = error.outcome.blocker;
+      const legacy = host !== "0" && !blocker.peerId && ["compose.identity-unreadable", "compose.selection-unsupported"].includes(blocker.reason);
+      if (!blocker.confirmable && !legacy) throw error;
+      const controller = new AbortController(); controllers.add(controller);
+      let confirmed: boolean;
+      try { confirmed = await confirmRuntimePeers(blocker, host, controller.signal); check(version); }
+      finally { controllers.delete(controller); }
+      if (!confirmed || !blocker.confirmable || !blocker.uncertainty) throw new CancelledError();
+      return admit(kind, target, command, lifecycle, recreate, service, verified, blocker.uncertainty.digest, refusedSuffix);
+    });
   }
   const command = (...args: Parameters<typeof admit>) => admit(...args).then((result) => result.runId);
   async function mutate(host: string, id: string, action: "cancel" | "release", input?: RuntimeReleaseInput) {

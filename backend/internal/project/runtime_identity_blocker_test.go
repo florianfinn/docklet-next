@@ -44,15 +44,19 @@ func TestRuntimeIdentityNamesBlockingPeer(t *testing.T) {
 				var body struct {
 					Error struct {
 						Blocker struct {
-							Name     string
-							Reason   string
-							Archived bool
+							Name        string
+							Reason      string
+							Archived    bool
+							Confirmable bool
+							Uncertainty struct{ Peers []struct{ Reason string } }
 						}
 					}
 				}
 				require.NoError(t, json.Unmarshal(encoded, &body))
 				require.Equal(t, peer.Name, body.Error.Blocker.Name)
-				require.Equal(t, "compose.selection-unsupported", body.Error.Blocker.Reason)
+				require.Equal(t, "compose.name-undeterminable", body.Error.Blocker.Reason)
+				require.True(t, body.Error.Blocker.Confirmable)
+				require.Equal(t, "compose.selection-unsupported", body.Error.Blocker.Uncertainty.Peers[0].Reason)
 				require.Equal(t, archived, body.Error.Blocker.Archived)
 				require.NotContains(t, string(encoded), f.root)
 			})

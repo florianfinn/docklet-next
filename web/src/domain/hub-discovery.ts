@@ -3,6 +3,7 @@
 // the server and the UI only ranks and explains the result.
 
 import { cidrOverlap, parseCidr, parseIp } from "./networks";
+import { storedIpAddress } from "./validation";
 
 export type HubNetworkMode = "bridge" | "host" | "macvlan" | "ipvlan";
 
@@ -16,11 +17,14 @@ export interface HubInterface {
   parent?: string;
 }
 
+export type HubCandidateOrigin = "settingsDomain" | "settingsAddress" | "appUrl" | "published" | "interface" | "request";
+
 export interface HubServerCandidate {
   id: string;
   url: string;
   reach: "unknown" | "same-host";
   source: "configured" | "interface" | "published" | "request";
+  origins?: HubCandidateOrigin[] | null;
   /** Whether the host is an IP literal or a name; older hubs omit it. */
   kind?: "ip" | "domain";
 }
@@ -63,6 +67,8 @@ export interface HubAddressCandidate {
   /** "host:port" as the internal hub address field expects it. */
   address: string;
   kind: CandidateKind;
+  addressKind: "ip" | "domain";
+  origins: (HubCandidateOrigin | "configured")[];
   reach: CandidateReach;
   /** Docker network or host interface the address belongs to. */
   via?: string;
@@ -110,11 +116,12 @@ export function hubAddressCandidates(d: HubDiscovery): HubAddressCandidate[] {
     // The internal hub address is an IP address: a name is listed but never recommended.
     const best = preferredIpCandidate(d.candidates);
     return d.candidates.map((candidate) => ({
-      id: candidate.id, address: new URL(candidate.url).host, kind: SERVER_KIND[candidate.source],
+      id: candidate.id, address: serverCandidateKind(candidate) === "domain" ? new URL(candidate.url).origin : storedIpAddress(candidate.url), kind: SERVER_KIND[candidate.source],
+      addressKind: serverCandidateKind(candidate), origins: candidate.origins?.length ? candidate.origins : [candidate.source],
       reach: candidate.reach, recommended: candidate === best,
     }));
   }
-  const out: Omit<HubAddressCandidate, "recommended">[] = [];
+  const out: Omit<HubAddressCandidate, "recommended" | "origins" | "addressKind">[] = [];
   const c = d.container;
   const listen = c?.listenPort ?? 8080;
   const published = c?.publishedPorts.find((p) => p.containerPort === listen && (!p.hostIp || p.hostIp === "0.0.0.0"));
@@ -139,6 +146,14 @@ export function hubAddressCandidates(d: HubDiscovery): HubAddressCandidate[] {
     if (i.driver === "bridge") out.push({ id: `if:${i.network}`, address: `${i.address}:${listen}`, kind: "bridge-local", reach: "same-host", via: i.network, driver: "bridge" });
   }
 
-  const best = out.find((o) => o.reach === "lan") ?? out.find((o) => o.reach === "unknown");
-  return out.map((o) => ({ ...o, recommended: o === best }));
+  const ip = (address: string) => {
+    try { const host = new URL(`http://${address}`).hostname; return host.startsWith("[") || parseIp(host) !== undefined; } catch { return false; }
+  };
+  const best = out.find((o) => ip(o.address) && o.reach === "lan") ?? out.find((o) => ip(o.address) && o.reach === "unknown");
+  return out.map((o) => ({ ...o, addressKind: ip(o.address) ? "ip" : "domain", origins: [o.kind === "request" ? "request" : "interface"], recommended: o === best }));
+}
+
+/** APP_URL is identified by provenance, never guessed from a configured settings value. */
+export function discoveryAppUrl(discovery?: HubDiscovery): string | undefined {
+  return discovery?.candidates?.find((c) => c.origins?.includes("appUrl"))?.url;
 }

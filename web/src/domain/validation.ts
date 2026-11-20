@@ -87,24 +87,62 @@ export function port(value: string): ValidationKey | undefined {
   return n >= 1 && n <= 65535 ? undefined : "port";
 }
 
-/**
- * Hub address reachable from agents: an IP or host name with optional port,
- * or an http(s) URL. Internal LAN/VPN addresses are the normal case.
- */
+/** IPv6 literals are parsed by the URL parser, without accepting zones or URL syntax. */
+export function isIpv6Literal(value: string): boolean {
+  if (!/^[\da-f:.]+$/i.test(value) || !value.includes(":")) return false;
+  try { return new URL(`http://[${value}]`).hostname.startsWith("["); } catch { return false; }
+}
+
+/** Host IP with an optional port; IPv6 with a port must be bracketed. */
 export function hubAddress(value: string): ValidationKey | undefined {
   const v = value.trim();
   if (!v) return "required";
-  if (/^https?:\/\//i.test(v)) return url(v) ? "hubAddress" : undefined;
+  if (isIpv6Literal(v)) return undefined;
+  const bracketed = /^\[([^\]]+)\]:(\d+)$/.exec(v);
+  if (bracketed) return isIpv6Literal(bracketed[1]!) && !port(bracketed[2]!) ? undefined : "hubAddress";
   const [host = "", portPart, ...rest] = v.split(":");
-  if (rest.length) return "hubAddress";
-  if (portPart !== undefined && port(portPart)) return "hubAddress";
-  return IPV4.test(host) || HOSTNAME.test(host) ? undefined : "hubAddress";
+  if (rest.length || (portPart !== undefined && port(portPart))) return "hubAddress";
+  return IPV4.test(host) && host.split(".").every((part) => part === String(Number(part))) ? undefined : "hubAddress";
 }
 
-/** http:// is assumed for bare addresses; agents and links use the URL form. */
+/** A legacy "http(s)://IP[:port]" value as the bare IP address the field stores, else undefined. */
+export function ipFromLegacyUrl(value: string): string | undefined {
+  const m = /^https?:\/\/([^/?#@\s]+)\/?$/i.exec(value.trim());
+  // Bracketed IPv6 without a port is stored bare.
+  const authority = m?.[1]?.replace(/^\[([^\]]+)\]$/, "$1");
+  return authority && !hubAddress(authority) ? authority : undefined;
+}
+
+/** The stored IP address form of an IP URL: bare IPv6 without a port, brackets only with one; an explicit default port is kept. */
+export function storedIpAddress(url: string): string {
+  const authority = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(url.trim())?.[1] ?? "";
+  const m = /^\[([^\]]+)\](?::(\d+))?$/.exec(authority);
+  if (m) return m[2] ? `[${m[1]}]:${m[2]}` : m[1]!;
+  return authority;
+}
+
+/** http:// is assumed for IP addresses; bare IPv6 needs brackets in a URL. */
 export function hubAddressUrl(value: string): string {
   const v = value.trim().replace(/\/+$/, "");
-  return /^https?:\/\//i.test(v) ? v : `http://${v}`;
+  return /^https?:\/\//i.test(v) ? v : `http://${isIpv6Literal(v) ? `[${v}]` : v}`;
+}
+
+/** Root-only local name. A matching APP_URL supplies the scheme for a bare name. */
+export function normalizeDomainUrl(value: string, appUrl?: string): string | undefined {
+  const v = value.trim();
+  if (!v) return "";
+  const explicit = /^https?:\/\//i.test(v);
+  const authority = explicit ? v.replace(/^https?:\/\//i, "") : v;
+  if (!/^[^\s/?#@\\]+\/?$/.test(authority)) return undefined;
+  try {
+    const parsed = new URL(explicit ? v : `http://${v}`);
+    if (!HOSTNAME.test(parsed.hostname) || parsed.username || parsed.password || (parsed.port && port(parsed.port))) return undefined;
+    if (!explicit && appUrl) {
+      const app = new URL(appUrl);
+      if (["http:", "https:"].includes(app.protocol) && app.hostname === parsed.hostname) return new URL(`${app.protocol}//${v}`).origin;
+    }
+    return parsed.origin;
+  } catch { return undefined; }
 }
 
 export function url(value: string): ValidationKey | undefined {

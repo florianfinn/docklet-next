@@ -26,13 +26,15 @@ import (
 // RuntimeHTTPPorts are trusted construction ports; no browser execution envelope
 // can select an executor, registration, storage generation or actor.
 type RuntimeHTTPPorts struct {
-	InvalidateInventory func(string)
-	GuardContainer      func(context.Context, string, string) error
-	ApplicationContext  context.Context
-	Agent               bool
-	Store               func(context.Context, string) (RuntimeStoreBinding, error)
-	PrepareLifecycle    func(context.Context, string, RuntimeTarget, RuntimeStoreBinding, updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error)
-	PrepareTarget       func(context.Context, string, RuntimeTarget) (RuntimeResolvedTarget, error)
+	InvalidateInventory          func(string)
+	GuardContainer               func(context.Context, string, string) error
+	ApplicationContext           context.Context
+	Agent                        bool
+	Store                        func(context.Context, string) (RuntimeStoreBinding, error)
+	PrepareAcknowledgedLifecycle func(context.Context, string, RuntimeTarget, RuntimeStoreBinding, updaterDTO.LifecycleRequest, string) (*updaterDTO.LifecycleIntent, error)
+	PrepareLifecycle             func(context.Context, string, RuntimeTarget, RuntimeStoreBinding, updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error)
+	PrepareAcknowledgedTarget    func(context.Context, string, RuntimeTarget, string) (RuntimeResolvedTarget, error)
+	PrepareTarget                func(context.Context, string, RuntimeTarget) (RuntimeResolvedTarget, error)
 }
 
 type RuntimeHTTPService struct {
@@ -126,6 +128,10 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 		command.ProposedRunID = options.ContainerImage.Policy.ChildID
 	}
 	var err error
+	command.Options.AcknowledgedUncertainty, err = runtimeAcknowledgement(command.Options.AcknowledgedUncertainty)
+	if err != nil {
+		return empty, noRef, err
+	}
 	if runtimeImageOperation(operation) {
 		if target.Kind != "stack" || options.Lifecycle == nil || len(options.Lifecycle.Request.ExpectedRevision) != 64 || (operation == RuntimeRestoreProject) != (options.Lifecycle.Request.PointID != "") {
 			return empty, noRef, imageDTO.Failure("update.invalid-target", 400)
@@ -162,7 +168,14 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 			}
 			return empty, noRef, err
 		}
-		resolved, err := h.ports.PrepareTarget(ctx, environmentID, target)
+		var resolved RuntimeResolvedTarget
+		if h.ports.PrepareAcknowledgedTarget != nil {
+			resolved, err = h.ports.PrepareAcknowledgedTarget(ctx, environmentID, target, command.Options.AcknowledgedUncertainty)
+		} else if command.Options.AcknowledgedUncertainty != "" {
+			err = imageDTO.Failure("runtime.invalid-acknowledgement", 400)
+		} else {
+			resolved, err = h.ports.PrepareTarget(ctx, environmentID, target)
+		}
 		if err != nil {
 			return empty, noRef, runtimeTargetFailure(operation, err)
 		}
@@ -183,7 +196,11 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 				return empty, noRef, huma.Error503ServiceUnavailable("Image lifecycle unavailable")
 			}
 			policy := command.Options.Lifecycle.Policy
-			command.Options.Lifecycle, err = h.ports.PrepareLifecycle(ctx, environmentID, command.Target, command.Store, command.Options.Lifecycle.Request)
+			if h.ports.PrepareAcknowledgedLifecycle != nil {
+				command.Options.Lifecycle, err = h.ports.PrepareAcknowledgedLifecycle(ctx, environmentID, command.Target, command.Store, command.Options.Lifecycle.Request, command.Options.AcknowledgedUncertainty)
+			} else {
+				command.Options.Lifecycle, err = h.ports.PrepareLifecycle(ctx, environmentID, command.Target, command.Store, command.Options.Lifecycle.Request)
+			}
 			if err != nil {
 				return empty, noRef, err
 			}

@@ -148,11 +148,10 @@ docker compose -f compose.yaml --env-file .env logs hub
 ```
 
 Wait for the service to become healthy (`/api/health`), then open the configured
-public address. Setup opens without a sign-in screen. It asks for the one-time
-setup code that the hub prints at startup (`Setup code: XXXX-XXXX-XXXX` in the
-logs), then for the sign-in mode and the first administrator. The code changes at
-every restart until setup has created the administrator; after that it is no
-longer accepted. The remaining steps configure addresses, projects and modules.
+public address. Setup opens without a sign-in screen and asks for the sign-in
+mode and the first administrator. Until that step is done, whoever reaches the hub
+first can create the administrator, so complete it right after the first start,
+before the hub is reachable by others. The remaining steps configure addresses, projects and modules.
 The `hub-data` volume holds the database pair under `/app/data`; `hub-backups`
 holds hub archives under `/var/lib/docklet/backups`. Keep both across container
 replacement. Never delete live SQLite WAL/SHM files or copy just a live main

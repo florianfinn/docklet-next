@@ -7,6 +7,8 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
+import { HubUpdateOverlay } from "@/shared/components/hub-update/HubUpdateOverlay";
+import { createHubUpdateSession } from "@/data/http/hub-update-session";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { IntlProvider, createTranslator } from "use-intl";
 import { MemoryRouter } from "react-router";
@@ -14,23 +16,21 @@ import { AdapterContext } from "@/data/use-adapter";
 import { createDisconnectedAdapter } from "@/data/disconnected-adapter";
 import type { DockletAdapter } from "@/data/adapter";
 import { catalogs } from "@/app/i18n/catalog";
-import type { SelfUpdateCheck } from "@/domain/self-update";
-import type { CodedActionRun } from "@/data/message-code";
+import type { SelfUpdateCheck, SelfUpdateInput } from "@/domain/self-update";
 import { SELF_UPDATE_CODE_KEYS, SELF_UPDATE_STATE_KEYS } from "@/data/wire-catalogue-self-update";
 import { activityStore } from "@/features/activity/activity-store";
-import { createSelfUpdates } from "@/data/http/self-update";
 import { LiveUpdatesSelfUpdate } from "./LiveUpdatesSelfUpdate";
 
 type Locale = keyof typeof catalogs;
 const check: SelfUpdateCheck = { version: "1.0.0", eligibility: { state: "available", candidate: { version: "1.0.1" }, manual: ["docker compose --env-file .env pull", "docker compose --env-file .env up -d"] } };
 const cleanups: (() => void)[] = [];
 afterEach(() => { cleanup(); cleanups.splice(0).forEach(f => f()); activityStore.reset(); vi.useRealTimers(); });
-function mount(locale: Locale = "en-US", value = check, options: { allowed?: boolean; hostId?: string; name?: string; overrides?: Partial<DockletAdapter> } = {}) {
+function mount(locale: Locale = "en-US", value = check, options: { allowed?: boolean; hostId?: string; name?: string; overrides?: Partial<DockletAdapter>; overlay?: boolean } = {}) {
   const adapter: DockletAdapter = { ...createDisconnectedAdapter(), kind: "http",
     getCapability: vi.fn(async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: options.allowed !== false, disabledReasonCode: "access.admin-required" })),
     getSelfUpdate: vi.fn(async () => value), selfUpdate: vi.fn(async () => "update-run"), ...options.overrides };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); cleanups.push(() => client.clear());
-  const result = render(<QueryClientProvider client={client}><AdapterContext.Provider value={adapter}><IntlProvider locale={locale} messages={catalogs[locale]}><MemoryRouter><LiveUpdatesSelfUpdate hostId={options.hostId ?? "0"} name={options.name} /></MemoryRouter></IntlProvider></AdapterContext.Provider></QueryClientProvider>);
+  const result = render(<QueryClientProvider client={client}><AdapterContext.Provider value={adapter}><IntlProvider locale={locale} messages={catalogs[locale]}><MemoryRouter><LiveUpdatesSelfUpdate hostId={options.hostId ?? "0"} name={options.name} />{options.overlay && <HubUpdateOverlay />}</MemoryRouter></IntlProvider></AdapterContext.Provider></QueryClientProvider>);
   return { ...result, adapter, client, t: createTranslator({ locale, messages: catalogs[locale] }) };
 }
 for (const locale of ["en-US", "de"] as const) {
@@ -80,26 +80,6 @@ it("uses the agent capability and target without hub backup advice", async () =>
   await waitFor(() => expect(f.adapter.selfUpdate).toHaveBeenCalledWith("example", { targetVersion: "1.0.1" }));
   expect(f.adapter.getCapability).toHaveBeenCalledWith("selfUpdate", { kind: "host", id: "example" });
 });
-it("A2-o component start follows offline/reconnect independently of the confirmation and page lifetime", async () => {
-  let version = "v1.0.0", offline = false, status = "running";
-  const reload = vi.fn();
-  const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
-    if (String(url).endsWith("/app-version")) { if (offline) throw new TypeError("offline"); return new Response(JSON.stringify({ currentVersion: version })); }
-    return new Response(JSON.stringify(init?.method === "POST" ? { accepted: true, opId: "operation", phase: "reserved", runId: "update-run" } : check), { status: init?.method === "POST" ? 202 : 200 });
-  });
-  const readRun = vi.fn(async () => ({ id: "update-run", hostId: "0", status } as CodedActionRun));
-  const api = createSelfUpdates({ baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "example" }, generation: () => 0, capability: async (operationId, resourceRef) => ({ operationId, resourceRef, available: true }), readRun, reload }); cleanups.push(api.reset);
-  const f = mount("en-US", check, { overrides: { getSelfUpdate: api.getSelfUpdate, selfUpdate: api.selfUpdate } }); const user = userEvent.setup();
-  const button = await screen.findByRole("button", { name: "Update Docklet" }); await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false)); await user.click(button);
-  vi.useFakeTimers(); await act(async () => { screen.getByRole("button", { name: "Start update" }).click(); });
-  expect(screen.queryByRole("dialog") !== null).toBe(false); f.unmount();
-  await act(async () => { await vi.advanceTimersByTimeAsync(1000); }); expect(reload).not.toHaveBeenCalled();
-  offline = true; await act(async () => { await vi.advanceTimersByTimeAsync(1000); }); expect(reload).not.toHaveBeenCalled();
-  offline = false; await act(async () => { await vi.advanceTimersByTimeAsync(2000); }); expect(reload).not.toHaveBeenCalled();
-  status = "succeeded"; await act(async () => { await vi.advanceTimersByTimeAsync(4000); }); expect(reload).not.toHaveBeenCalled();
-  version = "v1.0.1"; await act(async () => { await vi.advanceTimersByTimeAsync(8000); }); expect(reload).toHaveBeenCalledTimes(1);
-  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); }); expect(reload).toHaveBeenCalledTimes(1);
-});
 it("explains a changed target while confirmation is open and sends no stale start", async () => {
   const f = mount(); const user = userEvent.setup();
   const button = await screen.findByRole("button", { name: "Update Docklet" }); await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false)); await user.click(button);
@@ -141,3 +121,16 @@ it("checks again on its own only while an operation is unsettled", async () => {
   expect(vi.mocked(running.adapter.getSelfUpdate).mock.calls.length > start).toBe(true);
 });
 
+
+it("B19 confirmation becomes preparing immediately while intake has no response", async () => {
+  let accept!: (value: { accepted: boolean; opId: string; runId: string; phase: "reserved" }) => void;
+  const session = createHubUpdateSession({ baseUrl: "/api", client: { fetch: vi.fn(), token: async () => "example" }, publicFetch: vi.fn(), readRun: vi.fn() }); cleanups.push(session.clear);
+  const f = mount("en-US", check, { overlay: true, overrides: { hubUpdateSession: session, selfUpdate: vi.fn((_host: string, input: SelfUpdateInput) => session.start(input.targetVersion!, () => new Promise(resolve => { accept = resolve; }))) } });
+  const user = userEvent.setup(); const button = await screen.findByRole("button", { name: "Update Docklet" });
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false)); await user.click(button);
+  await user.click(screen.getByRole("button", { name: "Start update" }));
+  expect(session.get().state.phase).toBe("starting");
+  expect(document.querySelector("[data-hub-update-overlay]")?.textContent).toContain("Preparing update");
+  expect(f.adapter.selfUpdate).toHaveBeenCalledTimes(1);
+  await act(async () => { session.clear(); accept({ accepted: true, opId: "operation", runId: "update-run", phase: "reserved" }); });
+});

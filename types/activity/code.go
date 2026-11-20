@@ -10,23 +10,25 @@ package activity
 type Code string
 
 const (
-	CodeProxyReleased              Code = "proxy.operation.released"
-	CodeSelfUpdateFailed           Code = "update.self-failed"
-	CodeSelfUpdateUnknown          Code = "update.outcome-unknown"
-	CodeLoadSustained              Code = "load.sustained"
-	CodeConditionDown              Code = "container.condition.down"
-	CodeConditionUnhealthy         Code = "container.condition.unhealthy"
-	CodeConditionRestartLoop       Code = "container.condition.restart-loop"
-	CodeConditionRunningAgain      Code = "container.condition.running-again"
-	CodeContainerRecreateRecovered Code = "container.recreate-recovered"
-	CodeContainerRecreateAmbiguous Code = "container.recreate-ambiguous"
-	CodeContainerOriginLocked      Code = "container.origin-locked"
-	CodeRuntimeIdempotencyMismatch Code = "runtime.idempotency-mismatch"
-	CodeAutoHealRestarted          Code = "autoheal.restarted"
-	CodeAutoHealRestartFailed      Code = "autoheal.restart-failed"
-	CodeAutoHealLimitReached       Code = "autoheal.limit-reached"
-	CodeAutoHealInterrupted        Code = "autoheal.interrupted"
-	CodeNotificationDeliveryFailed Code = "notification.delivery-failed"
+	CodeRuntimePeerAcknowledged       Code = "runtime.peer-acknowledged"
+	CodeRuntimeInvalidAcknowledgement Code = "runtime.invalid-acknowledgement"
+	CodeProxyReleased                 Code = "proxy.operation.released"
+	CodeSelfUpdateFailed              Code = "update.self-failed"
+	CodeSelfUpdateUnknown             Code = "update.outcome-unknown"
+	CodeLoadSustained                 Code = "load.sustained"
+	CodeConditionDown                 Code = "container.condition.down"
+	CodeConditionUnhealthy            Code = "container.condition.unhealthy"
+	CodeConditionRestartLoop          Code = "container.condition.restart-loop"
+	CodeConditionRunningAgain         Code = "container.condition.running-again"
+	CodeContainerRecreateRecovered    Code = "container.recreate-recovered"
+	CodeContainerRecreateAmbiguous    Code = "container.recreate-ambiguous"
+	CodeContainerOriginLocked         Code = "container.origin-locked"
+	CodeRuntimeIdempotencyMismatch    Code = "runtime.idempotency-mismatch"
+	CodeAutoHealRestarted             Code = "autoheal.restarted"
+	CodeAutoHealRestartFailed         Code = "autoheal.restart-failed"
+	CodeAutoHealLimitReached          Code = "autoheal.limit-reached"
+	CodeAutoHealInterrupted           Code = "autoheal.interrupted"
+	CodeNotificationDeliveryFailed    Code = "notification.delivery-failed"
 )
 
 const (
@@ -141,6 +143,7 @@ func Values() []Code {
 		CodeRuntimeTargetRemoved,
 		CodeRuntimeTargetChanged,
 		CodeRuntimeTargetUnavailable,
+		CodeRuntimeInvalidAcknowledgement, CodeRuntimePeerAcknowledged,
 
 		CodeRunStarted,
 		CodeRunJoined,

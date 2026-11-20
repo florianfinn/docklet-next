@@ -5,6 +5,7 @@
 // Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M25 latest agent restart read. M26 #462: bounded shell counts and raw inventory ownership; optional-module foundation (#472); M29 first-run claim and sign-in policy operations.
 
 import { createNavInventory, createNavInventoryState } from "./nav-inventory";
+import { createHubUpdateSession } from "./hub-update-session";
 import { createSelfUpdates } from "./self-update";
 import { inventoryReadBudget } from "./host-read-deadline";
 import { skipReason, skipsReads } from "./host-read-policy";
@@ -63,6 +64,7 @@ import { registerIdentityLifetime } from "../identity-lifetime";
 import { activityDeadline } from "./activity-deadline";
 import { createActivityTargets } from "./activity-targets";
 import { mapActivityDetail } from "./map-dto";
+import { discardResponse } from "./identity-reads";
 import { createActivityReader } from "./activity-reader";
 import { createEventReader } from "./event-reader";
 import { DASHBOARD_EVENT_LIMIT, DASHBOARD_EVENT_WINDOW_MS, createDashboardEvents } from "./dashboard-events";
@@ -316,6 +318,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function invalidateCapabilities() { capabilityReads.clear(); }
   function invalidateEnvironments() { sharedReads.clear(); catalogueVersion++; }
   function suspendIdentity(retain = false, nextActive = false) {
+    if (!nextActive) hubSession.unauthorized();
     ++identityGeneration;
     inventoryOwner.reset(); navState.reset();
     backups.invalidate();
@@ -462,6 +465,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       if (expanded && actions.runs().some((run) => run.id === id && run.hostId === host && run.outcomeState !== undefined)) return runtime.detail(host, id, false, false, signal);
       const backupOwner = backups.guard(host);
       const dto = (await read("get-activity", `/environments/${encodeURIComponent(host)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!;
+      if (host === "0") hubSession.observeRun(dto.activity.id, dto.activity.messageCode);
       try {
         const run = mapActivityDetail(dto);
         if (run.kind === "backup" || run.kind === "volume-restore") {
@@ -514,7 +518,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     },
   });
 
-  const selfUpdates = createSelfUpdates({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, readRun: async (host, id, signal) => { const run = await actions.readDetail(id, host, signal, true); actions.upsert(run); return run; } });
+  const readUpdateRun = async (host: string, id: string, signal: AbortSignal) => { const run = await actions.readDetail(id, host, signal, true); actions.upsert(run); return run; };
+  const hubSession = createHubUpdateSession({ baseUrl, client, publicFetch: options.fetch ?? globalThis.fetch, readRun: readUpdateRun });
+  const selfUpdates = createSelfUpdates({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, readRun: readUpdateRun, hubSession });
   const targets = createActivityTargets({ terminal: (host, run) => { stackTerminals([run], true); refreshHost(host); }, hasConsumer: () => actionListeners.size > 0 || stackListeners.size > 0, read: (host, id, signal, expanded) => principal?.isAdmin === false ? runtime.detail(host, id, false, false, signal) : actions.readDetail(id, host, signal, expanded) });
 
   const events = createEventReader(async () => {
@@ -753,11 +759,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   });
   const unsupported = createDisconnectedAdapter();
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
-  const auth = createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration, (user) => { principal = user; });
+  const auth = createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration, (user) => { hubSession.establish(user.id, user.isAdmin === true); principal = user; });
   const adapter: DockletAdapter = {
     ...methods,
     ...auth,
     async logout() {
+      hubSession.clear();
       // Taken before admission closes: a read still bootstrapping the token may need its retry to finish it.
       await client.token();
       let settle!: (out: boolean) => void;
@@ -789,6 +796,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listSystemComponents: createSystemComponents({ baseUrl, client, hosts: listHosts, capability: getCapability, generation: () => identityGeneration }),
     restartAgent: restarts.restartAgent,
     latestAgentRestart: restarts.latest,
+    hubUpdateSession: hubSession,
+    async getHubVersionHint(signal) {
+      if (principal?.isAdmin !== true) throw unavailable("getHubVersionHint", HUB_REF);
+      const response = await client.fetch(`${baseUrl}/app-version`, { signal, cache: "no-store" });
+      if (!response.ok) { discardResponse(response); throw classifiedError(null, response.status); }
+      const value = await response.json() as components["schemas"]["VersionInfo"];
+      return { version: value.updateAvailable && typeof value.newestVersion === "string" ? value.newestVersion : undefined };
+    },
     selfUpdate: selfUpdates.selfUpdate,
     getSelfUpdate: selfUpdates.getSelfUpdate,
     installStackUpdates: runtime.installStackUpdates,

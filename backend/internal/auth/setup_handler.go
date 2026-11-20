@@ -53,7 +53,7 @@ func registerSetupRoutesInternal(api huma.API, h *AuthHandler) {
 		Method:      http.MethodPost,
 		Path:        "/setup/identity",
 		Summary:     "Create the first administrator",
-		Description: "While first-run setup is pending, store the sign-in mode and create the first administrator. Requires the setup code from the hub log, hub Origin and the CSRF pair; no credential exemption applies. Local mode signs the browser in.",
+		Description: "While first-run setup is pending, store the sign-in mode and create the first administrator. Requires the hub Origin and the CSRF pair; no credential exemption applies. Local mode signs the browser in.",
 		Tags:        []string{"Auth"},
 		Security:    []map[string][]string{},
 	}, h.ClaimSetupIdentity)
@@ -102,10 +102,6 @@ func policyProblemInternal(ctx context.Context, err error) error {
 		return huma.Error400BadRequest(policyErr.Err.Error())
 	case errors.Is(err, ErrSetupNotPending), errors.Is(err, ErrModeForced), errors.Is(err, ErrProxyUnverified), errors.Is(err, ErrPasswordRequired):
 		return access.Problem(http.StatusConflict, err.Error())
-	case errors.Is(err, ErrSetupCodeInvalid):
-		return access.Problem(http.StatusForbidden, err.Error())
-	case errors.Is(err, ErrSetupRateLimited):
-		return access.Problem(http.StatusTooManyRequests, err.Error())
 	case errors.Is(err, ErrSetupPending):
 		return access.Problem(http.StatusUnauthorized, err.Error())
 	case errors.Is(err, user.ErrUsernameRequired):

@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original reduced shell using the approved free sidebar primitives. M19 web consumer integration.
 
+import { RuntimePeerDialog } from "@/shared/components/runtime-peer-dialog";
 import { BulkResultController } from "@/shared/components/bulk-result-dialog";
 import { GlobalSearch } from "./GlobalSearch";
 import { LayoutDashboard, Layers } from "lucide-react";
@@ -31,5 +32,5 @@ export function UserShell() {
     <SidebarFooter><FreeUserMenu onNavigate={() => {}} /></SidebarFooter>
   </Sidebar><SidebarInset className="min-w-0 bg-transparent"><header className="glass sticky top-0 z-30 flex h-14 items-center border-b px-4"><SidebarTrigger aria-label={t("toggleSidebar")} /><div className="ml-auto"><GlobalSearch /></div></header>
     <main id="main-content" className="min-w-0 p-4 md:p-7"><Suspense fallback={null}>{allowed ? <Outlet /> : <div role="status"><h1 className="text-xl font-semibold">{t("unavailable.title")}</h1><p className="text-sm text-muted-foreground">{t("unavailable.body")}</p></div>}</Suspense></main>
-  </SidebarInset>{allowed && <><ActionToasts /><ActionDialog /><ServiceRestartDialog /><StackUpdateDialogController /></>}<BulkResultController /><AppToaster /></SidebarProvider>;
+  </SidebarInset>{allowed && <><ActionToasts /><ActionDialog /><ServiceRestartDialog /><StackUpdateDialogController /><RuntimePeerDialog /></>}<BulkResultController /><AppToaster /></SidebarProvider>;
 }

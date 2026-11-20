@@ -183,7 +183,7 @@ effect and only the password is reset.
 ## Upgrade from 1.0.0
 
 1.0.0 created a built-in `arcane` administrator. After the upgrade the hub opens
-first-run setup again: enter the setup code from the hub log, choose the sign-in
+first-run setup again: complete it right after the upgrade, choose the sign-in
 mode and set the administrator's new username and password. Setup takes over the
 existing administrator account, so hosts, stacks, settings, API keys and activity
 stay; the `arcane` login and all earlier sessions stop working. If your Compose

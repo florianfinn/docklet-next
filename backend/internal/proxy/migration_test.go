@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"io/fs"
 	"path/filepath"
-	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -27,7 +26,8 @@ func TestP20Upgrade004PreservesUnrelatedRows(t *testing.T) {
 	require.NoError(t, err)
 	old := fstest.MapFS{}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), "005_") {
+		// The upgrade starts at 004: every later migration is left out.
+		if e.Name() >= "005_" {
 			continue
 		}
 		b, err := fs.ReadFile(source, e.Name())

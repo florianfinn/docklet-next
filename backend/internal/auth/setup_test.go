@@ -146,14 +146,8 @@ func (c *setupClient) do(method, path string, body any) *httptest.ResponseRecord
 	return res
 }
 
-func setupCodeOf(f *setupFixture) string {
-	f.svc.setup.mu.Lock()
-	defer f.svc.setup.mu.Unlock()
-	return formatSetupCodeInternal(f.svc.setup.code)
-}
-
-func claimBody(code string, mode authtypes.SignInMode, username string, password *string) authtypes.SetupIdentityRequest {
-	return authtypes.SetupIdentityRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: mode}, Code: code, Username: username, Password: password}
+func claimBody(mode authtypes.SignInMode, username string, password *string) authtypes.SetupIdentityRequest {
+	return authtypes.SetupIdentityRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: mode}, Username: username, Password: password}
 }
 
 func settingValue(t *testing.T, db *database.DB, key string) string {
@@ -192,17 +186,14 @@ func TestSetupClaimLocalCreatesAdministratorAndSession(t *testing.T) {
 		f.svc.SetAfterClaim(func(context.Context) error { reconciled++; return nil })
 	})
 	client := newSetupClient(t, f.router)
-	code := setupCodeOf(f)
-	require.Len(t, code, 14)
-
-	wrong := client.do(http.MethodPost, "/api/setup/identity", claimBody("AAAA-AAAA-AAAA", authtypes.SignInModeLocal, "owner", new(setupTestPassword)))
-	require.Equal(t, http.StatusForbidden, wrong.Code)
-	require.Contains(t, wrong.Body.String(), authtypes.CodeSetupCodeInvalid)
-	noPassword := client.do(http.MethodPost, "/api/setup/identity", claimBody(code, authtypes.SignInModeLocal, "owner", nil))
+	// The setup code is gone from the contract: an old body that still sends one fails schema validation.
+	legacy := client.do(http.MethodPost, "/api/setup/identity", map[string]any{"mode": "local", "code": "AAAA-AAAA-AAAA", "username": "owner", "password": setupTestPassword})
+	require.Equal(t, http.StatusUnprocessableEntity, legacy.Code, legacy.Body.String())
+	noPassword := client.do(http.MethodPost, "/api/setup/identity", claimBody(authtypes.SignInModeLocal, "owner", nil))
 	require.Equal(t, http.StatusConflict, noPassword.Code)
 	require.Contains(t, noPassword.Body.String(), authtypes.CodePasswordRequired)
 
-	claim := client.do(http.MethodPost, "/api/setup/identity", claimBody(strings.ToLower(code), authtypes.SignInModeLocal, "owner", new(setupTestPassword)))
+	claim := client.do(http.MethodPost, "/api/setup/identity", claimBody(authtypes.SignInModeLocal, "owner", new(setupTestPassword)))
 	require.Equal(t, http.StatusOK, claim.Code, claim.Body.String())
 	require.Equal(t, 1, reconciled)
 	require.NotEmpty(t, client.cookies, "local claim signs the browser in")
@@ -212,7 +203,7 @@ func TestSetupClaimLocalCreatesAdministratorAndSession(t *testing.T) {
 	require.Equal(t, "false", settingValue(t, f.db, "setupCompleted"))
 	require.Equal(t, "local", settingValue(t, f.db, session.SettingAuthMode))
 
-	again := client.do(http.MethodPost, "/api/setup/identity", claimBody(code, authtypes.SignInModeLocal, "other", new(setupTestPassword)))
+	again := client.do(http.MethodPost, "/api/setup/identity", claimBody(authtypes.SignInModeLocal, "other", new(setupTestPassword)))
 	require.Equal(t, http.StatusConflict, again.Code)
 	require.Contains(t, again.Body.String(), authtypes.CodeSetupNotPending)
 	var count int64
@@ -222,24 +213,10 @@ func TestSetupClaimLocalCreatesAdministratorAndSession(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestSetupClaimRateLimit(t *testing.T) {
-	f := newSetupFixture(t, &config.Config{}, nil)
-	client := newSetupClient(t, f.router)
-	for range setupFailureLimit {
-		require.Equal(t, http.StatusForbidden, client.do(http.MethodPost, "/api/setup/identity", claimBody("WRONG", authtypes.SignInModeNone, "owner", nil)).Code)
-	}
-	limited := client.do(http.MethodPost, "/api/setup/identity", claimBody(setupCodeOf(f), authtypes.SignInModeNone, "owner", nil))
-	require.Equal(t, http.StatusTooManyRequests, limited.Code)
-	require.Contains(t, limited.Body.String(), authtypes.CodeSetupRateLimited)
-	later := time.Now().Add(2 * setupFailureWindow)
-	f.svc.setup.now = func() time.Time { return later }
-	require.Equal(t, http.StatusOK, client.do(http.MethodPost, "/api/setup/identity", claimBody(setupCodeOf(f), authtypes.SignInModeNone, "owner", nil)).Code)
-}
-
 func TestSetupClaimIsStrictCSRF(t *testing.T) {
 	f := newSetupFixture(t, &config.Config{}, nil)
 	client := newSetupClient(t, f.router)
-	body := claimBody(setupCodeOf(f), authtypes.SignInModeNone, "owner", nil)
+	body := claimBody(authtypes.SignInModeNone, "owner", nil)
 	client.headers["Origin"] = "https://attacker.example.org"
 	require.Equal(t, http.StatusForbidden, client.do(http.MethodPost, "/api/setup/identity", body).Code)
 	// A cookie-less request with a credential header gets no exemption either.
@@ -252,13 +229,12 @@ func TestSetupClaimIsStrictCSRF(t *testing.T) {
 
 func TestSetupConcurrentClaimsCreateOneAdministrator(t *testing.T) {
 	f := newSetupFixture(t, &config.Config{}, nil)
-	code := setupCodeOf(f)
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
 	for i := range errs {
 		wg.Go(func() {
 			req := httptest.NewRequest(http.MethodPost, "/api/setup/identity", nil)
-			_, errs[i] = f.svc.ClaimSetup(t.Context(), req, claimBody(code, authtypes.SignInModeNone, []string{"first", "second"}[i], nil), authtypes.SessionMeta{})
+			_, errs[i] = f.svc.ClaimSetup(t.Context(), req, claimBody(authtypes.SignInModeNone, []string{"first", "second"}[i], nil), authtypes.SessionMeta{})
 		})
 	}
 	wg.Wait()
@@ -267,7 +243,7 @@ func TestSetupConcurrentClaimsCreateOneAdministrator(t *testing.T) {
 		switch {
 		case err == nil:
 			succeeded++
-		case errors.Is(err, ErrSetupNotPending), errors.Is(err, ErrSetupCodeInvalid):
+		case errors.Is(err, ErrSetupNotPending):
 			refused++
 		default:
 			t.Fatalf("unexpected claim error: %v", err)
@@ -282,10 +258,9 @@ func TestSetupConcurrentClaimsCreateOneAdministrator(t *testing.T) {
 
 func TestSetupClaimRechecksInsideTransaction(t *testing.T) {
 	f := newSetupFixture(t, &config.Config{}, nil)
-	code := setupCodeOf(f)
 	// Another writer recorded the claim after this process published its pending snapshot.
 	require.NoError(t, f.db.Save(&settings.SettingVariable{Key: session.SettingSetupIdentity, Value: session.SetupIdentityDone}).Error)
-	_, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(code, authtypes.SignInModeNone, "late", nil), authtypes.SessionMeta{})
+	_, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(authtypes.SignInModeNone, "late", nil), authtypes.SessionMeta{})
 	require.ErrorIs(t, err, ErrSetupNotPending)
 	var count int64
 	require.NoError(t, f.db.Model(&user.User{}).Count(&count).Error)
@@ -316,11 +291,11 @@ func TestSetupClaimTakesOverUpgradedAdministrator(t *testing.T) {
 	_, err = f.svc.AuthenticateLocalPrimary(t.Context(), "arcane", "arcane-admin")
 	require.Error(t, err)
 
-	taken := claimBody(setupCodeOf(f), authtypes.SignInModeLocal, "viewer", new(setupTestPassword))
+	taken := claimBody(authtypes.SignInModeLocal, "viewer", new(setupTestPassword))
 	_, err = f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), taken, authtypes.SessionMeta{})
 	require.ErrorIs(t, err, user.ErrUsernameTaken)
 
-	result, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(setupCodeOf(f), authtypes.SignInModeLocal, "owner", new(setupTestPassword)), authtypes.SessionMeta{})
+	result, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(authtypes.SignInModeLocal, "owner", new(setupTestPassword)), authtypes.SessionMeta{})
 	require.NoError(t, err)
 	require.Equal(t, legacy.ID, result.User.ID, "takeover keeps the administrator ID")
 	_, _, err = f.svc.VerifyToken(t.Context(), legacyTokens.AccessToken)
@@ -338,10 +313,9 @@ func TestSetupClaimTakesOverUpgradedAdministrator(t *testing.T) {
 func TestSetupForcedModeLocksChoiceAndSurvivesRemoval(t *testing.T) {
 	cfg := &config.Config{AuthMode: "none"}
 	f := newSetupFixture(t, cfg, nil)
-	code := setupCodeOf(f)
-	_, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(code, authtypes.SignInModeLocal, "owner", new(setupTestPassword)), authtypes.SessionMeta{})
+	_, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(authtypes.SignInModeLocal, "owner", new(setupTestPassword)), authtypes.SessionMeta{})
 	require.ErrorIs(t, err, ErrModeForced)
-	result, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(code, authtypes.SignInModeNone, "owner", nil), authtypes.SessionMeta{})
+	result, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(authtypes.SignInModeNone, "owner", nil), authtypes.SessionMeta{})
 	require.NoError(t, err)
 	require.Equal(t, "none", settingValue(t, f.db, session.SettingAuthMode), "the claim records the forced mode")
 	_, err = f.svc.UpdateSignIn(t.Context(), httptest.NewRequest(http.MethodPut, "/", nil), result.User.ID, authtypes.SignInUpdateRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Password: new(setupTestPassword)}, authtypes.SessionMeta{})
@@ -356,7 +330,7 @@ func TestSetupForcedModeLocksChoiceAndSurvivesRemoval(t *testing.T) {
 func TestSignInRuntimeChangeRevokesSessionsAndReissues(t *testing.T) {
 	f := newSetupFixture(t, &config.Config{}, nil)
 	client := newSetupClient(t, f.router)
-	require.Equal(t, http.StatusOK, client.do(http.MethodPost, "/api/setup/identity", claimBody(setupCodeOf(f), authtypes.SignInModeLocal, "owner", new(setupTestPassword))).Code)
+	require.Equal(t, http.StatusOK, client.do(http.MethodPost, "/api/setup/identity", claimBody(authtypes.SignInModeLocal, "owner", new(setupTestPassword))).Code)
 	before := map[string]string{}
 	for name, value := range client.cookies {
 		before[name] = value
@@ -380,7 +354,7 @@ func TestSignInRuntimeChangeRevokesSessionsAndReissues(t *testing.T) {
 func TestSignInChangeLockoutGuards(t *testing.T) {
 	cfg := &config.Config{}
 	f := newSetupFixture(t, cfg, nil)
-	result, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(setupCodeOf(f), authtypes.SignInModeNone, "owner", nil), authtypes.SessionMeta{})
+	result, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(authtypes.SignInModeNone, "owner", nil), authtypes.SessionMeta{})
 	require.NoError(t, err)
 	ownerID := result.User.ID
 
@@ -448,7 +422,7 @@ func TestStoredPolicyInvalidFailsStartup(t *testing.T) {
 
 func TestSignInChangeRollbackKeepsPolicy(t *testing.T) {
 	f := newSetupFixture(t, &config.Config{}, nil)
-	result, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(setupCodeOf(f), authtypes.SignInModeNone, "owner", nil), authtypes.SessionMeta{})
+	result, err := f.svc.ClaimSetup(t.Context(), httptest.NewRequest(http.MethodPost, "/", nil), claimBody(authtypes.SignInModeNone, "owner", nil), authtypes.SessionMeta{})
 	require.NoError(t, err)
 	require.NoError(t, f.db.Migrator().DropTable(&session.UserSession{}))
 	change := authtypes.SignInUpdateRequest{SignInPolicyInput: authtypes.SignInPolicyInput{Mode: authtypes.SignInModeLocal}, Password: new(setupTestPassword)}

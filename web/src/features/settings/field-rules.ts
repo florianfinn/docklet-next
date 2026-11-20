@@ -1,7 +1,7 @@
 import { useTranslations } from "use-intl";
 
 import type { AuthSettings, GeneralSettings, HostDefaults, ProxyAuth } from "@/domain/settings";
-import { absolutePath, headerName, hubAddress, installDirProblem, optionalId, required, url } from "@/domain/validation";
+import { absolutePath, headerName, hubAddress, installDirProblem, optionalId, required, url, normalizeDomainUrl } from "@/domain/validation";
 
 
 /** Synthetic Authentik proxy-outpost values; example domains and RFC 5737 addresses only. */
@@ -19,12 +19,12 @@ export interface PasswordDraft {
   confirm: string;
 }
 
-export function useGeneralErrors(g: GeneralSettings) {
+export function useGeneralErrors(g: GeneralSettings, options?: { preserveAddress?: boolean; appUrl?: string }) {
   const tv = useTranslations("hosts.validation");
   const tg = useTranslations("settings.general");
   const name = required(g.hubName);
-  const address = hubAddress(g.hubAddress);
-  const domain = g.domainUrl.trim() ? url(g.domainUrl) : undefined;
+  const address = options?.preserveAddress ? undefined : hubAddress(g.hubAddress);
+  const domain = normalizeDomainUrl(g.domainUrl, options?.appUrl) === undefined;
   return {
     hubName: name ? tv(name as "required") : undefined,
     hubAddress: address === "required" ? tv("required") : address ? tg("hubAddressInvalid") : undefined,

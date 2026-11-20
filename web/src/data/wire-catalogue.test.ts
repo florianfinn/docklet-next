@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { GUARDED_WIRE_ENUMS, EXEMPT_WIRE_ENUMS } from "./wire-catalogue.test-support";
 
 type Node = { properties?: Record<string, Node>; items?: Node; allOf?: Node[]; anyOf?: Node[]; oneOf?: Node[]; enum?: unknown[]; $ref?: string };
-const PROPERTY_NAMES = new Set(["code", "reason", "errorCode", "messageCode", "baselineCode", "pointCode", "policyCode", "status", "state", "kind", "outcome", "phase"]);
+const PROPERTY_NAMES = new Set(["code", "reason", "definitionReason", "errorCode", "messageCode", "baselineCode", "pointCode", "policyCode", "status", "state", "kind", "outcome", "phase"]);
 
 function enumProperties(schemas: Record<string, Node>): Map<string, string[]> {
   const result = new Map<string, string[]>();

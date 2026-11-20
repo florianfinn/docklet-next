@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { RouterProvider } from "react-router";
 import { IntlProvider } from "use-intl";
 
+import { HubUpdateOverlay } from "@/shared/components/hub-update/HubUpdateOverlay";
+import { HubUpdateRecovery } from "@/shared/components/hub-update/session";
 import { AdapterProvider } from "@/data/AdapterProvider";
 import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { createAdapter } from "@/runtime";
@@ -19,7 +21,7 @@ import { router } from "./router";
 function AppContent({ locale }: { locale: ReturnType<typeof useAppLocale> }) {
   const timeZone = useHubTimeZone();
   return <IntlProvider locale={locale} messages={catalogs[locale]} timeZone={timeZone}>
-    <TooltipProvider delayDuration={250}><RouterProvider router={router} /></TooltipProvider>
+    <TooltipProvider delayDuration={250}><HubUpdateRecovery /><RouterProvider router={router} /><HubUpdateOverlay /></TooltipProvider>
   </IntlProvider>;
 }
 

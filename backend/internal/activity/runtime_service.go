@@ -16,12 +16,14 @@ import (
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	containertypes "github.com/florianfinn/docklet-next/types/container"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"gorm.io/gorm"
 )
 
 // RuntimeResolvedTarget is current identity evidence, not inventory cache data.
 // ComposeManaged without a persisted parent is an admission refusal.
 type RuntimeResolvedTarget struct {
+	PeerOverrides       *imageDTO.RuntimePeerOverrides
 	Origin              *containertypes.OriginFields
 	ComposeProjectLabel bool
 	ReplacementRunID    string

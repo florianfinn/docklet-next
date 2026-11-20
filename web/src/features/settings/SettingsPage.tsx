@@ -4,10 +4,11 @@ import { Archive, BellRing, HardDrive, HeartPulse, History, Info, KeyRound, Layo
 import { NavLink, Navigate, useParams } from "react-router";
 import { useTranslations } from "use-intl";
 
-import { useConnectedSettings, useSettings } from "@/data/queries";
+import { useConnectedSettings, useSettings, useHubVersionHint } from "@/data/queries";
 import { useAdapter } from "@/data/use-adapter";
 import { PageHeader, QueryError } from "@/shared/components/page";
 import { FavoritesSection } from "@/shared/preferences/FavoritesSection";
+import { HubUpdateHint } from "@/shared/components/hub-update/HubUpdateHint";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { AuthSection } from "./sections/AuthSection";
@@ -38,6 +39,7 @@ export default function SettingsPage() {
   const { section } = useParams();
   const t = useTranslations("settings");
   const adapter = useAdapter();
+  const hubVersion = useHubVersionHint();
   const validSection = !!section && (IDS as readonly string[]).includes(section);
   const id = validSection ? section as SectionId : "general";
   const connected = adapter.kind === "http" && (id === "general" || id === "auth" || id === "activity");
@@ -65,12 +67,12 @@ export default function SettingsPage() {
                 {g.items.map(({ id: item, icon: Icon }) => (
                   <NavLink
                     key={item}
-                    to={`/settings/${item}`}
+                    to={`/settings/${item}${item === "updates" && hubVersion ? "#hub-update" : ""}`}
                     end
                     className="nav-row flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm whitespace-nowrap outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >
                     <Icon className="size-4" aria-hidden />
-                    {t(`sections.${item}`)}
+                    {t(`sections.${item}`)}{item === "updates" && <HubUpdateHint version={hubVersion} />}
                   </NavLink>
                 ))}
               </div>

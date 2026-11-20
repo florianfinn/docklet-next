@@ -171,7 +171,7 @@ callers creating events must send a listed code. A run status transition uses
 | Family | Codes |
 | --- | --- |
 | `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy`, `run.cancelling`, `run.request-mismatch` |
-| `runtime` | `runtime.outcome-unknown`, `runtime.interrupted`, `runtime.cancelled`, `runtime.failed`, `runtime.wait-timeout`, `runtime.waiter-disconnected`, `runtime.parent-unresolved`, `runtime.target-removed`, `runtime.target-changed`, `runtime.target-unavailable`, `runtime.idempotency-mismatch` |
+| `runtime` | `runtime.outcome-unknown`, `runtime.interrupted`, `runtime.cancelled`, `runtime.failed`, `runtime.wait-timeout`, `runtime.waiter-disconnected`, `runtime.parent-unresolved`, `runtime.target-removed`, `runtime.target-changed`, `runtime.target-unavailable`, `runtime.invalid-acknowledgement`, `runtime.peer-acknowledged`, `runtime.idempotency-mismatch` |
 | `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.message` |
 | `deploy` | `deploy.pull` |
 | `job` | `job.queued`, `job.waiting`, `job.running`, `job.retrying`, `job.succeeded`, `job.partial`, `job.skipped`, `job.failed`, `job.needs_attention`, `job.canceled` |
@@ -399,3 +399,29 @@ status and are separate from the immutable helper phase evidence.
 
 The proxy module records a confirmed administrator override as `proxy.operation.released`.
 The audit event and reservation release commit together; actor, operation and target hashes remain available.
+
+### Peer identity confirmation (agent contract v20)
+
+Runtime target metadata and execution options accept an optional
+`acknowledgedUncertainty` SHA-256 digest. Empty acknowledgements preserve the
+v18/v19 semantic encoding and are omitted from the wire. Confirmed requests
+require agent contract v20 before dispatch. Direct and Edge carry the explicit
+`X-Docklet-Hub-Contract` announcement; missing or invalid announcements select the
+legacy three-field blocker and cannot authorize a confirmation. The supported
+v18/v19 fingerprints remain frozen.
+
+A confirmable `runtime.target-unavailable` response includes a sanitized
+`uncertainty` digest, total count, and at most sixteen display peers. The digest
+covers the complete sorted peer ID/reason set, with newline separators. Display
+pagination is independent of fleet size. A changed set requires another explicit
+confirmation; a proven duplicate is always non-confirmable. Admission bodies for
+ordinary project actions and flat deployment options accept the digest. Update
+admission preserves all lifecycle request fields alongside it. Unknown members
+remain rejected. Container recreate (`RecreateRequest`), container image update
+(`VerifiedImageRequest`) and container image restore carry no acknowledgement; their
+confirmable refusals stay refusals in the web.
+
+Receipts retain `acknowledged_uncertainty` and a bounded `peer_overrides` snapshot
+independently of activity history. Actual-use audit uses
+`runtime.peer-acknowledged` with count and at most sixteen safe peer descriptions.
+Unused supplied acknowledgements do not create audit entries.
