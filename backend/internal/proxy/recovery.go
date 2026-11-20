@@ -8,7 +8,9 @@ package proxy
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/resolver"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"gorm.io/gorm"
 	"log/slog"
@@ -153,6 +155,31 @@ func (a *Agent) Query(ctx context.Context, q dto.Query) (dto.Operation, error) {
 		a.mu.Unlock()
 		return o, nil
 	}
+	if o.Kind == dto.ResolverOperation {
+		var envelope dto.ResolverEnvelope
+		if json.Unmarshal(j.Intent, &envelope) != nil {
+			a.mu.Unlock()
+			return o, nil
+		}
+		executor, er := a.resolverExecutor(ctx, envelope)
+		if er != nil {
+			a.mu.Unlock()
+			return o, er
+		}
+		if o.State == dto.RecoveryRequired {
+			a.mu.Unlock()
+			if t, e := executor.Confirmation(ctx, envelope, o); e == nil {
+				if state, e := resolver.Current(t); e == nil {
+					o.Current = &state
+				}
+			}
+			return o, nil
+		}
+		a.active[q.ID] = true
+		a.mu.Unlock()
+		defer a.inactive(q.ID)
+		return executor.Resume(context.WithoutCancel(ctx), envelope, o)
+	}
 	if o.State == dto.RecoveryRequired {
 		a.mu.Unlock()
 		if current, er := a.Runtime.Rebind(ctx, i.Request.Instance); er == nil {
@@ -254,12 +281,27 @@ func (a *Agent) Settle(ctx context.Context) error {
 	// Journal content never fails startup: each row settles on its own, and an
 	// undecodable row stays locked and visible for explicit release.
 	for _, j := range rows {
-		i, _, err := decodeJournal(j)
+		i, receipt, err := decodeJournal(j)
+		if err == nil && deferredOperation(receipt) {
+			continue
+		}
 		if err == nil {
 			_, err = a.Query(ctx, dto.Query{ID: j.ID, Instance: i.Request.Instance, Generation: j.Generation, Registration: j.Registration})
 		}
 		if err != nil {
 			slog.WarnContext(ctx, "Proxy journal row left for recovery", "operationId", j.ID, "error", err)
+		}
+	}
+	var finished []Journal
+	if a.DB.WithContext(ctx).Where("finished_at IS NOT NULL").Find(&finished).Error == nil {
+		for _, j := range finished {
+			var en dto.ResolverEnvelope
+			_, o, er := decodeJournal(j)
+			if er == nil && o.Kind == dto.ResolverOperation && json.Unmarshal(j.Intent, &en) == nil {
+				if executor, er := a.resolverExecutor(ctx, en); er == nil {
+					_ = resolver.Remove(executor.Backups, o.ID)
+				}
+			}
 		}
 	}
 	if err := prune(ctx, a.DB, nowUTC()); err != nil {
@@ -325,14 +367,25 @@ func (a *Agent) Release(ctx context.Context, q dto.ReleaseRequest) (dto.Operatio
 		return dto.Operation{}, err
 	}
 	i, o, err := decodeJournal(j)
-	if err == nil && o.Kind == dto.ResolverOperation && o.State.Final() {
-		return o, nil
+	if q.Registration != j.Registration || (o.InstanceID != "" && q.Instance.ID != o.InstanceID) {
+		return o, dto.Fail(dto.RegistrationChanged, 409)
 	}
 	if err != nil || deferredOperation(o) {
 		return a.releaseUndecodable(ctx, j, q)
 	}
-	if q.Registration != j.Registration || q.Instance.ID != i.Request.Instance.ID {
-		return o, dto.Fail(dto.RegistrationChanged, 409)
+	if o.Kind == dto.ResolverOperation {
+		if a.active[q.ID] {
+			return o, dto.Fail(dto.OperationConflict, 409)
+		}
+		var en dto.ResolverEnvelope
+		if json.Unmarshal(j.Intent, &en) != nil {
+			return o, dto.Fail(dto.UnknownOperationKind, 409)
+		}
+		executor, er := a.resolverExecutor(ctx, en)
+		if er != nil {
+			return o, er
+		}
+		return executor.Release(ctx, en, o, q)
 	}
 	// A final journal answers with its receipt, which the hub adopts.
 	if o.State.Final() {

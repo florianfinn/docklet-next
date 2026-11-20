@@ -144,7 +144,7 @@ func (m *Module) RegisterRoutes(api huma.API, agent bool) {
 			if err := i.Body.Validate(); err != nil {
 				return nil, err
 			}
-			return out(dto.Operation{}, m.stubInstance(ctx, i.InstanceID))
+			return out(m.CreateResolver(ctx, i.InstanceID, i.Body))
 		})
 	}
 	// Keep schemas reachable in the exported document even before an executor uses them.

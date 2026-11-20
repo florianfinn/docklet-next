@@ -12,6 +12,7 @@ import (
 	"errors"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"gorm.io/gorm"
+	"strings"
 	"time"
 )
 
@@ -196,4 +197,19 @@ func (generationRow) TableName() string { return "proxy_generation" }
 // Models extends the forward schema without changing the frozen 001 baseline.
 func Models() []any {
 	return []any{&generationRow{}, &instanceRow{}, &Record{}, &reservation{}, &Journal{}, &fenceRow{}, &verifiedFile{}, &admissionRow{}}
+}
+
+// Resolver plans own a project ancestor of their static/dynamic paths. Routes
+// use the same overlap test, so direct host ingress cannot bypass this exclusion.
+func lockSource(tx *gorm.DB, source string) error {
+	var rows []Journal
+	if err := tx.Select("id,source").Where("finished_at IS NULL").Find(&rows).Error; err != nil {
+		return err
+	}
+	for _, j := range rows {
+		if source == j.Source || strings.HasPrefix(source, j.Source+"/") || strings.HasPrefix(j.Source, source+"/") {
+			return &dto.Problem{Status: 409, Code: dto.ModuleBusy, OperationID: j.ID}
+		}
+	}
+	return nil
 }

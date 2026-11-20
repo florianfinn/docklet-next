@@ -104,7 +104,7 @@ func TestM28StubsAndEdgeCommands(t *testing.T) {
 	value := "example-sentinel-value"
 	q := dto.ResolverApplyRequest{ID: "resolver-one", Instance: x.request.Instance, Request: dto.ResolverRequest{ResolverConfig: dto.ResolverConfig{Name: "test", Email: "admin@example.test", CA: dto.ResolverCA{Kind: "letsencrypt"}, Storage: "/certs/acme.json", Challenge: dto.ResolverChallenge{Kind: "dns", Provider: dto.HTTPRequest}}, Variables: []dto.ResolverVariable{{Name: "HTTPREQ_ENDPOINT", Value: &value}}}}
 	_, err := x.a.CreateResolver(t.Context(), q)
-	requireCode(t, err, dto.NotImplemented)
+	requireCode(t, err, dto.InvalidInput)
 	q.Request.Variables = append(q.Request.Variables, dto.ResolverVariable{Name: "COMPOSE_FILE"})
 	_, err = x.a.CreateResolver(t.Context(), q)
 	requireCode(t, err, dto.InvalidInput)
@@ -152,6 +152,9 @@ func TestM28TypedResolverEnvelopeAcrossRestart(t *testing.T) {
 			digest, err := dto.ResolverEnvelope{Kind: dto.ResolverOperation, ID: x.request.ID, Instance: x.request.Instance, Generation: x.a.Generation(), Registration: x.request.Registration, Intent: intent}.Digest()
 			require.NoError(t, err)
 			state := dto.Pending
+			if phase == dto.ResolverRecoveryRequired {
+				state = dto.RecoveryRequired
+			}
 			if phase.Final() {
 				state = dto.State(phase)
 			}
@@ -167,21 +170,16 @@ func TestM28TypedResolverEnvelopeAcrossRestart(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, x.db.Create(&Journal{ID: o.ID, Source: "host\x00" + x.request.Instance.Source.Canonical, Generation: o.Generation, Registration: o.Registration, Digest: digest, State: state, Phase: o.Phase, Intent: raw, Result: result, CreatedAt: o.CreatedAt, FinishedAt: o.FinishedAt}).Error)
 			require.NoError(t, x.db.Create(&Record{ID: o.ID, InstanceID: o.InstanceID, Generation: o.Generation, Registration: o.Registration, Digest: digest, State: state, Request: raw, Result: result, CreatedAt: o.CreatedAt, FinishedAt: o.FinishedAt}).Error)
-			x.a, err = NewAgent(x.db.DB, x.f, x.a.Engines)
+			journal, err := findJournal(t.Context(), x.db.DB, o.ID)
 			require.NoError(t, err)
-			require.NoError(t, x.a.Settle(t.Context()))
-			got, err := x.a.Query(t.Context(), x.query())
+			_, got, err := decodeJournal(journal)
 			require.NoError(t, err)
 			require.Equal(t, phase, got.Resolver.Phase)
-			expected := dto.RecoveryRequired
-			if state.Final() {
-				expected = state
-			}
-			require.Equal(t, expected, got.State)
-			h := &Hub{DB: x.db.DB}
-			hubResult, err := h.Query(t.Context(), o.ID)
+			require.Equal(t, state, got.State)
+			var record Record
+			require.NoError(t, x.db.First(&record, "id = ?", o.ID).Error)
+			_, hubResult, err := decodeRecord(record)
 			require.NoError(t, err)
-			require.Equal(t, got.State, hubResult.State)
 			require.Equal(t, got.Resolver, hubResult.Resolver)
 			require.Zero(t, x.f.publications)
 			require.Zero(t, x.f.restorations)

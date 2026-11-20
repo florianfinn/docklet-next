@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/types/base"
@@ -114,4 +115,23 @@ func (t *HostTransport) Inventory(ctx context.Context, i dto.Instance) (dto.Inve
 	var r base.ApiResponse[dto.Inventory]
 	err := t.call(ctx, i.EnvironmentID, "POST", "/inventory", i, &r)
 	return r.Data, err
+}
+
+func (t *HostTransport) CreateResolver(ctx context.Context, q dto.ResolverApplyRequest) (dto.Operation, error) {
+	if q.Instance.EnvironmentID == "0" {
+		return t.Local.Agent.CreateResolver(ctx, q)
+	}
+	var r base.ApiResponse[dto.Operation]
+	err := t.call(ctx, q.Instance.EnvironmentID, "POST", "/resolvers", q, &r)
+	// Network failures cannot carry submitted values to callers or loggers.
+	if err != nil {
+		if p, ok := errors.AsType[*moduledto.Problem](err); ok {
+			return r.Data, &moduledto.Problem{Status: p.Status, Code: p.Code, Feature: p.Feature}
+		}
+		if p, ok := errors.AsType[*dto.Problem](err); ok {
+			return r.Data, dto.Fail(p.Code, p.Status)
+		}
+		return r.Data, dto.Fail(dto.AgentUnavailable, 503)
+	}
+	return r.Data, nil
 }
