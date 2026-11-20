@@ -199,6 +199,10 @@ produce a confirmable refusal with a SHA-256 digest of all sorted `peerId:reason
 lines, total count and up to sixteen display peers. A deliberate confirmation
 resends the original intent with `acknowledgedUncertainty`; the fresh resolver
 accepts only an equal digest. Target read failures remain non-overridable.
+Stack start, stop, restart, down, deploy, redeploy and stack update/restore carry the
+confirmation. Container recreate, container image update and container image restore
+requests have no acknowledgement member, so the web shows their refusal without a
+confirm control; extending those three bodies is the way to add it later.
 Archived identity remains usable as a parent while the archived stack mutation
 guard remains in force. The existing definition-invalid marker gains a concrete
 reason and a safe project-relative missing filename; live/unknown rows retain

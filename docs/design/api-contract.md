@@ -417,7 +417,9 @@ pagination is independent of fleet size. A changed set requires another explicit
 confirmation; a proven duplicate is always non-confirmable. Admission bodies for
 ordinary project actions and flat deployment options accept the digest. Update
 admission preserves all lifecycle request fields alongside it. Unknown members
-remain rejected.
+remain rejected. Container recreate (`RecreateRequest`), container image update
+(`VerifiedImageRequest`) and container image restore carry no acknowledgement; their
+confirmable refusals stay refusals in the web.
 
 Receipts retain `acknowledged_uncertainty` and a bounded `peer_overrides` snapshot
 independently of activity history. Actual-use audit uses
