@@ -251,6 +251,7 @@ func (e *engine) inventory(ctx context.Context, i dto.Instance) (staticInventory
 	}
 	sort.Slice(v.EntryPoints, func(a, b int) bool { return v.EntryPoints[a].Name < v.EntryPoints[b].Name })
 	v.Resolvers = sorted(resolvers)
+	v.ResolverSummaries = resolverSummaries(selected, c.Config.Env)
 	v.Providers = sorted(providers)
 	v.Plugins = sorted(plugins)
 	return v, nil

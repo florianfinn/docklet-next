@@ -58,6 +58,14 @@ it("U-3 without a selectable source explains the fix and offers no Create", asyn
   expect((within(card).getByRole("button", { name: "Register instance" }) as HTMLButtonElement).disabled).toBe(true);
 });
 
+// A-U3: a candidate without any mounted source gets the same explanation.
+it("U-3 without any mounted source explains the fix and offers no Create", async () => {
+  const { card } = await setup([]);
+  expect(within(card).getByRole("status").textContent?.includes("Mount the directory of the file provider")).toBe(true);
+  expect(within(card).queryByRole("combobox", { name: "Configuration source" }) === null).toBe(true);
+  expect((within(card).getByRole("button", { name: "Register instance" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
 it("U-6 a held discovery answer from an earlier request never replaces the current one", async () => {
   const f = fixture();
   f.state.instances = [];

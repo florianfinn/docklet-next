@@ -63,7 +63,7 @@ function Candidate({
         {c.instanceId && <p>{t("assigned", { name: assigned ?? c.instanceId })}</p>}
       </div>
       <fieldset disabled={busy || !!c.instanceId} className="grid min-w-0 gap-4">
-        {sources.length > 0 && !initial ? (
+        {!initial ? (
           <p role="status" className="text-sm">
             {t("noEligibleSource")}
           </p>
