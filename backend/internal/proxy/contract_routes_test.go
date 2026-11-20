@@ -51,6 +51,7 @@ func TestM28HubAndAgentStubRoutes(t *testing.T) {
 	instance.EnvironmentID = "0"
 	instance.Authority = dto.FileAuthority
 	m := &Module{Agent: x.a, Settings: x.settings, Modules: x.mods, Hub: &Hub{DB: x.db.DB}}
+	m.Transport = &HostTransport{Local: m}
 	require.NoError(t, m.saveInstance(t.Context(), instance))
 	resolver := dto.ResolverRequest{ResolverConfig: dto.ResolverConfig{Name: "test", Email: "admin@example.test", CA: dto.ResolverCA{Kind: "letsencrypt"}, Storage: "/certs/acme.json", Challenge: dto.ResolverChallenge{Kind: "http", EntryPoint: "web"}}, Variables: []dto.ResolverVariable{}}
 	certificate := dto.CertificateCheckRequest{File: "routes/app.yml", Router: "app", SourceHash: strings.Repeat("a", 64), Host: "app.example.test"}
@@ -66,8 +67,13 @@ func TestM28HubAndAgentStubRoutes(t *testing.T) {
 		{agent, "/api/environments/0/modules/proxy/certificate-check", dto.HostCertificateCheckRequest{Instance: instance, CertificateCheckRequest: certificate}},
 	} {
 		w := postContract(tt.router, tt.path, tt.body)
-		require.Equal(t, 501, w.Code, w.Body.String())
-		require.Contains(t, w.Body.String(), "not-implemented")
+		if strings.HasSuffix(tt.path, "certificate-check") {
+			require.Equal(t, 409, w.Code, w.Body.String())
+			require.Contains(t, w.Body.String(), "certificate-unavailable")
+		} else {
+			require.Equal(t, 501, w.Code, w.Body.String())
+			require.Contains(t, w.Body.String(), "not-implemented")
+		}
 	}
 	for _, table := range []string{"proxy_journal", "proxy_operations", "proxy_reservations"} {
 		var n int64

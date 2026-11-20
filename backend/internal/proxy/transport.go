@@ -115,3 +115,12 @@ func (t *HostTransport) Inventory(ctx context.Context, i dto.Instance) (dto.Inve
 	err := t.call(ctx, i.EnvironmentID, "POST", "/inventory", i, &r)
 	return r.Data, err
 }
+
+func (t *HostTransport) CheckCertificate(ctx context.Context, q dto.HostCertificateCheckRequest) (dto.CertificateObservation, error) {
+	if q.Instance.EnvironmentID == "0" {
+		return t.Local.Agent.CheckCertificate(ctx, q)
+	}
+	var r base.ApiResponse[dto.CertificateObservation]
+	err := t.call(ctx, q.Instance.EnvironmentID, "POST", "/certificate-check", q, &r)
+	return r.Data, err
+}

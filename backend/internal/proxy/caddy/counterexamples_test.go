@@ -191,7 +191,7 @@ func TestLateRoutingCannotEraseAnEarlierAdminFailure(t *testing.T) {
 		}
 		probes++
 		if probes == 2 {
-			x.now = x.now.Add(4 * time.Second)
+			x.now = x.now.Add(6 * time.Second)
 			return httpResult(201, "late")
 		}
 		return httpResult(200, "")

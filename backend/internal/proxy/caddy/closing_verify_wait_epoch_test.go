@@ -20,11 +20,16 @@ import (
 func TestVerifyTransientEpochWaitDeadlineRetainsLastReason(t *testing.T) {
 	x := fixture(t)
 	i := observationIntent(x, baseSite(), true, "edit-route")
-	x.e.activated.Store(i.Request.ID, x.now.Add(-4800*time.Millisecond))
+	x.e.activated.Store(i.Request.ID, x.now.Add(-6800*time.Millisecond))
 	armed, failed := false, false
-	x.execFn = func([]string) hostio.ExecResult { armed = true; return httpResult(201, "changed") }
+	afterProbeReads := 0
+	x.execFn = func([]string) hostio.ExecResult { armed = true; afterProbeReads = 0; return httpResult(201, "changed") }
 	x.fault = func(w http.ResponseWriter, r *http.Request) bool {
 		if armed && !failed && strings.Contains(r.URL.Path, "/containers/") && strings.HasSuffix(r.URL.Path, "/json") {
+			afterProbeReads++
+			if afterProbeReads == 1 {
+				return false
+			}
 			failed = true
 			http.Error(w, `{"message":"temporary daemon failure"}`, http.StatusServiceUnavailable)
 			return true

@@ -9,11 +9,13 @@ package proxy
 import (
 	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/docker"
 	"io"
+	"sync"
 	"time"
 )
 
@@ -117,4 +119,114 @@ func (d *DockerRuntime) Logs(ctx context.Context, i dto.Instance, since time.Tim
 		return dto.Fail(dto.LogsUnavailable, 409)
 	}
 	return fence.Settle(ctx)
+}
+
+// Probe state belongs to the agent runtime instance; no hub image IDs cross
+// the transport. Prepared references are refreshed before each engine admission.
+type runtimeProbes struct {
+	runner   *hostio.ProbeRunner
+	mu       sync.RWMutex
+	prepared map[string]hostio.PreparedProbe
+}
+
+var probeRuntimes sync.Map
+
+func (d *DockerRuntime) probes(ctx context.Context) (*runtimeProbes, error) {
+	if state, ok := probeRuntimes.Load(d); ok {
+		return state.(*runtimeProbes), nil
+	}
+	cli, err := d.Docker.GetClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	state := &runtimeProbes{prepared: map[string]hostio.PreparedProbe{}, runner: &hostio.ProbeRunner{Client: cli, Docker: func(ctx context.Context) (*client.Client, error) { return d.Docker.GetClient(ctx) }}}
+	state.runner.Resolve = func(ctx context.Context) (volumehelper.Image, error) {
+		configured := ""
+		if d.Settings != nil {
+			configured = d.Settings.GetSettingsConfig().ToolsImage.Value
+		}
+		current, err := d.Docker.GetClient(ctx)
+		if err != nil {
+			return volumehelper.Image{}, err
+		}
+		return volumehelper.Resolve(ctx, current, configured)
+	}
+	actual, _ := probeRuntimes.LoadOrStore(d, state)
+	return actual.(*runtimeProbes), nil
+}
+func (d *DockerRuntime) PrewarmProbe(ctx context.Context, i dto.Instance) error {
+	state, err := d.probes(ctx)
+	if err != nil {
+		return err
+	}
+	prepared, err := state.runner.Prepare(ctx)
+	if err != nil {
+		return err
+	}
+	state.mu.Lock()
+	state.prepared[probeKey(i, hostio.ProbeOperation(ctx))] = prepared
+	state.mu.Unlock()
+	return nil
+}
+func (d *DockerRuntime) SweepProbes(ctx context.Context) error {
+	state, err := d.probes(ctx)
+	if err != nil {
+		return err
+	}
+	return state.runner.Sweep(ctx)
+}
+func (d *DockerRuntime) Probe(ctx context.Context, i dto.Instance, host, rawURL string) (hostio.Response, error) {
+	ctx, cancel := context.WithTimeout(ctx, hostio.HelperProbeBudget)
+	defer cancel()
+	if err := d.Check(ctx, i); err != nil {
+		return hostio.Response{}, err
+	}
+	state, err := d.probes(ctx)
+	if err != nil {
+		return hostio.Response{}, err
+	}
+	state.mu.RLock()
+	prepared, ok := state.prepared[probeKey(i, hostio.ProbeOperation(ctx))]
+	state.mu.RUnlock()
+	// Engine Prepare and recovery prewarm before opening their windows. One-off
+	// callers also prepare here, under their caller's deadline.
+	if !ok {
+		if err = d.PrewarmProbe(ctx, i); err != nil {
+			return hostio.Response{}, err
+		}
+		state.mu.RLock()
+		prepared = state.prepared[probeKey(i, hostio.ProbeOperation(ctx))]
+		state.mu.RUnlock()
+	}
+	return state.runner.Probe(ctx, prepared, i, d.epochInspector(i), host, rawURL, "", func(ctx context.Context) (hostio.Response, error) {
+		cli, err := d.Docker.GetClient(ctx)
+		if err != nil {
+			return hostio.Response{}, err
+		}
+		return hostio.WgetProbe(ctx, cli, i.Identity.ContainerID, i.Kind, host, rawURL)
+	})
+}
+
+func (d *DockerRuntime) EnsureProbePrepared(ctx context.Context, i dto.Instance) error {
+	state, err := d.probes(ctx)
+	if err != nil {
+		return err
+	}
+	state.mu.RLock()
+	_, ok := state.prepared[probeKey(i, hostio.ProbeOperation(ctx))]
+	state.mu.RUnlock()
+	if ok {
+		return nil
+	}
+	return d.PrewarmProbe(ctx, i)
+}
+
+func probeKey(i dto.Instance, operation string) string { return i.ID + "\x00" + operation }
+func (d *DockerRuntime) ForgetProbe(i dto.Instance, operation string) {
+	if state, ok := probeRuntimes.Load(d); ok {
+		probes := state.(*runtimeProbes)
+		probes.mu.Lock()
+		delete(probes.prepared, probeKey(i, operation))
+		probes.mu.Unlock()
+	}
 }

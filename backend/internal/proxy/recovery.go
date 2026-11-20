@@ -60,6 +60,9 @@ func (a *Agent) activateObserve(ctx context.Context, i Intent, o dto.Operation, 
 	if errors.Is(err, errCrash) {
 		return o, err
 	}
+	if Transient(err) {
+		return o, err
+	}
 	if err != nil {
 		o = withDiagnostic(o, err)
 		r := reason(err, dto.NotObservable)
@@ -81,6 +84,7 @@ func (a *Agent) activateObserve(ctx context.Context, i Intent, o dto.Operation, 
 	if observed.State != dto.Verified && observed.State != dto.AppliedUnverified {
 		return a.finish(ctx, i, o, dto.RecoveryRequired, dto.InvalidInput, "")
 	}
+	o.Certificate, o.Probe = observed.Certificate, observed.Probe
 	return a.finish(ctx, i, o, observed.State, observed.Reason, observed.Evidence)
 }
 func (a *Agent) restore(ctx context.Context, i Intent, o dto.Operation, e Engine, r dto.Reason) (dto.Operation, error) {

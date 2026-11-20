@@ -178,7 +178,7 @@ func TestRestartObservationUsesActivationDeadline(t *testing.T) {
 	o, err := x.e.Observe(t.Context(), i, false)
 	require.NoError(t, err)
 	require.Equal(t, dto.AppliedUnverified, o.State)
-	require.Equal(t, 30, x.waits)
+	require.Equal(t, 50, x.waits)
 }
 func TestInsertImportRechecksFreshRootMount(t *testing.T) {
 	for _, which := range []string{"inspect-error", "single-file"} {

@@ -113,6 +113,15 @@ func (e *engine) probe(ctx context.Context, i dto.Instance, s Site) (hostio.Resp
 	if s.Path == "" {
 		u += "/"
 	}
+	if runner, ok := e.runtime.(interface {
+		Probe(context.Context, dto.Instance, string, string) (hostio.Response, error)
+	}); ok {
+		response, err := runner.Probe(ctx, i, s.Domain, u)
+		if response.Certificate != nil {
+			response.Certificate.Route.Name = s.Name
+		}
+		return response, err
+	}
 	res, err := e.runtime.Exec(ctx, i, "probe", "", s.Domain, u)
 	return hostio.ParseProbe(res, err)
 }
@@ -132,16 +141,20 @@ func routing(before, after hostio.Response, kind string) bool {
 func unverified(r dto.Reason) proxy.Observation {
 	return proxy.Observation{State: dto.AppliedUnverified, Reason: r}
 }
-func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Observation, error) {
+func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (observation proxy.Observation, observeErr error) {
+	ctx = hostio.WithProbeOperation(ctx, i.Request.ID)
 	s, err := decode(i)
 	if err != nil {
+		return proxy.Observation{}, err
+	}
+	if err = proxy.EnsureProbePrepared(ctx, e.runtime, i.Request.Instance); err != nil {
 		return proxy.Observation{}, err
 	}
 	start := e.now()
 	if at, ok := e.activated.Load(i.Request.ID); ok {
 		start = at.(time.Time)
 	}
-	deadline := start.Add(5 * time.Second)
+	deadline := start.Add(7 * time.Second)
 	remaining := deadline.Sub(e.now())
 	if remaining <= 0 {
 		return unverified(dto.NoObservableDifference), nil
@@ -170,6 +183,13 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 	if site == nil {
 		site = s.OldSite
 	}
+	var certificate *dto.CertificateObservation
+	var probeEvidence *dto.ProbeEvidence
+	defer func() {
+		if observeErr == nil && observation.Reason != dto.ContainerChanged {
+			observation.Certificate, observation.Probe = certificate, probeEvidence
+		}
+	}()
 	lastReason := dto.NoObservableDifference
 	probeFailed := false // a later successful probe clears a reason a failed probe set
 	for {
@@ -190,6 +210,15 @@ func (e *engine) Observe(ctx context.Context, i proxy.Intent, _ bool) (proxy.Obs
 		probeReason := s.ProbeReason
 		if site != nil {
 			after, probeErr := e.probe(ctx, i.Request.Instance, *site)
+			if probeErr != nil && hostio.ProbeTransient(probeErr) && ctx.Err() == nil {
+				return proxy.Observation{}, probeErr
+			}
+			if probeErr == nil {
+				probeEvidence = after.Probe
+				if after.Certificate != nil {
+					certificate = after.Certificate
+				}
+			}
 			if probeErr != nil && ctx.Err() != nil && parent.Err() == nil {
 				return unverified(lastReason), nil // the window ended during the probe
 			}
@@ -378,4 +407,40 @@ func upstreamsEqual(handler map[string]any, want []string) bool {
 	}
 	hasTLS := object(transport["tls"]) != nil
 	return slices.Equal(got, expected) && tls == hasTLS
+}
+
+func (e *engine) CheckCertificate(ctx context.Context, i dto.Instance, q dto.CertificateCheckRequest) (dto.CertificateObservation, error) {
+	read, err := e.Read(ctx, i)
+	if err != nil {
+		return dto.CertificateObservation{}, err
+	}
+	route, err := proxy.CertificateRoute(read, q)
+	if err != nil {
+		return dto.CertificateObservation{}, err
+	}
+	content := ""
+	for _, f := range read.Files {
+		if f.Path == q.File {
+			content = f.Content
+		}
+	}
+	site, err := ParseSite(content)
+	if err != nil || site.TLS == "off" || site.Domain != q.Host {
+		return dto.CertificateObservation{}, dto.Fail(dto.CertificateUnavailable, 409)
+	}
+	if err = proxy.PrewarmProbe(ctx, e.runtime, i); err != nil {
+		return dto.CertificateObservation{}, err
+	}
+	response, err := e.probe(ctx, i, site)
+	if err != nil {
+		return dto.CertificateObservation{}, err
+	}
+	after, err := e.Read(ctx, i)
+	if err != nil {
+		return dto.CertificateObservation{}, err
+	}
+	if _, err = proxy.CertificateRoute(after, q); err != nil {
+		return dto.CertificateObservation{}, err
+	}
+	return proxy.CertificateResult(response, route.Name, "")
 }

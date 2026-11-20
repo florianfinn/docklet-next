@@ -138,7 +138,7 @@ func (m *Module) RegisterRoutes(api huma.API, agent bool) {
 			if err := validateCertificateCheck(i.Body); err != nil {
 				return nil, err
 			}
-			return out(dto.CertificateObservation{}, m.stubInstance(ctx, i.InstanceID))
+			return out(m.CheckCertificate(ctx, i.InstanceID, i.Body))
 		})
 		register(api, m, false, "create-proxy-resolver", "POST", "/modules/proxy/instances/{instanceId}/resolvers", func(ctx context.Context, i *CreateResolverInput) (*handlerutil.Out[dto.Operation], error) {
 			if err := i.Body.Validate(); err != nil {

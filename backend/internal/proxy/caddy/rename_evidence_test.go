@@ -60,7 +60,7 @@ func TestPureRenameVerifiesByConfigurationReadback(t *testing.T) {
 		o, err := x.e.Observe(t.Context(), i, false)
 		require.NoError(t, err)
 		if rename {
-			require.Equal(t, proxy.Observation{State: dto.Verified, Evidence: dto.Configuration}, o)
+			require.Equal(t, proxy.Observation{State: dto.Verified, Evidence: dto.Configuration, Probe: &dto.ProbeEvidence{Client: dto.WgetClient, Reason: dto.ProbeImageUnavailable}}, o)
 		} else {
 			require.Equal(t, dto.NoObservableDifference, o.Reason)
 		}
@@ -90,7 +90,7 @@ func TestEpochErrorAtWindowEndIsNotContainerChanged(t *testing.T) {
 	x := fixture(t)
 	s := baseSite()
 	i := observationIntent(x, s, false, "edit-route")
-	x.e.activated.Store(i.Request.ID, x.now.Add(-4800*time.Millisecond))
+	x.e.activated.Store(i.Request.ID, x.now.Add(-6800*time.Millisecond))
 	slow := false
 	x.execFn = func(args []string) hostio.ExecResult {
 		if strings.Contains(args[len(args)-1], "/config/") {
@@ -137,7 +137,7 @@ func TestLaterProbeClearsAnEarlierProbeFailureReason(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, creates, 1)
 	require.GreaterOrEqual(t, probes, 2)
-	require.Equal(t, proxy.Observation{State: dto.AppliedUnverified, Reason: dto.NoObservableDifference}, o)
+	require.Equal(t, proxy.Observation{State: dto.AppliedUnverified, Reason: dto.NoObservableDifference, Probe: &dto.ProbeEvidence{Client: dto.WgetClient, Reason: dto.ProbeImageUnavailable}}, o)
 }
 
 // Candidate delta 1: a probe or readback cut off by the end of the observation window is
@@ -147,7 +147,7 @@ func TestCallCutOffByWindowEndKeepsTheLastReason(t *testing.T) {
 		x := fixture(t)
 		s := baseSite()
 		i := observationIntent(x, s, adminOff, "edit-route")
-		x.e.activated.Store(i.Request.ID, x.now.Add(-4800*time.Millisecond))
+		x.e.activated.Store(i.Request.ID, x.now.Add(-6800*time.Millisecond))
 		x.execFn = func(args []string) hostio.ExecResult {
 			if strings.Contains(args[len(args)-1], "/config/") {
 				return httpResult(200, configFor(s))
@@ -166,6 +166,10 @@ func TestCallCutOffByWindowEndKeepsTheLastReason(t *testing.T) {
 		}
 		o, err := x.e.Observe(t.Context(), i, false)
 		require.NoError(t, err)
-		require.Equal(t, proxy.Observation{State: dto.AppliedUnverified, Reason: dto.NoObservableDifference}, o, "admin off: %v", adminOff)
+		expected := proxy.Observation{State: dto.AppliedUnverified, Reason: dto.NoObservableDifference}
+		if !adminOff {
+			expected.Probe = &dto.ProbeEvidence{Client: dto.WgetClient, Reason: dto.ProbeImageUnavailable}
+		}
+		require.Equal(t, expected, o, "admin off: %v", adminOff)
 	}
 }

@@ -24,6 +24,7 @@ var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 type probe struct {
 	Route, Host, URL string
+	EntryPoint       string
 	Before           hostio.Response
 	Reason           dto.Reason
 }
@@ -44,6 +45,7 @@ func state(in proxy.Intent) (engineState, error) {
 	return s, err
 }
 func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent, error) {
+	ctx = hostio.WithProbeOperation(ctx, r.ID)
 	in := proxy.Intent{Request: r, Mode: 0644, GraphHashes: map[string]string{}}
 	if !hostio.Relative(r.Target) || hostio.Secret(r.Target) || !consumed(r.Target) || strings.EqualFold(path.Ext(r.Target), ".toml") || !within(routeDirectory(r.Instance), path.Join(r.Instance.Source.MountTarget, r.Target)) {
 		return in, dto.Fail(dto.InvalidInput, 422)
@@ -208,6 +210,9 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 		return in, err
 	}
 	if err = checkNewReferences(nextDocs, g.result.OpaqueFiles, g.result.Inventory, in); err != nil {
+		return in, err
+	}
+	if err = proxy.PrewarmProbe(ctx, e.run, r.Instance); err != nil {
 		return in, err
 	}
 	s := engineState{Inventory: g.result.Inventory, Probes: []probe{}, ForceMarker: r.Change.Resolver != ""}

@@ -150,7 +150,7 @@ func TestClosingReviewerMissingBeforeRealApply(t *testing.T) {
 func TestClosingReviewerLogsDeadlineUsesLastReason(t *testing.T) {
 	x := fixture(t)
 	i := observationIntent(x, baseSite(), true, "edit-route")
-	x.e.activated.Store(i.Request.ID, x.now.Add(-4800*time.Millisecond))
+	x.e.activated.Store(i.Request.ID, x.now.Add(-6800*time.Millisecond))
 	x.fault = func(_ http.ResponseWriter, r *http.Request) bool {
 		if strings.Contains(r.URL.Path, "/logs") {
 			<-r.Context().Done()
