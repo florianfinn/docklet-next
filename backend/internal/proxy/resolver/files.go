@@ -48,7 +48,7 @@ func parent(root, p string) (int, string, error) {
 	}
 	fd, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
-		return -1, "", err
+		return -1, "", refuse(err)
 	}
 	for _, s := range strings.Split(filepath.Join(root, filepath.Dir(p)), "/") {
 		if s == "" || s == "." {
@@ -192,7 +192,17 @@ func observe(root, p string) (dto.FileState, error) {
 	}
 	fd, e := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if e != nil {
-		return dto.FileState{}, e
+		if transient(e) {
+			return dto.FileState{}, e
+		}
+		var st unix.Stat_t
+		if er := unix.Lstat("/", &st); er != nil {
+			if transient(er) {
+				return dto.FileState{}, er
+			}
+			return descriptor(-1, nil, "", e), nil
+		}
+		return descriptor(-1, &st, "", e), nil
 	}
 	parts := []string{}
 	for _, s := range strings.Split(filepath.Join(root, p), "/") {
@@ -212,11 +222,11 @@ func observe(root, p string) (dto.FileState, error) {
 			}
 			// The obstructing parent (e.g. no search permission) is fingerprinted, so
 			// replacing it changes the confirmation.
-			var parent unix.Stat_t
-			if er := unix.Fstat(fd, &parent); er != nil {
+			parent, er := statFD(fd)
+			if er != nil {
 				return dto.FileState{}, er
 			}
-			return descriptor(i, &parent, "", e), nil
+			return descriptor(i, parent, "", e), nil
 		}
 		kind := st.Mode & unix.S_IFMT
 		if i < len(parts)-1 && kind == unix.S_IFDIR {
@@ -248,6 +258,26 @@ func observe(root, p string) (dto.FileState, error) {
 	}
 	unix.Close(fd)
 	return dto.FileState{}, dto.Fail(dto.TargetUnclear, 409)
+}
+
+// statFD stats a pinned descriptor. A persistent Fstat refusal falls back to a
+// descriptor-relative no-follow stat; nil means nothing is observable.
+func statFD(fd int) (*unix.Stat_t, error) {
+	var st unix.Stat_t
+	e := unix.Fstat(fd, &st)
+	if e == nil {
+		return &st, nil
+	}
+	if transient(e) {
+		return nil, e
+	}
+	if e = unix.Fstatat(fd, "", &st, unix.AT_EMPTY_PATH|unix.AT_SYMLINK_NOFOLLOW); e == nil {
+		return &st, nil
+	}
+	if transient(e) {
+		return nil, e
+	}
+	return nil, nil
 }
 
 // content hashes a regular file that still matches its pinned stat; growth past

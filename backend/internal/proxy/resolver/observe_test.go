@@ -367,3 +367,94 @@ func TestRestorePersistentReadErrorIsThirdVersion(t *testing.T) {
 		t.Fatal("helper did not finish")
 	}
 }
+
+// confirmationHost confirms against the fixture target without backup reads, so
+// a syscall fault reaches only the observation path.
+type confirmationHost struct{ *fakeHost }
+
+func (h *confirmationHost) Confirmation(context.Context, dto.Instance, []dto.ResolverFile) (resolver.Target, error) {
+	return h.target, nil
+}
+
+// A persistent Fstat refusal of a search-denied parent still yields a
+// confirmation (descriptor-relative stat), so Release stays possible.
+func TestParentStatRefusalStaysReleasable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
+	}
+	if subprocess(t, "TestParentStatRefusalStaysReleasable", "RESOLVER_PARENT_FSTAT_HELPER") {
+		return
+	}
+	e, f, q, o := fixture(t)
+	f.failStartup = true
+	e.Host = &confirmationHost{fakeHost: f}
+	parent := filepath.Join(f.target.Directory, "config")
+	t.Cleanup(func() { _ = os.Chmod(parent, 0700) })
+	f.observing = func() { require.NoError(t, os.Chmod(parent, 0400)) }
+	held, err := e.Run(t.Context(), q, *o)
+	require.NoError(t, err)
+	require.Equal(t, dto.RecoveryRequired, held.State)
+	type result struct {
+		current dto.FileState
+		err     error
+		release error
+	}
+	done := make(chan result, 1)
+	go func() {
+		runtime.LockOSThread()
+		if err := denySyscall(unix.SYS_FSTAT, unix.EACCES); err != nil {
+			done <- result{err: err}
+			return
+		}
+		// Under the fault touched files fall back to descriptors, so the operator
+		// confirms the state they see now.
+		current, err := resolver.Current(f.target)
+		_, release := e.Release(t.Context(), envelope(q), held, dto.ReleaseRequest{Confirmed: current, Actor: "admin-one"})
+		done <- result{current, err, release}
+	}()
+	select {
+	case r := <-done:
+		require.NoError(t, r.err)
+		require.True(t, r.current.Present)
+		require.NoError(t, r.release)
+	case <-time.After(5 * time.Second):
+		t.Fatal("helper did not finish")
+	}
+}
+
+// A persistent refusal to open "/" is typed for the writer and confirmable for
+// observation (root metadata stays observable without open).
+func TestRootOpenRefusalIsClassified(t *testing.T) {
+	if subprocess(t, "TestRootOpenRefusalIsClassified", "RESOLVER_ROOT_OPEN_HELPER") {
+		return
+	}
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file"), []byte("example"), 0600))
+	target := resolver.Target{Directory: dir, Files: []resolver.File{{ResolverFile: dto.ResolverFile{Path: "file"}}}}
+	type result struct {
+		read          error
+		first, second dto.FileState
+		current       error
+	}
+	done := make(chan result, 1)
+	go func() {
+		runtime.LockOSThread()
+		if err := denySyscall(unix.SYS_OPENAT, unix.EACCES); err != nil {
+			done <- result{read: err, current: err}
+			return
+		}
+		_, read := resolver.Read(dir, "file")
+		first, current := resolver.Current(target)
+		second, _ := resolver.Current(target)
+		done <- result{read, first, second, current}
+	}()
+	select {
+	case r := <-done:
+		requireCode(t, r.read, dto.UnsupportedMetadata)
+		require.NoError(t, r.current)
+		require.True(t, r.first.Present)
+		require.Equal(t, r.first, r.second)
+	case <-time.After(5 * time.Second):
+		t.Fatal("helper did not finish")
+	}
+}
