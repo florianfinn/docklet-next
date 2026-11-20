@@ -12,6 +12,15 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
 
+// BeginHelperPull suppresses the daemon's own events for ref until the returned
+// function runs, as PullImage does, so the booking below is the only record.
+func (s *ImageService) BeginHelperPull(ref string) func() {
+	if s.eventService == nil {
+		return func() {}
+	}
+	return s.eventService.BeginDockerResourceSuppressionWindow("image", "", ref)
+}
+
 // RecordHelperPull books a tools image pull made outside PullImage (volume
 // helpers, proxy probe) like a system pull: audit event and registry usage.
 func (s *ImageService) RecordHelperPull(ctx context.Context, ref string) {

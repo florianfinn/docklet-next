@@ -132,11 +132,22 @@ func (s *VolumeService) getVolumeHelperImageInternal(ctx context.Context, docker
 		}
 	}
 
-	image, err := volumehelper.Resolve(ctx, dockerClient, s.toolsImageInternal(), s.HelperPullOptions)
+	ref := s.toolsImageInternal()
+	defer s.BeginHelperPull(ref)()
+	image, err := volumehelper.Resolve(ctx, dockerClient, ref, s.HelperPullOptions)
 	if err == nil && image.Pulled {
 		s.RecordHelperPull(ctx, image.Ref)
 	}
 	return image.Ref, err
+}
+
+// BeginHelperPull opens the image service's event suppression window for a
+// possible tools pull; the returned function closes it after the booking.
+func (s *VolumeService) BeginHelperPull(ref string) func() {
+	if s.imageService == nil {
+		return func() {}
+	}
+	return s.imageService.BeginHelperPull(ref)
 }
 
 // RecordHelperPull keeps the image service's pull bookkeeping for tools pulls.

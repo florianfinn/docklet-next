@@ -152,6 +152,7 @@ func (d *DockerRuntime) probes(ctx context.Context) (*runtimeProbes, error) {
 		var auth volumehelper.PullOptions
 		if d.Volumes != nil {
 			auth = d.Volumes.HelperPullOptions
+			defer d.Volumes.BeginHelperPull(volumehelper.ToolsImage(configured))()
 		}
 		image, err := volumehelper.Resolve(ctx, current, configured, auth)
 		if err == nil && image.Pulled && d.Volumes != nil {

@@ -16,10 +16,13 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
+	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
+	"github.com/moby/moby/api/types/events"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
@@ -80,4 +83,44 @@ func TestHelperImagePullUsesStoredRegistryCredentials(t *testing.T) {
 	usage, err = registries.GetRegistryPullUsage(t.Context())
 	require.NoError(t, err)
 	require.EqualValues(t, 1, usage.Registries[0].ObservedPulls)
+}
+
+// D2.1: the daemon's own pull event may be recorded before the pull returns;
+// the suppression window keeps one physical pull to exactly one audit event.
+func TestHelperImagePullBooksOneEvent(t *testing.T) {
+	gdb, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, gdb.AutoMigrate(&registry.ContainerRegistry{}, &kv.KVEntry{}, &event.Event{}))
+	db := &database.DB{DB: gdb}
+	eventService := event.NewEventService(db, nil, nil)
+	var pulled atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/json") && strings.Contains(r.URL.Path, "/images/"):
+			if !pulled.Load() {
+				http.Error(w, `{"message":"No such image"}`, http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write([]byte(`{"Id":"sha256:local-image"}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/images/create"):
+			eventService.RecordDockerEvent(t.Context(), events.Message{Type: events.ImageEventType, Action: events.ActionPull, TimeNano: 123, Actor: events.Actor{ID: volumehelper.DefaultToolsImage, Attributes: map[string]string{"name": volumehelper.DefaultToolsImage}}})
+			pulled.Store(true)
+			_, _ = w.Write([]byte(`{"status":"pulled"}` + "\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	cli := newVolumeServiceTestDockerClientInternal(t, server)
+	registries := registry.NewContainerRegistryService(db, nil, kv.NewKVService(db), nil)
+	svc := &VolumeService{
+		dockerService: docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(cli),
+		imageService:  image.NewImageService(db, nil, registries, nil, nil, eventService, nil, nil),
+	}
+	_, err = svc.getVolumeHelperImageInternal(t.Context(), cli)
+	require.NoError(t, err)
+	var rows []event.Event
+	require.NoError(t, gdb.Find(&rows).Error)
+	require.Len(t, rows, 1)
+	require.Equal(t, "pull", rows[0].Metadata["action"])
 }
