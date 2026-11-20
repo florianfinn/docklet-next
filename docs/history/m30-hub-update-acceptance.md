@@ -21,11 +21,11 @@ ran on every pushed head.
 
 | Issue | Step | Review outcome |
 | --- | --- | --- |
-| #529 | Design note with break map | The bundled design review failed with 8 blockers and its verify with 4 more; design v2.1 resolved them. |
+| #529 | Design note with break map | The bundled design review failed with 8 blockers; its verify still had 4 unresolved. Design v2.1 addressed them. |
 | #529 | S1 foundation: setup without a code, discovery `origins`, address write validation | The first review failed with two blockers, which were fixed; the verify passed. |
 | #529 | S2 web: hub update view, navigation hint, styled gate screens | The first review failed with one blocker, which was fixed; the verify passed. |
 | #529 | S3 logo colours and local hub addresses | The address review failed on bare IPv6 in links and discovery; its verify found mapped IPv6 and bracketed IPv6 legacy values. All were fixed and covered by the closing review. |
-| #531 | Design for unreadable peer stacks | The design review failed with 6 blockers and its verify with 2 more; design v3.1 resolved them. |
+| #531 | Design for unreadable peer stacks | The design review failed with 6 blockers; its verify had one unresolved and one new blocker. Design v3.1 addressed them. |
 | #531 | S4 peer confirmation, agent contract 20, migration 006 | The first review failed with two blockers: unsafe stack names dropped the confirmation, and **Run anyway** was offered where the request cannot carry it. Both were fixed; the verify passed. |
 | #531 | Fix for confirmed remote runs (found in acceptance) | The review passed without findings. |
 | #529 | Closing integration (#530) | The closing review failed on the IPv6 setup prefill; the verify passed. The delta round over #531 failed on compatibility and release text still naming contract 19 and no migration; the verify passed. |
@@ -57,8 +57,11 @@ test that ran later migrations. CI hid the last one behind a truncated test log;
 ## Accepted scope and method
 
 The sandbox had the hub-local host H, one Direct agent D and one Edge agent E.
-Every write used a real UI gesture in Chromium (German, 1440 px); API reads and
-container inspection served only as witnesses.
+Tested application actions used real UI gestures in Chromium; API reads and
+container inspection witnessed their effects. Feature cells ran in German at
+1440 px; the standard regression kept H in German and D in English at 1440 px and
+E in German at 390 px. Fixture preparation and restoration were separate sandbox
+operations.
 
 | Cell | Behaviour |
 | --- | --- |
