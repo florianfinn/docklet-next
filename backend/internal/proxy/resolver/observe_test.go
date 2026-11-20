@@ -1,0 +1,212 @@
+// Source: docklet-next/issues/492
+// Revision: f359750cd5e74f2ac4cde843de904d4d6dd31359
+// Retrieved: 2026-11-20
+// License: Apache-2.0
+// Deviations: Original confirmation and transient-I/O guards; scenarios from the S5 delta review.
+
+package resolver_test
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+	"unsafe"
+
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/resolver"
+	dto "github.com/florianfinn/docklet-next/types/proxy"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
+)
+
+func requireCode(t *testing.T, err error, want dto.Reason) {
+	t.Helper()
+	p, ok := errors.AsType[*dto.Problem](err)
+	require.True(t, ok, "error %v", err)
+	require.Equal(t, want, p.Code)
+}
+
+// A stale confirmation must not release a replaced unsupported path.
+func TestStaleUnsupportedConfirmationRefused(t *testing.T) {
+	for _, replace := range []string{"unchanged", "symlink", "directory"} {
+		t.Run(replace, func(t *testing.T) {
+			e, f, q, o := fixture(t)
+			f.failStartup = true
+			p := filepath.Join(f.target.Directory, ".env")
+			f.observing = func() {
+				require.NoError(t, os.Remove(p))
+				require.NoError(t, os.Symlink("operator-version-one", p))
+			}
+			result, err := e.Run(t.Context(), q, *o)
+			require.NoError(t, err)
+			require.Equal(t, dto.RecoveryRequired, result.State)
+			require.NotNil(t, result.Current)
+			confirmed := *result.Current
+			switch replace {
+			case "symlink":
+				require.NoError(t, os.Remove(p))
+				require.NoError(t, os.Symlink("operator-version-two", p))
+			case "directory":
+				require.NoError(t, os.Remove(p))
+				require.NoError(t, os.Mkdir(p, 0700))
+			}
+			released, err := e.Release(t.Context(), envelope(q), result, dto.ReleaseRequest{Confirmed: confirmed, Actor: "admin-one"})
+			if replace == "unchanged" {
+				require.NoError(t, err)
+				require.Equal(t, dto.Released, released.State)
+				return
+			}
+			requireCode(t, err, dto.TargetChanged)
+		})
+	}
+}
+
+// Regular readable files keep the content-hash confirmation; mode changes keep
+// it stable and a FIFO does not block.
+func TestCurrentRegularHashAndFIFO(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "file")
+	require.NoError(t, os.WriteFile(p, []byte("example\n"), 0600))
+	f, err := resolver.Read(dir, "file")
+	require.NoError(t, err)
+	target := resolver.Target{Directory: dir, Files: []resolver.File{f}}
+	before, err := resolver.Current(target)
+	require.NoError(t, err)
+	vector, _ := json.Marshal([]struct {
+		Path  string        `json:"path"`
+		State dto.FileState `json:"state"`
+	}{{"file", f.Old}})
+	hash := sha256.Sum256(vector)
+	require.Equal(t, dto.FileState{Present: true, Hash: hex.EncodeToString(hash[:])}, before)
+	require.NoError(t, os.Chmod(p, 0664))
+	after, err := resolver.Current(target)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	require.NoError(t, os.Remove(p))
+	require.NoError(t, unix.Mkfifo(p, 0600))
+	done := make(chan error, 1)
+	go func() { _, e := resolver.Current(target); done <- e }()
+	select {
+	case e := <-done:
+		require.NoError(t, e)
+	case <-time.After(time.Second):
+		t.Fatal("FIFO blocked")
+	}
+}
+
+// An oversized file is confirmed by a bounded descriptor that still changes
+// when the file grows. The helper runs in a subprocess so an unbounded read can be killed.
+func TestCurrentOversizedFileBounded(t *testing.T) {
+	if dir := os.Getenv("RESOLVER_HUGE_TARGET"); dir != "" {
+		target := resolver.Target{Directory: dir, Files: []resolver.File{{ResolverFile: dto.ResolverFile{Path: "file"}}}}
+		first, err := resolver.Current(target)
+		require.NoError(t, err)
+		f, err := os.OpenFile(filepath.Join(dir, "file"), os.O_WRONLY|os.O_APPEND, 0)
+		require.NoError(t, err)
+		_, err = f.WriteString("grown")
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+		second, err := resolver.Current(target)
+		require.NoError(t, err)
+		require.NotEqual(t, first, second)
+		return
+	}
+	dir := t.TempDir()
+	f, err := os.Create(filepath.Join(dir, "file"))
+	require.NoError(t, err)
+	require.NoError(t, f.Truncate(1<<40))
+	require.NoError(t, f.Close())
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestCurrentOversizedFileBounded$")
+	cmd.Env = append(os.Environ(), "RESOLVER_HUGE_TARGET="+dir)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "oversized confirmation did not finish: %s", out)
+}
+
+// Observation never follows a symlinked parent directory out of the project.
+func TestCurrentDoesNotFollowParentSymlink(t *testing.T) {
+	dir, outside := t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "static.yaml"), []byte("outside-version-one"), 0600))
+	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "config")))
+	target := resolver.Target{Directory: dir, Files: []resolver.File{{ResolverFile: dto.ResolverFile{Path: "config/static.yaml"}}}}
+	first, err := resolver.Current(target)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "static.yaml"), []byte("outside-version-two"), 0600))
+	second, err := resolver.Current(target)
+	require.NoError(t, err)
+	require.Equal(t, first, second)
+}
+
+// injectOpenEIO makes every non-directory openat on the calling thread fail with EIO.
+func injectOpenEIO() error {
+	filter := []unix.SockFilter{
+		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 0},
+		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_OPENAT, Jt: 0, Jf: 4},
+		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 16 + 2*8},
+		{Code: unix.BPF_JMP | unix.BPF_JSET | unix.BPF_K, K: unix.O_DIRECTORY, Jt: 2, Jf: 0},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ERRNO | uint32(unix.EIO)},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ALLOW},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ALLOW},
+	}
+	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		return err
+	}
+	program := unix.SockFprog{Len: uint16(len(filter)), Filter: &filter[0]}
+	return unix.Prctl(unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER, uintptr(unsafe.Pointer(&program)), 0, 0)
+}
+
+type eioHost struct {
+	*fakeHost
+	calls int
+}
+
+// The second Preflight is the restore preflight; the fault starts after it.
+func (h *eioHost) Preflight(context.Context, resolver.Target) error {
+	h.calls++
+	if h.calls == 2 {
+		return injectOpenEIO()
+	}
+	return nil
+}
+
+// A transient read error during restore keeps the journal and stays retryable.
+func TestRestoreTransientOpenErrorRetries(t *testing.T) {
+	if os.Getenv("RESOLVER_EIO_HELPER") != "1" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestRestoreTransientOpenErrorRetries$")
+		cmd.Env = append(os.Environ(), "RESOLVER_EIO_HELPER=1")
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		return
+	}
+	e, f, q, o := fixture(t)
+	f.failStartup = true
+	e.Host = &eioHost{fakeHost: f}
+	type outcome struct {
+		op  dto.Operation
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		// The locked thread ends with this goroutine, so the filter never
+		// reaches test cleanup or other runtime threads.
+		runtime.LockOSThread()
+		op, err := e.Run(t.Context(), q, *o)
+		done <- outcome{op, err}
+	}()
+	select {
+	case r := <-done:
+		requireCode(t, r.err, dto.AgentUnavailable)
+		require.Equal(t, dto.Pending, r.op.State)
+		require.Equal(t, dto.ResolverObserving, r.op.Resolver.Phase)
+	case <-time.After(5 * time.Second):
+		t.Fatal("helper did not finish")
+	}
+}

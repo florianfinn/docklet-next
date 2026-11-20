@@ -9,6 +9,7 @@ package resolver
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -56,7 +57,7 @@ func parent(root, p string) (int, string, error) {
 		next, e := unix.Openat(fd, s, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 		unix.Close(fd)
 		if e != nil {
-			return -1, "", dto.Fail(dto.UnsupportedMetadata, 409)
+			return -1, "", refuse(e)
 		}
 		fd = next
 	}
@@ -68,7 +69,7 @@ func readAt(fd int, name string) ([]byte, uint32, bool, error) {
 		return nil, 0600, false, nil
 	}
 	if e != nil {
-		return nil, 0, false, dto.Fail(dto.UnsupportedMetadata, 409)
+		return nil, 0, false, refuse(e)
 	}
 	f := os.NewFile(uintptr(n), name)
 	defer f.Close()
@@ -77,7 +78,10 @@ func readAt(fd int, name string) ([]byte, uint32, bool, error) {
 		return nil, 0, false, e
 	}
 	attrs, e := unix.Flistxattr(n, nil)
-	if e != nil || attrs != 0 || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Nlink != 1 || st.Mode&07000 != 0 || st.Mode&0022 != 0 {
+	if e != nil {
+		return nil, 0, false, refuse(e)
+	}
+	if attrs != 0 || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Nlink != 1 || st.Mode&07000 != 0 || st.Mode&0022 != 0 {
 		return nil, 0, false, dto.Fail(dto.UnsupportedMetadata, 409)
 	}
 	b, e := io.ReadAll(io.LimitReader(f, maxFile+1))
@@ -158,37 +162,136 @@ func accessDirectory(fd int) error {
 	return unix.Faccessat(fd, ".", unix.W_OK, 0)
 }
 
-// unsupportedState marks a path that exists but is not a plain readable file.
-const unsupportedState = "unsupported"
+// transient reports syscall errors that may succeed on retry; every other
+// refusal of a touched path is persistent.
+func transient(e error) bool {
+	for _, t := range []unix.Errno{unix.EIO, unix.EAGAIN, unix.EINTR, unix.ENOMEM, unix.ENFILE, unix.EMFILE} {
+		if errors.Is(e, t) {
+			return true
+		}
+	}
+	return false
+}
+func refuse(e error) error {
+	if transient(e) {
+		return e
+	}
+	return dto.Fail(dto.UnsupportedMetadata, 409)
+}
 
-// observe hashes a path for confirmation without the writer's metadata rules:
-// symlinks, special files and unreadable paths get a distinct stable state.
+// observe fingerprints a path for confirmation without the writer's metadata
+// rules. It walks pinned no-follow components like parent. A regular file up to
+// maxFile keeps its content hash; anything else (symlink, other type, oversized
+// or obstructing component) gets a bounded, change-sensitive descriptor.
 func observe(root, p string) (dto.FileState, error) {
 	if !relative(p) || !filepath.IsAbs(root) {
 		return dto.FileState{}, dto.Fail(dto.TargetUnclear, 409)
 	}
-	n, e := unix.Open(filepath.Join(root, p), unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
-	if errors.Is(e, unix.ENOENT) || errors.Is(e, unix.ENOTDIR) {
-		return dto.FileState{}, nil
-	}
-	if errors.Is(e, unix.EIO) || errors.Is(e, unix.EAGAIN) || errors.Is(e, unix.EINTR) {
+	fd, e := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if e != nil {
 		return dto.FileState{}, e
+	}
+	parts := []string{}
+	for _, s := range strings.Split(filepath.Join(root, p), "/") {
+		if s != "" {
+			parts = append(parts, s)
+		}
+	}
+	for i, s := range parts {
+		var st unix.Stat_t
+		if e = unix.Fstatat(fd, s, &st, unix.AT_SYMLINK_NOFOLLOW); e != nil {
+			unix.Close(fd)
+			if errors.Is(e, unix.ENOENT) {
+				return dto.FileState{}, nil
+			}
+			if transient(e) {
+				return dto.FileState{}, e
+			}
+			return descriptor(i, nil, "", e), nil
+		}
+		kind := st.Mode & unix.S_IFMT
+		if i < len(parts)-1 && kind == unix.S_IFDIR {
+			next, er := unix.Openat(fd, s, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+			if er != nil {
+				defer unix.Close(fd)
+				if transient(er) {
+					return dto.FileState{}, er
+				}
+				return descriptor(i, &st, "", er), nil
+			}
+			unix.Close(fd)
+			fd = next
+			continue
+		}
+		defer unix.Close(fd)
+		if kind == unix.S_IFLNK {
+			buf := make([]byte, unix.PathMax)
+			n, er := unix.Readlinkat(fd, s, buf)
+			if transient(er) {
+				return dto.FileState{}, er
+			}
+			return descriptor(i, &st, string(buf[:max(n, 0)]), er), nil
+		}
+		if i < len(parts)-1 || kind != unix.S_IFREG || st.Size > maxFile {
+			return descriptor(i, &st, "", nil), nil
+		}
+		return content(fd, s, i, st)
+	}
+	unix.Close(fd)
+	return dto.FileState{}, dto.Fail(dto.TargetUnclear, 409)
+}
+
+// content hashes a regular file that still matches its pinned stat; growth past
+// maxFile or replacement after stat falls back to a descriptor.
+func content(dir int, name string, i int, st unix.Stat_t) (dto.FileState, error) {
+	n, e := unix.Openat(dir, name, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+	if e != nil {
+		if transient(e) {
+			return dto.FileState{}, e
+		}
+		return descriptor(i, &st, "", e), nil
+	}
+	f := os.NewFile(uintptr(n), name)
+	defer f.Close()
+	var now unix.Stat_t
+	if e = unix.Fstat(n, &now); e != nil {
+		return dto.FileState{}, e
+	}
+	if now.Dev != st.Dev || now.Ino != st.Ino || now.Mode&unix.S_IFMT != unix.S_IFREG {
+		return descriptor(i, &now, "", nil), nil
+	}
+	b, e := io.ReadAll(io.LimitReader(f, maxFile+1))
+	if e != nil {
+		return dto.FileState{}, e
+	}
+	if len(b) > maxFile {
+		return descriptor(i, &now, "", nil), nil
+	}
+	return snapshot(b, true), nil
+}
+
+// descriptor never reads content: component index, type, identity, size,
+// change times, link destination and a persistent error code.
+func descriptor(i int, st *unix.Stat_t, link string, e error) dto.FileState {
+	d := struct {
+		Component int    `json:"component"`
+		Mode      uint32 `json:"mode,omitempty"`
+		Dev       uint64 `json:"dev,omitempty"`
+		Ino       uint64 `json:"ino,omitempty"`
+		Size      int64  `json:"size,omitempty"`
+		Mtime     int64  `json:"mtime,omitempty"`
+		Ctime     int64  `json:"ctime,omitempty"`
+		Link      string `json:"link,omitempty"`
+		Error     string `json:"error,omitempty"`
+	}{Component: i, Link: link}
+	if st != nil {
+		d.Mode, d.Dev, d.Ino, d.Size = st.Mode, st.Dev, st.Ino, st.Size
+		d.Mtime, d.Ctime = st.Mtim.Nano(), st.Ctim.Nano()
 	}
 	if e != nil {
-		return dto.FileState{Present: true, Hash: unsupportedState}, nil
+		d.Error = e.Error()
 	}
-	f := os.NewFile(uintptr(n), p)
-	defer f.Close()
-	var st unix.Stat_t
-	if e = unix.Fstat(n, &st); e != nil {
-		return dto.FileState{}, e
-	}
-	if st.Mode&unix.S_IFMT != unix.S_IFREG {
-		return dto.FileState{Present: true, Hash: unsupportedState}, nil
-	}
-	h := sha256.New()
-	if _, e = io.Copy(h, f); e != nil {
-		return dto.FileState{}, e
-	}
-	return dto.FileState{Present: true, Hash: hex.EncodeToString(h.Sum(nil))}, nil
+	b, _ := json.Marshal(d)
+	h := sha256.Sum256(b)
+	return dto.FileState{Present: true, Hash: "meta:" + hex.EncodeToString(h[:])}
 }
