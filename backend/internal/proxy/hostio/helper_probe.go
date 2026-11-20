@@ -12,7 +12,6 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
-	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -87,7 +86,7 @@ func (r *ProbeRunner) Prepare(ctx context.Context) (PreparedProbe, error) {
 		} else {
 			return PreparedProbe{}, err
 		}
-	} else if res.ExitCode == 127 {
+	} else if res.ExitCode == 127 || res.ExitCode == 126 {
 		reason = dto.ProbeClientMissing
 	} else {
 		var version struct {
@@ -95,15 +94,15 @@ func (r *ProbeRunner) Prepare(ctx context.Context) (PreparedProbe, error) {
 			Version      string         `json:"version"`
 			Capabilities jsontext.Value `json:"capabilities"`
 		}
-		if len(res.Stdout) > MaxProbeJSON || json.Unmarshal(res.Stdout, &version) != nil {
-			return PreparedProbe{}, dto.Fail(dto.NotObservable, 409)
-		}
+		// Malformed version output is a cached unsupported client, like v=2.
 		var capabilities []string
-		explicit := len(version.Capabilities) > 0
-		if explicit && (string(version.Capabilities) == "null" || json.Unmarshal(version.Capabilities, &capabilities) != nil) {
-			return PreparedProbe{}, dto.Fail(dto.NotObservable, 409)
+		explicit := false
+		malformed := len(res.Stdout) > MaxProbeJSON || json.Unmarshal(res.Stdout, &version) != nil
+		if !malformed {
+			explicit = len(version.Capabilities) > 0
+			malformed = explicit && (string(version.Capabilities) == "null" || json.Unmarshal(version.Capabilities, &capabilities) != nil)
 		}
-		if res.ExitCode != 0 || version.V != 1 || version.Version == "" || explicit && !slices.Contains(capabilities, "http") {
+		if malformed || res.ExitCode != 0 || version.V != 1 || version.Version == "" || explicit && !slices.Contains(capabilities, "http") {
 			reason = dto.ProbeClientUnsupported
 		} else {
 			// Published v1 predates capability negotiation and has a fixed HTTP/TLS contract.
@@ -120,10 +119,9 @@ func (r *ProbeRunner) Prepare(ctx context.Context) (PreparedProbe, error) {
 func (r *ProbeRunner) Probe(ctx context.Context, p PreparedProbe, i dto.Instance, inspect Inspect, host, rawURL, sni string, fallback func(context.Context) (Response, error)) (Response, error) {
 	ctx, cancel := context.WithTimeout(ctx, HelperProbeBudget)
 	defer cancel()
-	args, tls, err := ProbeArgs(host, rawURL, sni)
-	if err != nil {
-		return Response{}, err
-	}
+	// The helper's stricter argument rules never refuse a route that wget
+	// (M27) accepts: such routes fall back as an unsupported client.
+	args, tls, argErr := ProbeArgs(host, rawURL, sni)
 	before, err := inspect(ctx)
 	if err != nil {
 		return Response{}, err
@@ -139,7 +137,7 @@ func (r *ProbeRunner) Probe(ctx context.Context, p PreparedProbe, i dto.Instance
 		return Response{}, dto.Fail(dto.ContainerChanged, 409)
 	}
 	var response Response
-	if tls && !p.SupportsTLS && p.Reason == "" {
+	if p.Reason == "" && (argErr != nil || tls && !p.SupportsTLS) {
 		p.Reason = dto.ProbeClientUnsupported
 	}
 	if p.Reason != "" {
@@ -207,13 +205,21 @@ func (r *ProbeRunner) run(ctx context.Context, image, target string, args []stri
 		}
 	}()
 	if err != nil {
-		return out, err
+		return out, dockerRefusal(err)
 	}
 	if created.ID == "" {
-		return out, errors.New("probe helper create returned no ID")
+		return out, dto.Fail(dto.NotObservable, 409)
 	}
 	if _, err = cli.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
-		return out, err
+		// The runtime records 127/126 for a missing or non-executable command,
+		// independent of runc or crun error wording.
+		if inspected, e := cli.ContainerInspect(ctx, created.ID, client.ContainerInspectOptions{}); e == nil && inspected.Container.State != nil {
+			if code := inspected.Container.State.ExitCode; code == 127 || code == 126 {
+				out.ExitCode = code
+				return out, nil
+			}
+		}
+		return out, dockerRefusal(err)
 	}
 	wait := cli.ContainerWait(ctx, created.ID, client.ContainerWaitOptions{Condition: container.WaitConditionNotRunning})
 	select {
@@ -221,12 +227,12 @@ func (r *ProbeRunner) run(ctx context.Context, image, target string, args []stri
 		return out, ctx.Err()
 	case err = <-wait.Error:
 		if err == nil {
-			err = errors.New("probe helper wait returned no status")
+			return out, dto.Fail(dto.NotObservable, 409)
 		}
-		return out, err
+		return out, dockerRefusal(err)
 	case status := <-wait.Result:
 		if status.Error != nil && status.Error.Message != "" {
-			return out, fmt.Errorf("probe helper wait failed")
+			return out, dto.Fail(dto.NotObservable, 409)
 		}
 		out.ExitCode = int(status.StatusCode)
 	}
@@ -318,6 +324,16 @@ type ProbeFailure struct{ Err error }
 func (e *ProbeFailure) Error() string { return "probe helper infrastructure failure: " + e.Err.Error() }
 func (e *ProbeFailure) Unwrap() error { return e.Err }
 func ProbeTransient(err error) bool   { var failure *ProbeFailure; return errors.As(err, &failure) }
+
+// dockerRefusal types a definitive daemon refusal (4xx: missing image or
+// target, invalid or denied request, conflict) so the operation finishes
+// not-observable; connection and server errors stay transient.
+func dockerRefusal(err error) error {
+	if errdefs.IsNotFound(err) || errdefs.IsInvalidArgument(err) || errdefs.IsPermissionDenied(err) || errdefs.IsUnauthorized(err) || errdefs.IsConflict(err) || errdefs.IsFailedPrecondition(err) {
+		return dto.Fail(dto.NotObservable, 409)
+	}
+	return err
+}
 func probeInfrastructure(err error) bool {
 	var observed *dto.Problem
 	return err != nil && !errors.As(err, &observed)

@@ -44,9 +44,12 @@ func unavailable(err error) bool {
 	lower := strings.ToLower(err.Error())
 	return strings.Contains(lower, "pull access denied") || strings.Contains(lower, "manifest unknown") || strings.Contains(lower, `get "http`) && registryUnavailable(lower)
 }
+
+// registryUnavailable: the daemon answered, but could not dial or resolve the
+// registry (a dial timeout included). Other timeouts stay daemon errors.
 func registryUnavailable(message string) bool {
 	lower := strings.ToLower(message)
-	return !strings.Contains(lower, "timeout") && !strings.Contains(lower, "deadline exceeded") && (strings.Contains(lower, "dial tcp") || strings.Contains(lower, "no such host"))
+	return strings.Contains(lower, "dial tcp") || strings.Contains(lower, "no such host")
 }
 func pullFailure(err error) error {
 	if unavailable(err) {
@@ -55,9 +58,12 @@ func pullFailure(err error) error {
 	return &DockerError{err}
 }
 
+// PullOptions supplies registry authentication for a reference; nil pulls anonymously.
+type PullOptions func(ctx context.Context, ref string) (client.ImagePullOptions, error)
+
 // Resolve uses the agent's complete configured reference and resolves it to a
 // local immutable ID. Daemon failures never imply missing helper capabilities.
-func Resolve(ctx context.Context, cli *client.Client, configured string) (Image, error) {
+func Resolve(ctx context.Context, cli *client.Client, configured string, auth PullOptions) (Image, error) {
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 	if cli == nil {
@@ -71,7 +77,13 @@ func Resolve(ctx context.Context, cli *client.Client, configured string) (Image,
 	if !errdefs.IsNotFound(err) {
 		return Image{}, &DockerError{fmt.Errorf("inspect helper image: %w", err)}
 	}
-	pullReader, err := cli.ImagePull(ctx, ref, client.ImagePullOptions{})
+	options := client.ImagePullOptions{}
+	if auth != nil {
+		if options, err = auth(ctx, ref); err != nil {
+			return Image{}, &DockerError{fmt.Errorf("helper image credentials: %w", err)}
+		}
+	}
+	pullReader, err := cli.ImagePull(ctx, ref, options)
 	if err != nil {
 		if ctx.Err() != nil {
 			return Image{}, &DockerError{ctx.Err()}
@@ -101,10 +113,13 @@ func Resolve(ctx context.Context, cli *client.Client, configured string) (Image,
 		if strings.TrimSpace(message) != "" {
 			err := errors.New("helper image pull failed")
 			lower := strings.ToLower(message)
+			if registryUnavailable(lower) {
+				return Image{}, &ImageUnavailable{err}
+			}
 			if strings.Contains(lower, "timeout") || strings.Contains(lower, "deadline exceeded") {
 				return Image{}, &DockerError{err}
 			}
-			for _, code := range []string{"not found", "manifest unknown", "denied", "unauthorized", "no such host", "dial tcp"} {
+			for _, code := range []string{"not found", "manifest unknown", "denied", "unauthorized"} {
 				if strings.Contains(lower, code) {
 					return Image{}, &ImageUnavailable{err}
 				}

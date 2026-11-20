@@ -149,7 +149,11 @@ func (d *DockerRuntime) probes(ctx context.Context) (*runtimeProbes, error) {
 		if err != nil {
 			return volumehelper.Image{}, err
 		}
-		return volumehelper.Resolve(ctx, current, configured)
+		var auth volumehelper.PullOptions
+		if d.Volumes != nil {
+			auth = d.Volumes.HelperPullOptions
+		}
+		return volumehelper.Resolve(ctx, current, configured, auth)
 	}
 	actual, _ := probeRuntimes.LoadOrStore(d, state)
 	return actual.(*runtimeProbes), nil

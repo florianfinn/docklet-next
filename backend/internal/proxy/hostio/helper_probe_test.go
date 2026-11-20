@@ -56,6 +56,8 @@ func helperFixture(t *testing.T) (*probeFixture, *ProbeRunner) {
 			stage = "logs"
 		case r.Method == "DELETE":
 			stage = "remove"
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/containers/helper/json"):
+			stage = "inspect"
 		case strings.HasSuffix(r.URL.Path, "/containers/json"):
 			stage = "list"
 		}
@@ -75,6 +77,22 @@ func helperFixture(t *testing.T) (*probeFixture, *ProbeRunner) {
 		}
 		if stage == "start" && fail == "binary-missing" {
 			http.Error(w, `{"message":"exec: /usr/bin/docklet-probe: stat /usr/bin/docklet-probe: no such file or directory"}`, 500)
+			return
+		}
+		if stage == "start" && fail == "crun-missing" {
+			http.Error(w, `{"message":"crun: synthetic wording for a command that was not found"}`, 400)
+			return
+		}
+		if stage == "inspect" {
+			code := 0
+			if fail == "crun-missing" {
+				code = 127
+			}
+			fmt.Fprintf(w, `{"Id":"helper","State":{"Status":"exited","ExitCode":%d}}`, code)
+			return
+		}
+		if stage == "create" && fail == "image-pruned" {
+			http.Error(w, `{"message":"No such image: sha256:local-image"}`, 404)
 			return
 		}
 		if stage == fail {
@@ -214,7 +232,8 @@ func TestP4CapabilityClassesAndImmutableCache(t *testing.T) {
 		{name: "published-v1-missing-capabilities", version: `{"v":1,"version":"0.2.0"}`},
 		{name: "explicit-no-http", version: `{"v":1,"version":"0.2.0","capabilities":["tls"]}`, want: dto.ProbeClientUnsupported},
 		{name: "explicit-http-only", version: `{"v":1,"version":"0.2.0","capabilities":["http"]}`},
-		{name: "malformed", version: `{`, bad: true},
+		{name: "malformed", version: `{`, want: dto.ProbeClientUnsupported},
+		{name: "malformed-capabilities", version: `{"v":1,"version":"0.2.0","capabilities":null}`, want: dto.ProbeClientUnsupported},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			f, r := helperFixture(t)
@@ -429,4 +448,56 @@ func TestP6CleanupFailureRemainsTransientAndStartupSweepRecovers(t *testing.T) {
 	f.fail = ""
 	require.NoError(t, r.Sweep(t.Context()))
 	require.Equal(t, f.creates, f.removes)
+}
+
+// N5: a missing probe binary is detected from the runtime's exit code, so the
+// wget fallback also works with crun wording.
+func TestP4MissingBinaryDetectedByExitCode(t *testing.T) {
+	f, r := helperFixture(t)
+	f.fail = "crun-missing"
+	prepared, err := r.Prepare(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, dto.ProbeClientMissing, prepared.Reason)
+	require.Equal(t, f.creates, f.removes)
+}
+
+// N1: a definitive daemon refusal (pruned image) is a typed observation
+// failure, never an endless transient retry.
+func TestP6DaemonRefusalIsTyped(t *testing.T) {
+	f, r := helperFixture(t)
+	p, err := r.Prepare(t.Context())
+	require.NoError(t, err)
+	f.mu.Lock()
+	f.fail = "image-pruned"
+	f.mu.Unlock()
+	_, err = r.Probe(t.Context(), p, probeInstance(), probeInspect, "example.test", "http://127.0.0.1/", "", noFallback(t))
+	var problem *dto.Problem
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, dto.NotObservable, problem.Code)
+	require.False(t, ProbeTransient(err))
+}
+
+// N2: hosts the helper cannot express (M27 accepted them through wget) fall
+// back as an unsupported client instead of invalid-input.
+func TestP4HelperArgumentRefusalFallsBack(t *testing.T) {
+	for _, tt := range []struct{ host, url string }{
+		{"my_app.example.test", "http://127.0.0.1/"},
+		{"192.0.2.10", "https://127.0.0.1/"},
+	} {
+		t.Run(tt.host, func(t *testing.T) {
+			f, r := helperFixture(t)
+			p, err := r.Prepare(t.Context())
+			require.NoError(t, err)
+			created := f.creates
+			used := false
+			response, err := r.Probe(t.Context(), p, probeInstance(), probeInspect, tt.host, tt.url, "", func(context.Context) (Response, error) {
+				used = true
+				return Response{}, nil
+			})
+			require.NoError(t, err)
+			require.True(t, used)
+			require.Equal(t, dto.ProbeClientUnsupported, response.Probe.Reason)
+			require.Equal(t, created, f.creates, "no helper runs for refused arguments")
+		})
+	}
 }

@@ -47,6 +47,6 @@ func HostConfig(_ string, binds []string, mounts []mount.Mount) *container.HostC
 
 // ResolveHelperImage shares the classified resolver with every tools-image consumer.
 func ResolveHelperImage(ctx context.Context, dockerClient *client.Client, configured string) (string, error) {
-	image, err := Resolve(ctx, dockerClient, configured)
+	image, err := Resolve(ctx, dockerClient, configured, nil)
 	return image.Ref, err
 }

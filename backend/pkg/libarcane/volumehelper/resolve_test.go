@@ -31,11 +31,13 @@ func TestResolveClassifiesPullAndDaemonFailures(t *testing.T) {
 		{"denied", 404, 403, "", true},
 		{"daemon-pull", 404, 500, "", false},
 		{"registry-dial-response", 404, 500, `{"message":"Get \"https://registry.example.test/v2/\": dial tcp: lookup registry.example.test: no such host"}`, true},
-		{"registry-timeout-response", 404, 500, `{"message":"Get \"https://registry.example.test/v2/\": dial tcp: i/o timeout"}`, false},
+		{"registry-timeout-response", 404, 500, `{"message":"Get \"https://registry.example.test/v2/\": dial tcp: i/o timeout"}`, true},
 		{"registry-denied-response", 404, 500, `{"message":"pull access denied for registry.example.test/tools"}`, true},
 		{"stream-denied", 404, 200, `{"error":"pull access denied"}`, true},
 		{"stream-offline", 404, 200, `{"error":"dial tcp: connection refused"}`, true},
-		{"stream-timeout", 404, 200, `{"error":"dial tcp: i/o timeout"}`, false},
+		{"stream-timeout", 404, 200, `{"error":"dial tcp: i/o timeout"}`, true},
+		{"stream-deadline", 404, 200, `{"error":"context deadline exceeded"}`, false},
+		{"registry-deadline-response", 404, 500, `{"message":"Get \"https://registry.example.test/v2/\": net/http: request canceled (Client.Timeout exceeded)"}`, false},
 		{"stream-daemon", 404, 200, `{"error":"synthetic daemon failure"}`, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -49,7 +51,7 @@ func TestResolveClassifiesPullAndDaemonFailures(t *testing.T) {
 				w.WriteHeader(tt.inspect)
 			}))
 			t.Cleanup(server.Close)
-			_, err := Resolve(t.Context(), newTestDockerClientInternal(t, server), "registry.example.test/tools:0.2.0")
+			_, err := Resolve(t.Context(), newTestDockerClientInternal(t, server), "registry.example.test/tools:0.2.0", nil)
 			require.Error(t, err)
 			var absent *ImageUnavailable
 			require.Equal(t, tt.absent, errors.As(err, &absent))
