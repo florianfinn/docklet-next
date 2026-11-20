@@ -43,10 +43,12 @@ their expected schema fingerprints. Health/version reads and the agent update
 recovery routes remain available with authentication. This is the first release
 compatibility boundary for both Direct and Edge agents.
 
-A contract-18 agent stays usable for all host functions except optional
-modules and peer-stack confirmations. Modules need contract 19; on an older host,
-or an Edge agent that does not advertise the module commands, the module shows as
-unavailable for that host (`agent.update-required`) and receives no module call.
+A contract-18 or contract-19 agent stays usable for all host functions except
+optional modules and peer-stack confirmations. Modules need contract 20 with its
+current fingerprint, because the proxy module requests changed in contract 20; on
+an older host, or an Edge agent that does not advertise the module commands, the
+module shows as unavailable for that host (`agent.update-required`) and receives
+no module call.
 
 Contract 20 adds the confirmation for runtime actions while another stack's
 Compose name cannot be determined. Agents on contract 18 or 19 keep all ordinary

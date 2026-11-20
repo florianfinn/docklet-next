@@ -116,8 +116,13 @@ docker compose -f compose.yaml --env-file .env up -d --no-deps agent
 
 Keep the agent's token, directories, data and file-owner settings. Wait for a
 successful hub health check; `update-required` clears after compatibility is
-confirmed. Older agent contracts retain only health/version and update recovery
-access until then.
+confirmed. Agents below contract 18, or with an unexpected fingerprint, retain
+only health/version and update recovery access until then. Contract-18 and
+contract-19 agents keep ordinary actions but need the update for optional modules
+and peer-stack confirmations (see [compatibility](compatibility.md)).
+
+Upgrading to 1.2.0: back up the hub database first, because migration 006 adds two
+runtime receipt columns at startup; then update every agent to 1.2.0.
 
 ## Recover a failed in-app update
 
