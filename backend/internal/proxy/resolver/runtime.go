@@ -142,8 +142,21 @@ func (r *Runtime) Prepare(ctx context.Context, q dto.ResolverApplyRequest) (Targ
 	if len(projects.NamespaceDependents(model, []string{service})) > 0 {
 		return t, layout(dto.NamespaceDependent)
 	}
-	if svc, ok := model.Services[service]; !ok || !slices.Equal([]string(svc.Command), []string(c.Config.Cmd)) {
+	svc, ok := model.Services[service]
+	// Without a compose command the container runs the image's default command
+	// (implicit static file layout); an explicit command must match exactly.
+	if !ok || svc.Command != nil && !slices.Equal([]string(svc.Command), []string(c.Config.Cmd)) {
 		return t, dto.Fail(dto.TargetUnclear, 409)
+	}
+	// The scoped recreate drops other services, so the selected service must not
+	// borrow another service's namespaces or volumes.
+	for _, mode := range []string{svc.NetworkMode, svc.Ipc, svc.Pid} {
+		if strings.HasPrefix(mode, "service:") {
+			return t, layout(dto.NamespaceDependent)
+		}
+	}
+	if len(svc.VolumesFrom) > 0 {
+		return t, layout(dto.NamespaceDependent)
 	}
 	inv, err := r.Inventory(ctx, i)
 	if err != nil {

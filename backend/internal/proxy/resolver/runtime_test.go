@@ -129,9 +129,9 @@ func TestScopedRecreateHasNoBuildPullOrDependencies(t *testing.T) {
 }
 
 func TestR8RealAdmissionLayouts(t *testing.T) {
-	for _, branch := range []string{"flags", "file", "unmanaged", "replicas", "overrides", "include", "extends", "anchor", "env-selection", "symlink-env", "namespace", "toml", "entrypoint", "scalar", "environment", "mixed", "outside", "storage", "nested-storage", "shadow-static"} {
+	for _, branch := range []string{"flags", "file", "unmanaged", "replicas", "overrides", "include", "extends", "anchor", "env-selection", "symlink-env", "namespace", "toml", "entrypoint", "scalar", "environment", "mixed", "outside", "storage", "nested-storage", "shadow-static", "implicit-file", "command-mismatch", "network-owner", "volumes-from"} {
 		t.Run(branch, func(t *testing.T) {
-			v := target(t, branch == "file" || branch == "toml" || branch == "outside" || branch == "mixed")
+			v := target(t, branch == "file" || branch == "toml" || branch == "outside" || branch == "mixed" || branch == "implicit-file")
 			q := request()
 			dir := v.Directory
 			db, err := database.Initialize(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "runtime.db")), database.MigrationOptions{})
@@ -150,6 +150,20 @@ func TestR8RealAdmissionLayouts(t *testing.T) {
 				content = strings.Replace(composeText, "      - --entrypoints.web.address=:80 # listener\n      - --providers.file.directory=/etc/traefik/routes", "      - --configfile="+inv.RootFile, 1)
 			}
 			switch branch {
+			case "implicit-file":
+				// No compose command: the image default runs and Traefik finds the file itself.
+				b, readErr := os.ReadFile(filepath.Join(dir, v.Static))
+				require.NoError(t, readErr)
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "traefik.yml"), b, 0644))
+				inv.RootFile = "/etc/traefik/traefik.yml"
+				inspected.Config.Cmd = []string{"traefik"}
+				content = strings.Replace(content, "    command:\n      - --configfile=/etc/traefik/"+v.Static+"\n", "", 1)
+			case "command-mismatch":
+				inspected.Config.Cmd = []string{"--entrypoints.web.address=:8080"}
+			case "network-owner":
+				content = strings.Replace(content, "    command:", "    network_mode: service:app\n    command:", 1)
+			case "volumes-from":
+				content = strings.Replace(content, "    command:", "    volumes_from: [app]\n    command:", 1)
 			case "unmanaged":
 				require.NoError(t, db.Exec("DELETE FROM projects").Error)
 			case "replicas":
@@ -204,10 +218,18 @@ func TestR8RealAdmissionLayouts(t *testing.T) {
 				return source, nil
 			}, Inventory: func(context.Context, dto.Instance) (dto.Inventory, error) { return inv, nil }}
 			_, err = runtime.Prepare(t.Context(), dto.ResolverApplyRequest{Instance: dto.Instance{Kind: dto.Traefik, Identity: dto.Identity{ContainerID: "original"}, Source: source}, Request: q})
-			if branch == "file" || branch == "flags" {
+			if branch == "file" || branch == "flags" || branch == "implicit-file" {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
+			}
+			if branch == "network-owner" || branch == "volumes-from" {
+				var refused *resolver.LayoutError
+				require.ErrorAs(t, err, &refused)
+				require.Equal(t, dto.NamespaceDependent, refused.Reason)
+			}
+			if branch == "command-mismatch" {
+				requireCode(t, err, dto.TargetUnclear)
 			}
 			if branch == "toml" {
 				var refused *resolver.LayoutError
