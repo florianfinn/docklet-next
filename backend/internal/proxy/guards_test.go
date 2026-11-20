@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -344,6 +345,15 @@ func TestSettleToleratesPruneFailure(t *testing.T) {
 	x := newFixture(t)
 	require.NoError(t, x.db.Callback().Delete().Before("gorm:delete").Register("example:fail-prune", func(tx *gorm.DB) { _ = tx.AddError(errors.New("example prune failure")) }))
 	require.NoError(t, x.a.Settle(t.Context()))
+}
+
+// The probe sweep is cleanup only: an unreachable Docker daemon must not fail
+// hub startup (the release image smoke runs without a socket).
+func TestStartToleratesUnreachableDocker(t *testing.T) {
+	x, _, m := reconcilerFixture(t, false)
+	m.Agent = x.a
+	m.Runtime = &DockerRuntime{Docker: dockerinternal.NewDockerClientService(t.Context(), nil, &config.Config{DockerHost: "unix://" + filepath.Join(t.TempDir(), "missing.sock")}, nil)}
+	returnsWithin(t, "Start", func() { require.NoError(t, m.Start(t.Context())) })
 }
 
 // Start installs the reconciler: its startup pass and the periodic pass both run.
