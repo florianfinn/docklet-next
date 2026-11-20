@@ -157,6 +157,7 @@ func rootSites(f dto.File) []dto.Route {
 	return out
 }
 func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent, error) {
+	ctx = hostio.WithProbeOperation(ctx, r.ID)
 	i := proxy.Intent{Request: r, Mode: 0644, GraphHashes: map[string]string{}}
 	if !hostio.Relative(r.Target) || hostio.Secret(r.Target) {
 		return i, problem(dto.InvalidInput, r.Target, 0, "invalid target")
@@ -268,6 +269,9 @@ func (e *engine) Prepare(ctx context.Context, r dto.ApplyRequest) (proxy.Intent,
 		if probeSite == nil {
 			probeSite = s.OldSite
 		}
+		if err = proxy.PrewarmProbe(ctx, e.runtime, r.Instance); err != nil {
+			return i, err
+		}
 		s.Before, err = e.probe(ctx, r.Instance, *probeSite)
 		if err != nil {
 			s.ProbeReason = reason(err, dto.NotObservable)
@@ -301,6 +305,7 @@ func (e *engine) Mark(context.Context, proxy.Intent) error { return dto.Fail(dto
 
 // The shared runtime owns every temporary and staging name, including recovery.
 func (e *engine) Cleanup(_ context.Context, i proxy.Intent) error {
+	proxy.ForgetProbe(e.runtime, i.Request.Instance, i.Request.ID)
 	e.activated.Delete(i.Request.ID)
 	return nil
 }

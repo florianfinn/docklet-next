@@ -109,7 +109,7 @@ func TestM28StubsAndEdgeCommands(t *testing.T) {
 	_, err = x.a.CreateResolver(t.Context(), q)
 	requireCode(t, err, dto.InvalidInput)
 	_, err = x.a.CheckCertificate(t.Context(), dto.HostCertificateCheckRequest{Instance: x.request.Instance, CertificateCheckRequest: dto.CertificateCheckRequest{File: "routes/app.yml", Router: "app", SourceHash: strings.Repeat("a", 64), Host: "app.example.test"}})
-	requireCode(t, err, dto.NotImplemented)
+	requireCode(t, err, dto.CertificateUnavailable)
 	for command, path := range map[string]string{"proxy.certificate.check": "/api/environments/0/modules/proxy/certificate-check", "proxy.resolver.create": "/api/environments/0/modules/proxy/resolvers"} {
 		require.True(t, edge.ValidateEdgeCommand(command, "POST", path, false), command)
 		require.Contains(t, edge.AdvertisedEdgeCommands(), command)

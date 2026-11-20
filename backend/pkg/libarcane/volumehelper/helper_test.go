@@ -60,7 +60,11 @@ func TestResolveHelperImage_PullsToolsImageWhenMissing(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/json"):
-			http.NotFound(w, r)
+			if pullCalls.Load() == 0 {
+				http.NotFound(w, r)
+			} else {
+				_, _ = w.Write([]byte(`{"Id":"sha256:local-image"}`))
+			}
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/images/create"):
 			pullCalls.Add(1)
 			if !assert.Equal(t, "ghcr.io/florianfinn/docklet-tools", r.URL.Query().Get("fromImage")) {

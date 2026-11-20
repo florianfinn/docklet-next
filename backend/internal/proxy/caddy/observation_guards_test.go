@@ -63,7 +63,7 @@ func TestP6NoProofAfterDeadlineEvenWhenResponseChanges(t *testing.T) {
 			x.execFn = func([]string) hostio.ExecResult {
 				calls++
 				if late {
-					x.now = x.now.Add(6 * time.Second)
+					x.now = x.now.Add(8 * time.Second)
 					return httpResult(201, "late")
 				}
 				if x.waits > 0 {
@@ -75,7 +75,7 @@ func TestP6NoProofAfterDeadlineEvenWhenResponseChanges(t *testing.T) {
 				x.mu.Lock()
 				defer x.mu.Unlock()
 				x.waits++
-				x.now = x.now.Add(5 * time.Second)
+				x.now = x.now.Add(7 * time.Second)
 				return nil
 			}
 			o, err := x.e.Observe(t.Context(), i, false)
@@ -97,7 +97,7 @@ func TestInitialEpochAndWaitFailuresCannotVerify(t *testing.T) {
 	x.c.State.StartedAt = epoch
 	x.execFn = func([]string) hostio.ExecResult { return httpResult(200, "") }
 	x.e.wait = func(context.Context, time.Duration) error {
-		x.now = x.now.Add(6 * time.Second)
+		x.now = x.now.Add(8 * time.Second)
 		return context.Canceled
 	}
 	// A failed wait inside a live operation ends the window: never verified, never uncertain.
@@ -118,7 +118,7 @@ func TestAdminOffUnobservableAndAdminOnMismatchCannotUseConfigurationEvidence(t 
 				}
 				return hostio.ExecResult{ExitCode: 1}
 			}
-			x.e.wait = func(context.Context, time.Duration) error { x.now = x.now.Add(5 * time.Second); return nil }
+			x.e.wait = func(context.Context, time.Duration) error { x.now = x.now.Add(7 * time.Second); return nil }
 			o, err := x.e.Observe(t.Context(), i, false)
 			require.NoError(t, err)
 			require.Equal(t, dto.AppliedUnverified, o.State)
@@ -136,7 +136,7 @@ func TestHTTPUnchangedReadbackReportsNoObservableDifference(t *testing.T) {
 		}
 		return httpResult(200, "")
 	}
-	x.e.wait = func(context.Context, time.Duration) error { x.now = x.now.Add(5 * time.Second); return nil }
+	x.e.wait = func(context.Context, time.Duration) error { x.now = x.now.Add(7 * time.Second); return nil }
 	o, err := x.e.Observe(t.Context(), i, false)
 	require.NoError(t, err)
 	require.Equal(t, dto.AppliedUnverified, o.State)

@@ -123,7 +123,7 @@ export function ResolverDialog({ instance, inventory, close }: {
         ]} />
         {ca === "custom" && <TextField id="resolver-url" label={t("url")} type="url" value={url} onChange={setURL} />}
         <Choice id="resolver-challenge" label={t("challenge")} value={challenge} onChange={value => setChallenge(value as "http" | "dns")} options={[
-          { value: "http", label: "HTTP-01" }, { value: "dns", label: "DNS-01" },
+          { value: "http", label: t("challengeHttp") }, { value: "dns", label: t("challengeDns") },
         ]} />
         {challenge === "http" ? <Choice id="resolver-entry" label={t("entryPoint")} value={entry} onChange={setEntry}
           options={(inventory.entryPoints ?? []).filter(ep => !ep.tls).map(ep => ({ value: ep.name, label: `${ep.name} · ${ep.address}` }))} /> : <>

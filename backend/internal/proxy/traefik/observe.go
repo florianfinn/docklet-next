@@ -25,12 +25,15 @@ func routeProbes(r dto.Route, inv dto.Inventory) []probe {
 		return []probe{{Route: r.ID, Reason: dto.NotObservable}}
 	}
 	hosts := []string{}
+	hostMatcher := false
 	requestPath := "/"
 	for _, c := range calls {
 		switch c.name {
 		case "Host":
+			hostMatcher = true
 			hosts = append(hosts, c.args[0])
 		case "HostRegexp":
+			hostMatcher = true
 			expression := c.args[0]
 			prefix := "^[a-z0-9-]+\\."
 			if strings.HasPrefix(expression, prefix) && strings.HasSuffix(expression, "$") {
@@ -39,6 +42,9 @@ func routeProbes(r dto.Route, inv dto.Inventory) []probe {
 		case "Path", "PathPrefix":
 			requestPath = c.args[0]
 		}
+	}
+	if len(hosts) == 0 && !hostMatcher {
+		hosts = []string{"probe.example.test"}
 	}
 	out := []probe{}
 	for _, ep := range inv.EntryPoints {
@@ -53,12 +59,12 @@ func routeProbes(r dto.Route, inv dto.Inventory) []probe {
 			continue
 		}
 		scheme := "http"
-		if ep.TLS {
+		if ep.TLS || r.TLS {
 			scheme = "https"
 		}
 		for _, host := range hosts {
 			u := url.URL{Scheme: scheme, Host: net.JoinHostPort("127.0.0.1", port), Path: requestPath}
-			out = append(out, probe{Route: r.ID, Host: host, URL: u.String()})
+			out = append(out, probe{Route: r.ID, Host: host, URL: u.String(), EntryPoint: ep.Name})
 		}
 	}
 	if len(out) == 0 {
@@ -79,6 +85,19 @@ func markerProbe(id string, inv dto.Inventory) probe {
 	return probe{Reason: dto.NotObservable}
 }
 func (e *engine) probe(ctx context.Context, i dto.Instance, p probe) (hostio.Response, error) {
+	if runner, ok := e.run.(interface {
+		Probe(context.Context, dto.Instance, string, string) (hostio.Response, error)
+	}); ok {
+		response, err := runner.Probe(ctx, i, p.Host, p.URL)
+		if response.Certificate != nil {
+			response.Certificate.Route.Name = p.Route
+			if _, name, ok := strings.Cut(p.Route, "#"); ok {
+				response.Certificate.Route.Name = name
+			}
+			response.Certificate.Route.EntryPoint = p.EntryPoint
+		}
+		return response, err
+	}
 	res, err := e.run.Exec(ctx, i, "probe", "", p.Host, p.URL)
 	return hostio.ParseProbe(res, err)
 }
@@ -169,6 +188,9 @@ func (e *engine) checkLogs(ctx context.Context, i dto.Instance, since time.Time,
 // noRoute is Traefik's no-route answer as BusyBox reports it: wget stops at the
 // first 4xx status line, so no headers and no body are available.
 func noRoute(r hostio.Response) bool {
+	if r.Probe != nil && r.Probe.Client == dto.HelperClient {
+		return r.Status == 404 && !r.Followed && !r.Truncated && r.BodyHash == "b16e15764b8bc06c5c3f9f19bc8b99fa48e7894aa5a6ccdad65da49bbf564793"
+	}
 	return r.Status == 404 && !r.Followed && len(r.Headers) == 0 && r.BodyHash == ""
 }
 func routingEvidence(kind string, before, after hostio.Response) bool {
@@ -202,17 +224,28 @@ func deadlineObservation(s engineState, marked bool, lastReason dto.Reason, unan
 	}
 	return unverified(lastReason)
 }
-func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (proxy.Observation, error) {
+func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (observation proxy.Observation, observeErr error) {
+	ctx = hostio.WithProbeOperation(ctx, in.Request.ID)
 	s, err := state(in)
 	if err != nil {
 		return proxy.Observation{}, err
 	}
-	budget := time.Duration(s.Inventory.ThrottleMillis)*2*time.Millisecond + 10*time.Second
+	if err = proxy.EnsureProbePrepared(ctx, e.run, in.Request.Instance); err != nil {
+		return proxy.Observation{}, err
+	}
+	budget := time.Duration(s.Inventory.ThrottleMillis)*2*time.Millisecond + hostio.HelperProbeBudget
 	deadline := e.now().Add(budget)
 	parent := ctx
 	ctx, cancel := e.limit(ctx, budget)
 	defer cancel()
 	// Recovery starts a fresh window. Publication still bounds log evidence.
+	var certificate *dto.CertificateObservation
+	var probeEvidence *dto.ProbeEvidence
+	defer func() {
+		if observeErr == nil && observation.Reason != dto.ContainerChanged {
+			observation.Certificate, observation.Probe = certificate, probeEvidence
+		}
+	}()
 	lastReason := dto.NoObservableDifference
 	unanswered := false
 	for {
@@ -248,6 +281,15 @@ func (e *engine) Observe(ctx context.Context, in proxy.Intent, marked bool) (pro
 				continue
 			}
 			after, probeErr := e.probe(ctx, in.Request.Instance, p)
+			if probeErr != nil && hostio.ProbeTransient(probeErr) && ctx.Err() == nil {
+				return proxy.Observation{}, probeErr
+			}
+			if probeErr == nil {
+				probeEvidence = after.Probe
+				if after.Certificate != nil {
+					certificate = after.Certificate
+				}
+			}
 			if probeErr != nil {
 				all = false
 				lastReason = reason(probeErr, dto.NotObservable)
@@ -340,4 +382,45 @@ func (e *engine) Mark(ctx context.Context, in proxy.Intent) error {
 		return err
 	}
 	return w.Replace(ctx, in.TempPath, in.MarkerPath)
+}
+
+func (e *engine) CheckCertificate(ctx context.Context, i dto.Instance, q dto.CertificateCheckRequest) (dto.CertificateObservation, error) {
+	read, err := e.Read(ctx, i)
+	if err != nil {
+		return dto.CertificateObservation{}, err
+	}
+	route, err := proxy.CertificateRoute(read, q)
+	if err != nil {
+		return dto.CertificateObservation{}, err
+	}
+	if err = proxy.PrewarmProbe(ctx, e.run, i); err != nil {
+		return dto.CertificateObservation{}, err
+	}
+	for _, p := range routeProbes(route, read.Inventory) {
+		if p.Reason != "" || !strings.HasPrefix(p.URL, "https://") || p.Host != q.Host {
+			continue
+		}
+		response, err := e.probe(ctx, i, p)
+		if err != nil {
+			return dto.CertificateObservation{}, err
+		}
+		// Re-read after collection so an edited route cannot give a current result.
+		after, err := e.Read(ctx, i)
+		if err != nil {
+			return dto.CertificateObservation{}, err
+		}
+		if _, err = proxy.CertificateRoute(after, q); err != nil {
+			return dto.CertificateObservation{}, err
+		}
+		entry := ""
+		for _, ep := range read.Inventory.EntryPoints {
+			_, port, _ := net.SplitHostPort(strings.TrimSuffix(ep.Address, "/tcp"))
+			if strings.Contains(p.URL, "127.0.0.1:"+port+"/") {
+				entry = ep.Name
+				break
+			}
+		}
+		return proxy.CertificateResult(response, route.Name, entry)
+	}
+	return dto.CertificateObservation{}, dto.Fail(dto.CertificateUnavailable, 409)
 }

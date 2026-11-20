@@ -16,19 +16,22 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 )
 
-// Response is the first response of a probe. BusyBox wget follows redirects and
-// cannot be told not to, so only the first status line and its headers count;
-// the body hash is kept only when no further response was fetched.
+// Response is the first HTTP answer, with independent certificate observation.
+// The helper never follows redirects; the wget fallback keeps only its first
+// status and headers, discarding a body fetched after a redirect.
 type Response struct {
 	// Status 0 means no HTTP response at all (connection refused or reset).
-	Status   int               `json:"status"`
-	Headers  map[string]string `json:"headers,omitempty"`
-	BodyHash string            `json:"bodyHash,omitempty"`
-	Followed bool              `json:"followed,omitempty"`
+	Status      int                         `json:"status"`
+	Headers     map[string]string           `json:"headers,omitempty"`
+	BodyHash    string                      `json:"bodyHash,omitempty"`
+	Followed    bool                        `json:"followed,omitempty"`
+	Truncated   bool                        `json:"truncated,omitempty"`
+	Certificate *dto.CertificateObservation `json:"certificate,omitempty"`
+	Probe       *dto.ProbeEvidence          `json:"probe,omitempty"`
 }
 
 // probeHeaders are compared between probes; volatile headers such as Date are not.
-var probeHeaders = map[string]bool{"location": true, "content-type": true, "content-length": true, "server": true}
+var probeHeaders = map[string]bool{"location": true, "content-type": true, "content-length": true, "server": true, "www-authenticate": true}
 
 // ParseProbe reads the result of Exec(…, "probe", …). A non-zero exit with a status
 // line is an ordinary HTTP answer (BusyBox exits 1 on 4xx and 5xx).
@@ -92,8 +95,13 @@ func ParseProbe(res ExecResult, err error) (Response, error) {
 		return Response{}, nil
 	}
 	out.Followed = responses > 1
-	if !out.Followed && len(res.Stdout) > 0 {
-		h := sha256.Sum256(res.Stdout)
+	if !out.Followed && (len(res.Stdout) > 0 || out.Status < 400) {
+		body := res.Stdout
+		out.Truncated = len(body) > MaxProbeBody
+		if out.Truncated {
+			body = body[:MaxProbeBody]
+		}
+		h := sha256.Sum256(body)
 		out.BodyHash = hex.EncodeToString(h[:])
 	}
 	return out, nil
@@ -113,5 +121,5 @@ func Differs(before, after Response) bool {
 			return true
 		}
 	}
-	return before.BodyHash != "" && after.BodyHash != "" && before.BodyHash != after.BodyHash
+	return before.BodyHash != "" && after.BodyHash != "" && (before.BodyHash != after.BodyHash || before.Truncated != after.Truncated)
 }

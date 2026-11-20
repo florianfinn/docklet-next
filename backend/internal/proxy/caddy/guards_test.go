@@ -161,7 +161,7 @@ func TestP6DeadlineBeginsAtActivation(t *testing.T) {
 	o, err := x.e.Observe(t.Context(), i, false)
 	require.NoError(t, err)
 	require.Equal(t, dto.AppliedUnverified, o.State)
-	require.Equal(t, 30, x.waits)
+	require.Equal(t, 50, x.waits)
 	x.now = x.now.Add(time.Second)
 	before := len(x.commands)
 	o, err = x.e.Observe(t.Context(), i, false)

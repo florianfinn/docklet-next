@@ -72,6 +72,8 @@ type Runtime interface {
 	Rebind(context.Context, dto.Instance) (dto.Instance, error)
 }
 type Observation struct {
+	Certificate *dto.CertificateObservation
+	Probe       *dto.ProbeEvidence
 	State       dto.State
 	Reason      dto.Reason
 	Evidence    dto.EvidenceKind

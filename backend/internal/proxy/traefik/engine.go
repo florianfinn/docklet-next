@@ -68,4 +68,7 @@ func (*engine) Reload(context.Context, proxy.Intent) error  { return nil }
 func (*engine) Restart(context.Context, proxy.Intent) error { return dto.Fail(dto.InvalidInput, 422) }
 
 // Runtime removes its named marker and temporary paths after this callback.
-func (*engine) Cleanup(context.Context, proxy.Intent) error { return nil }
+func (e *engine) Cleanup(_ context.Context, in proxy.Intent) error {
+	proxy.ForgetProbe(e.run, in.Request.Instance, in.Request.ID)
+	return nil
+}

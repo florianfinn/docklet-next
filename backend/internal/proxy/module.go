@@ -83,6 +83,11 @@ func NewModule(db *database.DB, cfg *config.Config, mods *modules.Service, s *se
 // engines with Runtime and register their kind; runtime and agent share this map.
 func (m *Module) RegisterEngine(kind dto.Kind, e Engine) { m.Agent.Engines[kind] = e }
 func (m *Module) Start(ctx context.Context) error {
+	if m.Runtime != nil && m.Runtime.Docker != nil {
+		if err := m.Runtime.SweepProbes(ctx); err != nil {
+			return err
+		}
+	}
 	if err := m.Agent.Settle(ctx); err != nil {
 		return err
 	}

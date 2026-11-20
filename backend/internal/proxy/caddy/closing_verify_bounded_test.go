@@ -21,9 +21,14 @@ func TestVerifyTransientRoundEpochRemainsBounded(t *testing.T) {
 	x := fixture(t)
 	i := observationIntent(x, baseSite(), true, "edit-route")
 	armed, reads := false, 0
-	x.execFn = func([]string) hostio.ExecResult { armed = true; return httpResult(201, "changed") }
+	afterProbeReads := 0
+	x.execFn = func([]string) hostio.ExecResult { armed = true; afterProbeReads = 0; return httpResult(201, "changed") }
 	x.fault = func(w http.ResponseWriter, r *http.Request) bool {
 		if armed && strings.Contains(r.URL.Path, "/containers/") && strings.HasSuffix(r.URL.Path, "/json") {
+			afterProbeReads++
+			if afterProbeReads == 1 {
+				return false
+			}
 			armed = false
 			reads++
 			http.Error(w, `{"message":"temporary daemon failure"}`, http.StatusServiceUnavailable)
@@ -34,7 +39,7 @@ func TestVerifyTransientRoundEpochRemainsBounded(t *testing.T) {
 	waits := 0
 	x.e.wait = func(ctx context.Context, d time.Duration) error {
 		waits++
-		require.LessOrEqual(t, waits, 51)
+		require.LessOrEqual(t, waits, 71)
 		x.now = x.now.Add(d)
 		return ctx.Err()
 	}

@@ -315,7 +315,7 @@ func TestP6P7DelayedEvidenceAndFirstResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, dto.AppliedUnverified, o.State)
 	require.Equal(t, dto.NoObservableDifference, o.Reason)
-	require.Equal(t, 50, x.waits)
+	require.Equal(t, 70, x.waits)
 	for _, code := range []int{502, 503, 504} {
 		require.False(t, routing(st.Before, hostio.Response{Status: code}, "create-route"))
 	}

@@ -238,8 +238,9 @@ export function InstanceWorkspace({
                 </Button>
               </div>
               <RouteList
-                instance={instance}
+                instance={{ ...instance, identity: snapshot.inventory.identity }}
                 routes={snapshot.read.routes ?? []}
+                hashes={Object.fromEntries((snapshot.read.files ?? []).map(file => [file.path, file.hash]))}
                 writable={writable}
                 edit={route => setEditor({ route, snapshot })}
                 action={value => setAction({ value, snapshot })}

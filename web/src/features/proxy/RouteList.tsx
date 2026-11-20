@@ -12,6 +12,7 @@ import { Button } from "@/shared/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
 import { PROXY_REFERENCE_KEYS } from "@/data/wire-catalogue-proxy";
 import { EligibilityView } from "./controls";
+import { CertificateCheck } from "./CertificateCheck";
 import { canEdit } from "./model";
 import type { Instance, Route } from "./types";
 import type { ChangeAction } from "./ChangeDialog";
@@ -19,12 +20,14 @@ import type { ChangeAction } from "./ChangeDialog";
 export function RouteList({
   instance,
   routes,
+  hashes,
   writable,
   edit,
   action,
 }: {
   instance: Instance;
   routes: Route[];
+  hashes?: Record<string, string>;
   writable: boolean;
   edit: (r: Route) => void;
   action: (a: ChangeAction) => void;
@@ -83,7 +86,8 @@ export function RouteList({
               <p className="text-xs">{ui("opaqueService", { name: r.serviceFile })}</p>
             )}
           </div>
-          <div>
+          <div className="grid content-start gap-2">
+            {hashes?.[r.file] && <CertificateCheck instance={instance} route={r} hash={hashes[r.file] ?? ""} />}
             {canEdit(r) && writable && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "use-intl";
+import { CertificateObservation } from "./CertificateObservation";
 import { proxyOutcome } from "@/data/http/proxy-decoder";
 import { Button } from "@/shared/ui/button";
 import { ToneBadge } from "@/shared/components/tone";
@@ -83,6 +84,8 @@ export function Operations({
             <p className="break-all font-mono text-xs">{row.target}</p>
             <Reason code={row.reason} />
             <Diagnostic value={row.diagnostic} />
+            {row.probe?.client === "wget" && <p className="text-xs">{ui("certificateUnavailable")}</p>}
+            {row.certificate && <CertificateObservation value={row.certificate} />}
             {row.state === "recovery-required" && (
               <>
                 <div className="grid min-w-0 gap-3 sm:grid-cols-3">

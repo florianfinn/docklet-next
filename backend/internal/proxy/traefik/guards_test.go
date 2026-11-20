@@ -446,7 +446,7 @@ func TestObservationBudgetCancelsHeldDockerIO(t *testing.T) {
 	defer close(release)
 	budgetReady := make(chan context.CancelFunc, 1)
 	x.e.limit = func(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
-		require.Equal(t, 14*time.Second, d)
+		require.Equal(t, 16*time.Second, d)
 		limited, cancel := context.WithCancel(ctx)
 		budgetReady <- cancel
 		return limited, cancel

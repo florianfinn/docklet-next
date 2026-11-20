@@ -13,7 +13,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -34,7 +33,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
-	"github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 )
 
@@ -134,27 +132,8 @@ func (s *VolumeService) getVolumeHelperImageInternal(ctx context.Context, docker
 		}
 	}
 
-	toolsImage := s.toolsImageInternal()
-
-	if _, imageInspectErr := dockerClient.ImageInspect(ctx, toolsImage); imageInspectErr == nil {
-		slog.InfoContext(ctx, "volume service: helper image strategy selected", "strategy", "tools-local", "image", toolsImage)
-		return toolsImage, nil
-	}
-
-	var pullErr error
-	if s.imageService != nil {
-		pullImageErr := s.imageService.PullImage(ctx, toolsImage, io.Discard, user.SystemUser, nil)
-		if pullImageErr == nil {
-			slog.InfoContext(ctx, "volume service: helper image strategy selected", "strategy", "tools-pulled", "image", toolsImage)
-			return toolsImage, nil
-		}
-		pullErr = pullImageErr
-		slog.WarnContext(ctx, "volume service: failed to pull configured tools helper image", "error", pullImageErr.Error())
-	} else {
-		return volumehelper.ResolveHelperImage(ctx, dockerClient, toolsImage)
-	}
-
-	return "", fmt.Errorf("failed to resolve helper image: configured tools image unavailable: %w", pullErr)
+	image, err := volumehelper.Resolve(ctx, dockerClient, s.toolsImageInternal())
+	return image.Ref, err
 }
 
 func (s *VolumeService) acquireVolumeHelperInternal(ctx context.Context, volumeName string) (string, func(), error) {
