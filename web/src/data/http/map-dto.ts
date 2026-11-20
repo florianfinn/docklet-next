@@ -226,6 +226,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   };
   if (lifecycle) { const l = record(lifecycle); id(l.runId); bool(l.verified); if (bool(l.volumeDataIncluded)) throw new Error("dto.invalid-lifecycle"); }
   const target = run.resourceName || run.resourceId || run.sourceEnvironmentName || run.type;
+  const peerAudit = (detail.messages ?? []).map((item) => runtimePeerAudit(item.code, item.payload)).find((item) => item !== undefined);
   const output = (detail.output ?? []).map((line) => {
     required(line.timestamp, "output-timestamp");
     if (!STREAMS.has(line.stream as OutputStream) || typeof line.text !== "string") throw new Error("dto.invalid-output-line");
@@ -271,6 +272,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       startedAt: step.startedAt, finishedAt: step.endedAt,
     })),
     log: detail.messages?.length ? detail.messages.map((item) => runtimePeerAudit(item.code, item.payload) ?? jobSummary(item.message, item.code) ?? coded(item.code, item.message)) : run.latestMessage ? [jobSummary(run.latestMessage) ?? coded(run.messageCode, run.latestMessage)] : [],
+    ...(peerAudit ? { peerAudit } : {}),
     output,
     outputTruncated: detail.outputTruncated,
   }, { summary: { stepsAvailable: true } });

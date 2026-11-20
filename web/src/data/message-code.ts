@@ -15,13 +15,14 @@ export interface MessageCode {
 
 export type CodedStep = Omit<ActionStep, "label" | "detail"> & { label: MessageCode; detail?: MessageCode };
 export type CodedOutputLine = Omit<RunOutputLine, "text"> & { text: string | MessageCode };
-export type CodedActionRun = Omit<ActionRun, "title" | "target" | "error" | "steps" | "log" | "output"> & {
+export type CodedActionRun = Omit<ActionRun, "title" | "target" | "error" | "steps" | "log" | "peerAudit" | "output"> & {
   title: MessageCode;
   backupOutcome?: { status: string; errorCode?: string; reason?: string };
   target: MessageCode;
   error?: MessageCode;
   steps: CodedStep[];
   log: MessageCode[];
+  peerAudit?: MessageCode;
   output: CodedOutputLine[];
 };
 export type CodedEvent = Omit<OpsEvent, "title"> & { title: MessageCode };
@@ -71,6 +72,7 @@ export function renderRun(run: CodedActionRun, locale: AppLocale): ActionRun {
     error: run.error === undefined ? undefined : renderMessage(run.error, locale),
     steps: run.steps.map((step) => ({ ...step, label: renderMessage(step.label, locale), detail: step.detail === undefined ? undefined : renderMessage(step.detail, locale) })),
     log: run.log.map((line) => renderMessage(line, locale)),
+    peerAudit: run.peerAudit === undefined ? undefined : renderMessage(run.peerAudit, locale),
     output: run.output.map((line) => ({ ...line, text: typeof line.text === "string" ? line.text : renderMessage(line.text, locale) })),
   };
   cache.set(run, result);

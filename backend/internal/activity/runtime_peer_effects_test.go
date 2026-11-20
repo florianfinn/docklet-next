@@ -237,6 +237,12 @@ func TestS4UncertaintyProducerDirectEdgeAndDurableAudit(t *testing.T) {
 			require.NotEmpty(t, identitySDKEffects(f.agent.http.snapshot()))
 			_, err = f.control.Wait(ctx, ref, nil)
 			require.NoError(t, err)
+			var hubRun activity.Activity
+			require.NoError(t, f.db.First(&hubRun, "id = ?", ref.RunID).Error)
+			require.Equal(t, a.StatusSuccess, hubRun.Status, "the confirmed remote run settles on the hub with its audit row already present")
+			var unknown int64
+			require.NoError(t, f.db.Table("activity_messages").Where("activity_id = ? AND code = ?", ref.RunID, "runtime.outcome-unknown").Count(&unknown).Error)
+			require.Zero(t, unknown)
 			for _, db := range []*runtimeServicesFixture{f.agent} {
 				var row activity.RuntimeReceipt
 				require.NoError(t, db.db.First(&row, "run_id = ?", ref.RunID).Error)

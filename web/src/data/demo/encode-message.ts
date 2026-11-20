@@ -51,6 +51,7 @@ export function encodeDemoRun(run: ActionRun): CodedActionRun {
     error: run.error === undefined ? undefined : encodeDemoMessage(run.error),
     steps: run.steps.map((step) => ({ ...step, label: encodeDemoMessage(step.label), detail: step.detail === undefined ? undefined : encodeDemoMessage(step.detail) })),
     log: run.log.map(encodeDemoMessage),
+    peerAudit: run.peerAudit === undefined ? undefined : encodeDemoMessage(run.peerAudit),
     output: run.output.map((line) => ({ ...line, text: line.stream === "note" ? encodeDemoMessage(line.text) : line.text })),
   };
   runCache.set(run, coded);

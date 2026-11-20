@@ -282,6 +282,8 @@ export interface ActionRun {
   finishedAt?: string;
   error?: string;
   log: string[];
+  /** Peer stacks this run was confirmed to run despite (#531 audit). */
+  peerAudit?: string;
   /** Raw, chronological operation output. */
   output: RunOutputLine[];
   outputTruncated?: boolean;

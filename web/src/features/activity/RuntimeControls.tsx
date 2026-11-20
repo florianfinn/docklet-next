@@ -56,6 +56,7 @@ export function RuntimeControls({ run, feedback }: { run: ActionRun; feedback?: 
     {state && <p role="status">{t(`${state}Body`)}</p>}
     {active && run.cancelRequested && state !== "cancelling" && <p>{t("cancellingBody")}</p>}
     {run.status === "cancelled" && <p>{t("cancelledBody")}</p>}
+    {run.peerAudit && <p className="break-words">{run.peerAudit}</p>}
     {evidence?.releaseReason && <p className="break-words">{t("releaseReason", { reason: evidence.releaseReason })}</p>}
     {evidence?.lateResult && <p>{t("lateEvidence")}</p>}
     <div className="flex flex-wrap gap-2">
