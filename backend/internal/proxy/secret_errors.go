@@ -23,7 +23,9 @@ func ErrorTransformer(ctx huma.Context, status string, value any) (any, error) {
 		return value, nil
 	}
 	n, _ := strconv.Atoi(status)
-	if _, ok := value.(*huma.ErrorModel); !ok || n != 400 && n != 413 && n != 422 {
+	// Body errors (400, 413, 415, 422, ...) may carry the raw body; auth, gate
+	// and conflict answers carry none and keep their meaning.
+	if _, ok := value.(*huma.ErrorModel); !ok || n < 400 || n > 499 || n == 401 || n == 403 || n == 404 || n == 409 {
 		return value, nil
 	}
 	ctx.SetStatus(422)

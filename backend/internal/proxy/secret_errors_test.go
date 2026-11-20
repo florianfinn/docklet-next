@@ -9,6 +9,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -72,6 +73,11 @@ func TestResolverValidationErrorsNeverEchoValues(t *testing.T) {
 			r["variables"] = []any{map[string]any{"name": "HTTPREQ_PASSWORD", "value": sentinel, "extra": sentinel}}
 			return r
 		},
+		"variable without name": func() map[string]any {
+			r := asMap(t, base)
+			r["variables"] = []any{map[string]any{"value": sentinel}}
+			return r
+		},
 		"missing name": func() map[string]any {
 			r := asMap(t, base)
 			delete(r, "name")
@@ -93,5 +99,17 @@ func TestResolverValidationErrorsNeverEchoValues(t *testing.T) {
 		require.Equal(t, 422, w.Code, "%s agent: %s", name, w.Body.String())
 		require.NotContains(t, w.Body.String(), sentinel, "%s agent", name)
 		require.Contains(t, w.Body.String(), string(dto.InvalidInput), "%s agent", name)
+	}
+	for _, path := range []string{"/api/modules/proxy/instances/instance-one/resolvers", "/api/environments/0/modules/proxy/resolvers"} {
+		router := hub
+		if strings.HasPrefix(path, "/api/environments/") {
+			router = agent
+		}
+		r := httptest.NewRequest("POST", path, strings.NewReader(`{"value":"`+sentinel+`"}`))
+		r.Header.Set("Content-Type", "text/plain")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		require.Equal(t, 422, w.Code, "%s unsupported content type: %s", path, w.Body.String())
+		require.NotContains(t, w.Body.String(), sentinel, path)
 	}
 }
