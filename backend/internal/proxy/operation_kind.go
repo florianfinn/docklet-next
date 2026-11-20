@@ -45,7 +45,7 @@ func recordReceipt(r Record) dto.Operation {
 	return dto.Operation{ID: r.ID, InstanceID: r.InstanceID, Kind: prior.Kind, Resolver: prior.Resolver, Generation: r.Generation, Registration: r.Registration, Digest: r.Digest, State: r.State, Phase: prior.Phase, Target: prior.Target, Old: prior.Old, New: prior.New, Current: prior.Current, ReleasedBy: prior.ReleasedBy, Reason: prior.Reason, CreatedAt: r.CreatedAt, FinishedAt: r.FinishedAt}
 }
 func deferredOperation(o dto.Operation) bool {
-	return o.Kind.Effective() != dto.RouteOperation || o.Reason == dto.UnknownOperationKind
+	return o.Kind.Effective() != dto.RouteOperation && o.Kind != dto.ResolverOperation || o.Reason == dto.UnknownOperationKind
 }
 
 // Typed resolver envelopes can be read before the resolver executor is installed.
@@ -56,13 +56,28 @@ func decodeResolverPayload(raw, result []byte, id, generation, registration, dig
 	if json.Unmarshal(raw, &envelope, json.RejectUnknownMembers(true)) != nil || json.Unmarshal(result, &o) != nil || envelope.Intent.Validate() != nil || envelope.Kind != dto.ResolverOperation || envelope.ID != id || envelope.Generation != generation || envelope.Registration != registration || envelope.Instance.ID == "" || o.Kind != dto.ResolverOperation || o.ID != id || o.InstanceID != envelope.Instance.ID || o.Generation != generation || o.Registration != registration || o.Digest != digest || o.State != state || !state.ValidFor(dto.ResolverOperation) || o.Resolver == nil || !o.Resolver.Phase.Valid() {
 		return dto.ApplyRequest{}, dto.Operation{}, false
 	}
+	if o.Resolver.Phase.Final() && dto.State(o.Resolver.Phase) != state {
+		return dto.ApplyRequest{}, dto.Operation{}, false
+	}
+	if o.Resolver.Phase == dto.ResolverRecoveryRequired && state != dto.RecoveryRequired && state != dto.Released {
+		return dto.ApplyRequest{}, dto.Operation{}, false
+	}
+	receiptEnvelope := envelope
+	receiptEnvelope.Intent = o.Resolver.Intent
+	receiptDigest, err := receiptEnvelope.Digest()
+	if err != nil || receiptDigest != digest {
+		return dto.ApplyRequest{}, dto.Operation{}, false
+	}
+	if (state == dto.Applied || state == dto.RolledBack || state == dto.Refused) && dto.State(o.Resolver.Phase) != state {
+		return dto.ApplyRequest{}, dto.Operation{}, false
+	}
 	intentDigest, err := envelope.Digest()
 	if err != nil || intentDigest != digest {
 		return dto.ApplyRequest{}, dto.Operation{}, false
 	}
 	q := dto.ApplyRequest{Kind: dto.ResolverOperation, ID: id, Instance: envelope.Instance, Generation: generation, Registration: registration}
-	if !state.Final() {
-		o = deferredReceipt(o, dto.ResolverOperation)
+	if !dto.ResolverPhase(o.Phase).Valid() || dto.ResolverPhase(o.Phase) != o.Resolver.Phase {
+		return dto.ApplyRequest{}, dto.Operation{}, false
 	}
 	return q, o, true
 }

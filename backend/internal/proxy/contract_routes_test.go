@@ -52,7 +52,7 @@ func TestM28HubAndAgentStubRoutes(t *testing.T) {
 	instance.Authority = dto.FileAuthority
 	m := &Module{Agent: x.a, Settings: x.settings, Modules: x.mods, Hub: &Hub{DB: x.db.DB}}
 	require.NoError(t, m.saveInstance(t.Context(), instance))
-	resolver := dto.ResolverRequest{ResolverConfig: dto.ResolverConfig{Name: "test", Email: "admin@example.test", CA: dto.ResolverCA{Kind: "letsencrypt"}, Storage: "/certs/acme.json", Challenge: dto.ResolverChallenge{Kind: "http", EntryPoint: "web"}}, Variables: []dto.ResolverVariable{}}
+
 	certificate := dto.CertificateCheckRequest{File: "routes/app.yml", Router: "app", SourceHash: strings.Repeat("a", 64), Host: "app.example.test"}
 	hub, agent := contractRouter(m, false), contractRouter(m, true)
 	for _, tt := range []struct {
@@ -60,9 +60,7 @@ func TestM28HubAndAgentStubRoutes(t *testing.T) {
 		path   string
 		body   any
 	}{
-		{hub, "/api/modules/proxy/instances/instance-one/resolvers", resolver},
 		{hub, "/api/modules/proxy/instances/instance-one/certificate-check", certificate},
-		{agent, "/api/environments/0/modules/proxy/resolvers", dto.ResolverApplyRequest{ID: "example", Instance: instance, Generation: instance.Generation, Registration: instance.Registration, Request: resolver}},
 		{agent, "/api/environments/0/modules/proxy/certificate-check", dto.HostCertificateCheckRequest{Instance: instance, CertificateCheckRequest: certificate}},
 	} {
 		w := postContract(tt.router, tt.path, tt.body)

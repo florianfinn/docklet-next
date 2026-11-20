@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original production proxy Manager implementation.
 
+import { ResolverDialog } from "./ResolverDialog";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
 import { Button } from "@/shared/ui/button";
@@ -30,6 +31,7 @@ export function Settings({
   const [name, setName] = useState(instance.name),
     [directory, setDirectory] = useState(instance.routeDirectory),
     [root, setRoot] = useState(instance.rootFile ?? "");
+  const [resolverOpen,setResolverOpen]=useState(false);
   const [removing, setRemoving] = useState(false),
     [confirmed, setConfirmed] = useState(false);
   const facts = !inventory
@@ -74,6 +76,19 @@ export function Settings({
           </dl>
         )}
       </div>
+      {instance.kind === "traefik" && inventory && (
+        <section className="grid gap-3 rounded-xl border p-4">
+          <h2 className="font-semibold">{t("resolvers")}</h2>
+          <ul className="grid gap-2">
+            {(inventory.resolverSummaries ?? []).map(resolver => <li key={resolver.name} className="break-all text-sm">
+              <strong>{resolver.name}</strong> · {resolver.challenge.kind.toUpperCase()}-01 · {resolver.storage}
+              {resolver.variables?.map(variable => <span key={variable.name}> · {variable.name}: {t(variable.configured ? "yes" : "no")}</span>)}
+            </li>)}
+          </ul>
+          <Button variant="outline" disabled={busy || !inventory.eligibility.writable} onClick={() => setResolverOpen(true)}>{t("resolverCreate.create")}</Button>
+        </section>
+      )}
+      {resolverOpen && inventory && <ResolverDialog instance={instance} inventory={inventory} close={() => setResolverOpen(false)} />}
       <form
         className="grid min-w-0 gap-4 rounded-xl border p-4"
         onSubmit={e => {

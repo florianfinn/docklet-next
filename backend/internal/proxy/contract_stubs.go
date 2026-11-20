@@ -15,12 +15,6 @@ import (
 )
 
 // These typed stubs perform no host call, admission, journal write or reservation.
-func (a *Agent) CreateResolver(_ context.Context, q dto.ResolverApplyRequest) (dto.Operation, error) {
-	if err := q.Request.Validate(); err != nil {
-		return dto.Operation{}, err
-	}
-	return dto.Operation{}, dto.Fail(dto.NotImplemented, 501)
-}
 func (a *Agent) CheckCertificate(_ context.Context, q dto.HostCertificateCheckRequest) (dto.CertificateObservation, error) {
 	if err := validateCertificateCheck(q.CertificateCheckRequest); err != nil {
 		return dto.CertificateObservation{}, err

@@ -6,6 +6,36 @@
 
 export const enProxyContract = {
   "ui": {
+    "resolverCreate": {
+  "create": "Create certificate resolver",
+  "hint": "Only the Traefik service is recreated. Issuance is separate from startup verification.",
+  "envDisclosure": "Administrators can read .env in the stack editor. Submitted values are stored there.",
+  "injection": "When autoInjectEnv is enabled, .env variables are also injected into other services. Other services may already read this file.",
+  "email": "ACME email",
+  "storage": "Certificate storage path",
+  "ca": "Certificate authority",
+  "production": "Let’s Encrypt production",
+  "staging": "Let’s Encrypt staging (avoids production rate limits)",
+  "custom": "Custom HTTPS authority",
+  "url": "Directory URL",
+  "challenge": "Challenge",
+  "entryPoint": "HTTP entry point",
+  "provider": "DNS provider",
+  "reuse": "Reuse {name} from .env",
+  "delay": "Delay before check (seconds)",
+  "dns": "DNS resolvers (host:port, comma separated)",
+  "ack": "I understand that the Traefik service will be recreated.",
+  "providers": {
+    "cloudflare": "Cloudflare",
+    "hetzner": "Hetzner",
+    "ionos": "IONOS",
+    "inwx": "INWX",
+    "netcup": "netcup",
+    "desec": "deSEC",
+    "duckdns": "DuckDNS",
+    "httpreq": "HTTP request"
+  }
+},
     "title": "Proxy",
     "intro": "Manage routes from the configuration running on your hosts.",
     "instances": "Configured instances",

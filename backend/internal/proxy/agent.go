@@ -10,9 +10,11 @@ import (
 	"context"
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/modules"
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/resolver"
 	"github.com/florianfinn/docklet-next/types/features"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"gorm.io/gorm"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,15 +26,17 @@ import (
 // Agent serializes admission and receipts; durable source uniqueness also covers
 // recovery-required operations and operations on different files/instances.
 type Agent struct {
-	DB           *gorm.DB
-	Gate         *modules.Service
-	Runtime      Runtime
-	Engines      Engines
-	generationID atomic.Value
-	mu           sync.Mutex
-	active       map[string]bool
-	afterCommit  func(dto.Phase) error
-	afterEffect  func(dto.Phase) error
+	DB              *gorm.DB
+	Gate            *modules.Service
+	ResolverHost    resolver.Host
+	ResolverBackups string
+	Runtime         Runtime
+	Engines         Engines
+	generationID    atomic.Value
+	mu              sync.Mutex
+	active          map[string]bool
+	afterCommit     func(dto.Phase) error
+	afterEffect     func(dto.Phase) error
 }
 
 func NewAgent(db *gorm.DB, r Runtime, e Engines) (*Agent, error) {
@@ -168,12 +172,8 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 			if _, er := databaseGeneration(tx, q.Generation); er != nil {
 				return er
 			}
-			var busy Journal
-			er := tx.Where("source = ? AND finished_at IS NULL", source).First(&busy).Error
-			if er == nil {
-				return &dto.Problem{Status: 409, Code: dto.ModuleBusy, OperationID: busy.ID}
-			}
-			if !missing(er) {
+			er := lockSource(tx, source)
+			if er != nil {
 				return er
 			}
 			if er = tx.Create(&admissionRow{ID: q.ID, Generation: a.Generation(), Registration: q.Registration}).Error; er != nil {
@@ -459,3 +459,177 @@ func (a *Agent) effectFailure(ctx context.Context, i Intent, o dto.Operation, er
 
 // errCrash is used only by deterministic phase fault tests; it is never returned by production I/O.
 var errCrash = errors.New("injected process interruption")
+
+func resolverEnvelope(q dto.ResolverApplyRequest) dto.ResolverEnvelope {
+	return dto.ResolverEnvelope{Kind: dto.ResolverOperation, ID: q.ID, Instance: q.Instance, Generation: q.Generation, Registration: q.Registration, Intent: q.Request.Redact()}
+}
+func validResolver(q dto.ResolverApplyRequest) error {
+	if !safeID.MatchString(q.ID) || q.Instance.ID == "" || q.Instance.EnvironmentID == "" || q.Instance.Source.Canonical == "" || q.Generation == "" || q.Registration == "" {
+		return dto.Fail(dto.InvalidInput, 422)
+	}
+	return q.Request.Validate()
+}
+func (a *Agent) saveResolver(ctx context.Context, en dto.ResolverEnvelope, o dto.Operation) error {
+	ib, err := marshal(en)
+	if err != nil {
+		return err
+	}
+	ob, err := marshal(o)
+	if err != nil {
+		return err
+	}
+	res := a.DB.WithContext(ctx).Model(&Journal{}).Where("id = ? AND generation = ?", o.ID, o.Generation).Updates(map[string]any{"intent": ib, "result": ob, "state": o.State, "phase": o.Phase, "finished_at": o.FinishedAt})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return dto.Fail(dto.JournalLost, 409)
+	}
+	return nil
+}
+func (a *Agent) resolverExecutor(ctx context.Context, en dto.ResolverEnvelope) (*resolver.Executor, error) {
+	host, backups := a.ResolverHost, a.ResolverBackups
+	if host == nil {
+		d, ok := a.Runtime.(*DockerRuntime)
+		if !ok {
+			return nil, dto.Fail(dto.EngineUnavailable, 503)
+		}
+		engine, err := a.Engines.For(dto.Traefik)
+		if err != nil {
+			return nil, err
+		}
+		splicer, ok := engine.(interface {
+			ResolverSplice(string, []string, map[string]any) (string, error)
+		})
+		if !ok {
+			return nil, dto.Fail(dto.EngineUnavailable, 503)
+		}
+		host = &resolver.Runtime{DB: a.DB, ProjectsDirectory: d.projects(), AutoInject: d.Settings.GetBoolSetting(ctx, "autoInjectEnv", false), Splice: splicer.ResolverSplice, Inspect: d.inspect, List: d.Docker.ListContainers, Inventory: engine.Inventory, Source: d.Source, Logs: d.Logs}
+		var databases []struct{ Name, File string }
+		if err := a.DB.WithContext(ctx).Raw("PRAGMA database_list").Scan(&databases).Error; err != nil {
+			return nil, err
+		}
+		for _, db := range databases {
+			if db.Name == "main" && db.File != "" {
+				backups = filepath.Join(filepath.Dir(db.File), "proxy", "backups")
+			}
+		}
+	}
+	if backups == "" {
+		return nil, dto.Fail(dto.BackupInvalid, 503)
+	}
+	hook := func(fn func(dto.Phase) error) func(dto.Phase) error {
+		return func(p dto.Phase) error {
+			if fn != nil {
+				if err := fn(p); err != nil {
+					return resolver.ErrInterrupted
+				}
+			}
+			return nil
+		}
+	}
+	return &resolver.Executor{Host: host, Backups: backups, Save: func(ctx context.Context, o dto.Operation) error { return a.saveResolver(ctx, en, o) }, AfterCommit: hook(a.afterCommit), AfterEffect: hook(a.afterEffect)}, nil
+}
+func (a *Agent) CreateResolver(ctx context.Context, q dto.ResolverApplyRequest) (dto.Operation, error) {
+	if err := validResolver(q); err != nil {
+		return dto.Operation{}, err
+	}
+	en := resolverEnvelope(q)
+	digest, err := en.Digest()
+	if err != nil {
+		return dto.Operation{}, err
+	}
+	a.mu.Lock()
+	deferUnlock := true
+	defer func() {
+		if deferUnlock {
+			a.mu.Unlock()
+		}
+	}()
+	if err = a.generation(q.Generation); err != nil {
+		return dto.Operation{}, err
+	}
+	if q.Registration != q.Instance.Registration {
+		return dto.Operation{}, dto.Fail(dto.RegistrationChanged, 409)
+	}
+	j, err := findJournal(ctx, a.DB, q.ID)
+	if err == nil {
+		_, o, e := decodeJournal(j)
+		if j.Digest != digest {
+			return o, dto.Fail(dto.OperationConflict, 409)
+		}
+		return o, e
+	}
+	if !missing(err) {
+		return dto.Operation{}, err
+	}
+	var f fenceRow
+	err = a.DB.WithContext(ctx).First(&f, "id = ?", q.ID).Error
+	if err == nil {
+		return dto.Operation{}, dto.Fail(dto.Fenced, 409)
+	}
+	if !missing(err) {
+		return dto.Operation{}, err
+	}
+	var prior admissionRow
+	err = a.DB.WithContext(ctx).First(&prior, "id = ?", q.ID).Error
+	if err == nil {
+		return dto.Operation{}, dto.Fail(dto.OperationConflict, 409)
+	}
+	if !missing(err) {
+		return dto.Operation{}, err
+	}
+	if err = a.Check(ctx, q.Instance); err != nil {
+		return dto.Operation{}, dto.Fail(reason(err, dto.AgentUnavailable), 409)
+	}
+	executor, err := a.resolverExecutor(ctx, en)
+	if err != nil {
+		return dto.Operation{}, err
+	}
+	o := dto.Operation{Kind: dto.ResolverOperation, ID: q.ID, InstanceID: q.Instance.ID, Generation: q.Generation, Registration: q.Registration, Digest: digest, State: dto.Pending, Phase: dto.Admitted, CreatedAt: time.Now().UTC(), Resolver: &dto.ResolverReceipt{Intent: en.Intent, Phase: dto.ResolverAdmitted, Files: []dto.ResolverFile{}}}
+	source := q.Instance.Source.Canonical
+	if locker, ok := executor.Host.(interface {
+		LockSource(context.Context, dto.Instance) (string, error)
+	}); ok {
+		source, err = locker.LockSource(ctx, q.Instance)
+		if err != nil {
+			return o, dto.Fail(reason(err, dto.UnsupportedLayout), 409)
+		}
+	}
+
+	en.Instance.Source.ProjectPath = source
+	executor.Save = func(ctx context.Context, o dto.Operation) error { return a.saveResolver(ctx, en, o) }
+	ib, _ := marshal(en)
+	ob, _ := marshal(o)
+	commit := func(ctx context.Context) error {
+		return a.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if _, er := databaseGeneration(tx, q.Generation); er != nil {
+				return er
+			}
+			if er := lockSource(tx, "host\x00"+source); er != nil {
+				return er
+			}
+			if er := tx.Create(&admissionRow{ID: q.ID, Generation: q.Generation, Registration: q.Registration}).Error; er != nil {
+				return er
+			}
+			return tx.Create(&Journal{ID: q.ID, Source: "host\x00" + source, Generation: q.Generation, Registration: q.Registration, Digest: digest, State: o.State, Phase: o.Phase, Intent: ib, Result: ob, CreatedAt: o.CreatedAt}).Error
+		})
+	}
+	if a.Gate != nil {
+		err = a.Gate.Admit(ctx, features.Proxy, commit)
+	} else {
+		err = commit(ctx)
+	}
+	if err != nil {
+		return o, err
+	}
+	a.active[q.ID] = true
+	a.mu.Unlock()
+	deferUnlock = false
+	defer a.inactive(q.ID)
+	ctx = context.WithoutCancel(ctx)
+	if err = executor.AfterCommit(dto.Admitted); err != nil {
+		return o, err
+	}
+	return executor.Run(ctx, q, o)
+}

@@ -15,7 +15,9 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/modules"
 	activitydto "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/features"
+	moduledto "github.com/florianfinn/docklet-next/types/modules"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"sync"
 	"time"
@@ -124,13 +126,16 @@ func (h *Hub) accept(ctx context.Context, q dto.ApplyRequest, prior, remote dto.
 	if remote.Generation != q.Generation {
 		return h.recovery(ctx, prior, dto.GenerationMismatch)
 	}
-	if remote.Registration != q.Registration || remote.ID != q.ID || remote.Digest != prior.Digest {
+	if remote.Registration != q.Registration || remote.ID != q.ID || remote.InstanceID != q.Instance.ID || remote.Digest != prior.Digest {
 		return h.recovery(ctx, prior, dto.OperationConflict)
 	}
 	if remote.Kind.Effective() != prior.Kind.Effective() || !remote.State.ValidFor(remote.Kind) {
 		return h.recovery(ctx, prior, dto.JournalLost)
 	}
 	if err := h.persist(ctx, remote); err != nil {
+		if p, ok := errors.AsType[*dto.Problem](err); ok {
+			return h.recovery(ctx, prior, p.Code)
+		}
 		return prior, err
 	}
 	var row Record
@@ -153,6 +158,18 @@ func (h *Hub) persist(ctx context.Context, o dto.Operation) error {
 		if current.State.Final() {
 			return nil
 		}
+		if o.Kind == dto.ResolverOperation && !(o.State == dto.Released && o.Reason == dto.UnknownOperationKind) {
+			candidate := current
+			candidate.State = o.State
+			candidate.Result = b
+			_, decoded, er := decodeRecord(candidate)
+			if er != nil || decoded.Reason == dto.UnknownOperationKind {
+				return dto.Fail(dto.JournalLost, 409)
+			}
+		}
+		if err := adoptResolver(tx, current, o); err != nil {
+			return err
+		}
 		if o.State.Final() && o.FinishedAt == nil {
 			now := time.Now().UTC()
 			o.FinishedAt = &now
@@ -170,6 +187,13 @@ func (h *Hub) persist(ctx context.Context, o dto.Operation) error {
 		}
 		if o.State == dto.Released {
 			request, _, er := decodeRecord(current)
+			if request.Instance.EnvironmentID == "" {
+				var row instanceRow
+				if e := tx.First(&row, "id = ?", current.InstanceID).Error; e != nil {
+					return e
+				}
+				request.Instance.EnvironmentID = row.EnvironmentID
+			}
 			if er != nil {
 				return er
 			}
@@ -333,4 +357,167 @@ func (h *Hub) Release(ctx context.Context, id string, confirmed dto.FileState, a
 }
 func (h *Hub) Unfinished(ctx context.Context) (string, error) {
 	return unfinished(ctx, h.DB, "proxy_operations")
+}
+
+func (h *Hub) CreateResolver(ctx context.Context, q dto.ResolverApplyRequest) (dto.Operation, error) {
+	if err := validResolver(q); err != nil {
+		return dto.Operation{}, err
+	}
+	en := resolverEnvelope(q)
+	digest, err := en.Digest()
+	if err != nil {
+		return dto.Operation{}, err
+	}
+	h.mu.Lock()
+	var existing Record
+	err = h.DB.WithContext(ctx).First(&existing, "id = ?", q.ID).Error
+	if err == nil {
+		h.mu.Unlock()
+		if existing.Digest != digest {
+			return dto.Operation{}, dto.Fail(dto.OperationConflict, 409)
+		}
+		return h.Query(ctx, q.ID)
+	}
+	if !missing(err) {
+		h.mu.Unlock()
+		return dto.Operation{}, err
+	}
+	reg, err := h.Transport.Registration(ctx, q.Instance.EnvironmentID)
+	if err != nil {
+		h.mu.Unlock()
+		return dto.Operation{}, err
+	}
+	if reg != q.Registration {
+		h.mu.Unlock()
+		return dto.Operation{}, dto.Fail(dto.RegistrationChanged, 409)
+	}
+	o := dto.Operation{Kind: dto.ResolverOperation, ID: q.ID, InstanceID: q.Instance.ID, Generation: q.Generation, Registration: q.Registration, Digest: digest, State: dto.Pending, Phase: dto.Admitted, CreatedAt: time.Now().UTC(), Resolver: &dto.ResolverReceipt{Intent: en.Intent, Phase: dto.ResolverAdmitted, Files: []dto.ResolverFile{}}}
+	request, _ := marshal(en)
+	result, _ := marshal(o)
+	err = h.Modules.Admit(ctx, features.Proxy, func(ctx context.Context) error {
+		return h.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var held reservation
+			er := tx.First(&held, "instance_id = ?", q.Instance.ID).Error
+			if er == nil {
+				return &dto.Problem{Status: 409, Code: dto.ModuleBusy, OperationID: held.OperationID}
+			}
+			if !missing(er) {
+				return er
+			}
+			if er = tx.Create(&Record{ID: q.ID, InstanceID: q.Instance.ID, Generation: q.Generation, Registration: q.Registration, Digest: digest, State: o.State, Request: request, Result: result, CreatedAt: o.CreatedAt}).Error; er != nil {
+				return er
+			}
+			return tx.Create(&reservation{InstanceID: q.Instance.ID, OperationID: q.ID}).Error
+		})
+	})
+	h.mu.Unlock()
+	if err != nil {
+		return o, err
+	}
+	ctx = context.WithoutCancel(ctx)
+	sender, ok := h.Transport.(interface {
+		CreateResolver(context.Context, dto.ResolverApplyRequest) (dto.Operation, error)
+	})
+	if !ok {
+		return h.query(ctx, q.ID, dto.EngineUnavailable)
+	}
+	remote, err := sender.CreateResolver(ctx, q)
+	if err != nil {
+		return h.query(ctx, q.ID, reason(err, dto.AgentUnavailable))
+	}
+	binding := dto.ApplyRequest{Kind: dto.ResolverOperation, ID: q.ID, Instance: q.Instance, Generation: q.Generation, Registration: q.Registration}
+	return h.accept(ctx, binding, o, remote)
+}
+
+func (m *Module) CreateResolver(ctx context.Context, id string, input dto.ResolverRequest) (dto.Operation, error) {
+	if err := input.Validate(); err != nil {
+		return dto.Operation{}, err
+	}
+	i, err := m.Instance(ctx, id)
+	if err != nil {
+		return dto.Operation{}, err
+	}
+	if i.EnvironmentID != "0" {
+		if m.Transport == nil || m.Transport.Hosts == nil {
+			return dto.Operation{}, dto.Fail(dto.AgentUnavailable, 503)
+		}
+		why := m.Transport.Hosts.ModuleReason(ctx, i.EnvironmentID, features.Proxy)
+		if why == "agent.update-required" {
+			return dto.Operation{}, &moduledto.Problem{Status: 409, Code: why, Feature: features.Proxy}
+		}
+		if why != "" {
+			return dto.Operation{}, dto.Fail(dto.AgentUnavailable, 503)
+		}
+	}
+	inv, err := m.Transport.Inventory(ctx, i)
+	if err != nil {
+		return dto.Operation{}, err
+	}
+	reg, err := m.Transport.Registration(ctx, i.EnvironmentID)
+	if err != nil {
+		return dto.Operation{}, err
+	}
+	i.Generation = inv.Generation
+	i.Registration = reg
+	i.Eligibility = inv.Eligibility
+	if inv.Identity.ContainerID != i.Identity.ContainerID {
+		return dto.Operation{}, dto.Fail(dto.ContainerChanged, 409)
+	}
+	i.Identity.StartedAt = inv.Identity.StartedAt
+	return m.Hub.CreateResolver(ctx, dto.ResolverApplyRequest{ID: uuid.NewString(), Instance: i, Generation: i.Generation, Registration: reg, Request: input})
+}
+
+// adoptResolver runs in the receipt transaction. A concurrent re-registration
+// cannot be overwritten; a repeated receipt for the adopted identity is a no-op.
+func adoptResolver(tx *gorm.DB, record Record, o dto.Operation) error {
+	if o.Kind != dto.ResolverOperation || (o.State != dto.Applied && o.State != dto.RolledBack) {
+		return nil
+	}
+	q, _, err := decodeRecord(record)
+	if err != nil {
+		return err
+	}
+	if o.Resolver == nil {
+		return dto.Fail(dto.JournalLost, 409)
+	}
+	replacement := o.Resolver.Replacement
+	if replacement == nil {
+		if o.State == dto.RolledBack && !o.Resolver.RecreateCommitted {
+			return nil
+		}
+		return dto.Fail(dto.IdentityUnclear, 409)
+	}
+	if replacement.ContainerID == "" || replacement.Name == "" || replacement.StartedAt == "" || replacement.Canonical != q.Instance.Source.Canonical || replacement.MountTarget != q.Instance.Source.MountTarget || replacement.Kind != q.Instance.Source.Kind {
+		return dto.Fail(dto.IdentityUnclear, 409)
+	}
+	var row instanceRow
+	if err := tx.First(&row, "id = ?", record.InstanceID).Error; err != nil {
+		return err
+	}
+	var current dto.Instance
+	if json.Unmarshal(row.Data, &current) != nil {
+		return dto.Fail(dto.ContainerChanged, 409)
+	}
+	if current.Registration != q.Registration || current.Source.Canonical != replacement.Canonical || current.Source.MountTarget != replacement.MountTarget || current.Source.Kind != replacement.Kind {
+		return dto.Fail(dto.ContainerChanged, 409)
+	}
+	if current.Identity.ContainerID == replacement.ContainerID {
+		return nil
+	}
+	if current.Identity.ContainerID != q.Instance.Identity.ContainerID {
+		return dto.Fail(dto.ContainerChanged, 409)
+	}
+	current.Identity = dto.Identity{ContainerID: replacement.ContainerID, ContainerName: replacement.Name, StartedAt: replacement.StartedAt}
+	data, err := marshal(current)
+	if err != nil {
+		return err
+	}
+	res := tx.Model(&instanceRow{}).Where("id = ? AND data = ?", record.InstanceID, row.Data).Update("data", data)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return dto.Fail(dto.ContainerChanged, 409)
+	}
+	return nil
 }

@@ -6,6 +6,36 @@
 
 export const deProxyContract = {
   "ui": {
+    "resolverCreate": {
+  "create": "Zertifikatsresolver erstellen",
+  "hint": "Nur der Traefik-Dienst wird neu erstellt. Die Ausstellung ist von der Startprüfung getrennt.",
+  "envDisclosure": "Administratoren können .env im Stack-Editor lesen. Übermittelte Werte werden dort gespeichert.",
+  "injection": "Wenn autoInjectEnv aktiviert ist, werden .env-Variablen auch in andere Dienste eingefügt. Andere Dienste können diese Datei bereits lesen.",
+  "email": "ACME-E-Mail",
+  "storage": "Speicherpfad für Zertifikate",
+  "ca": "Zertifizierungsstelle",
+  "production": "Let’s Encrypt Produktion",
+  "staging": "Let’s Encrypt Staging (vermeidet Produktionslimits)",
+  "custom": "Eigene HTTPS-Zertifizierungsstelle",
+  "url": "Verzeichnis-URL",
+  "challenge": "Challenge",
+  "entryPoint": "HTTP-Einstiegspunkt",
+  "provider": "DNS-Anbieter",
+  "reuse": "{name} aus .env wiederverwenden",
+  "delay": "Verzögerung vor Prüfung (Sekunden)",
+  "dns": "DNS-Resolver (Host:Port, kommagetrennt)",
+  "ack": "Ich verstehe, dass der Traefik-Dienst neu erstellt wird.",
+  "providers": {
+    "cloudflare": "Cloudflare",
+    "hetzner": "Hetzner",
+    "ionos": "IONOS",
+    "inwx": "INWX",
+    "netcup": "netcup",
+    "desec": "deSEC",
+    "duckdns": "DuckDNS",
+    "httpreq": "HTTP request"
+  }
+},
     "title": "Proxy",
     "intro": "Routen aus der laufenden Konfiguration auf deinen Hosts verwalten.",
     "instances": "Konfigurierte Instanzen",
