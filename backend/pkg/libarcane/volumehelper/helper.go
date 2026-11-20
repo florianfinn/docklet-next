@@ -22,7 +22,7 @@ import (
 )
 
 // DefaultToolsImage pins the multi-platform tools image index for this release.
-const DefaultToolsImage = "ghcr.io/florianfinn/docklet-tools:0.1.0@sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602"
+const DefaultToolsImage = "ghcr.io/florianfinn/docklet-tools:0.2.0@sha256:2b8e00f83ce199f9faab467572ac96979f80a1f738c12014b74f9c464e0aa132"
 
 // ContainerLabel is retained so existing helper containers remain discoverable
 // for cleanup across upgrades. Image selection never depends on this label.

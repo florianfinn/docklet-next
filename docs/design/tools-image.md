@@ -80,7 +80,7 @@ Release tag `tools-v0.1.0` publishes revision
 `ee89b810ab4775dba5415b35a44ddc21c26b5cf1`, with acfs v0.6.2,
 ACFS protocol 2 and Trivy 0.75.0. The published references are:
 
-- Runtime index (the hub/agent release default):
+- Runtime index (the hub/agent release default until 0.2.0):
   `ghcr.io/florianfinn/docklet-tools:0.1.0@sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602`.
 - `linux/amd64` runtime digest:
   `sha256:c69b8fa23b4cae0bd1d9f247977e8f0fa7ad9b00df4961f6bf8f735073954a64`.
@@ -184,7 +184,19 @@ and anonymous volumes. See [vulnerability scanning](vulnerability-scanning.md).
 
 ## HTTP/TLS probe (tools-v0.2.0)
 
-The next tools publication, `tools-v0.2.0`, adds `/usr/bin/docklet-probe`.
+Release tag `tools-v0.2.0` publishes revision
+`926cacb1f6ab5c63d4affa261267f55f95b0a83c` and adds `/usr/bin/docklet-probe`.
+The published references are:
+
+- Runtime index (the hub/agent release default):
+  `ghcr.io/florianfinn/docklet-tools:0.2.0@sha256:2b8e00f83ce199f9faab467572ac96979f80a1f738c12014b74f9c464e0aa132`.
+- `linux/amd64` runtime digest:
+  `sha256:01cf3e5b7035c47f378a44183f2c6669b4d03684fc15386875b06d4f665810cf`.
+- `linux/arm64` runtime digest:
+  `sha256:a19e75efc14db0edf89bb5cca07d42c38486e6d5666f91a548cac31dec4c52cd`.
+- Corresponding-source index:
+  `ghcr.io/florianfinn/docklet-tools:0.2.0-source@sha256:78079f0ffba0e004e50589fcfce216fb384f054b1f9944008c0794f1106e5a47`.
+
 There is no in-tree tools release version: the existing build wrapper derives
 OCI metadata and the probe version from the tools tag, or uses `development` for
 local builds. Publication still requires the explicit tag gate above. `PATH`

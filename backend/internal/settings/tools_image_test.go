@@ -111,7 +111,7 @@ func TestToolsImageSyncPreservesEmptyAndExplicitOverride(t *testing.T) {
 		require.Equal(t, override, agentConfig.ToolsImage.Value, "agent-mode loading retains only the synced override")
 		expected := override
 		if expected == "" {
-			expected = "ghcr.io/florianfinn/docklet-tools:0.1.0@sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602"
+			expected = "ghcr.io/florianfinn/docklet-tools:0.2.0@sha256:2b8e00f83ce199f9faab467572ac96979f80a1f738c12014b74f9c464e0aa132"
 		}
 		require.Equal(t, expected, volumehelper.ToolsImage(hub.GetSettingsConfig().ToolsImage.Value), "hub resolves its release default only at read time")
 		require.Equal(t, expected, volumehelper.ToolsImage(agentConfig.ToolsImage.Value), "agent-mode loading resolves the pinned release default")

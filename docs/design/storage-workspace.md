@@ -208,7 +208,7 @@ to those two values and exclude `DefaultToolsImage` from retirement.
 Other explicit references survive startup.
 Image overrides must pass Docker reference syntax validation; empty resets the
 override. The shared default is
-`ghcr.io/florianfinn/docklet-tools:0.1.0@sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602`.
+`ghcr.io/florianfinn/docklet-tools:0.2.0@sha256:2b8e00f83ce199f9faab467572ac96979f80a1f738c12014b74f9c464e0aa132`.
 Release defaults include SemVer and the multi-platform index digest. An operator
 may choose another complete reference, including a mutable `latest` tag.
 
