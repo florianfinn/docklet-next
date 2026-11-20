@@ -210,6 +210,9 @@ func observe(root, p string) (dto.FileState, error) {
 			parts = append(parts, s)
 		}
 	}
+	// walked is the no-follow stat of the directory fd currently pins; it stands in
+	// when fresh metadata of that pinned directory is persistently refused.
+	var walked *unix.Stat_t
 	for i, s := range parts {
 		var st unix.Stat_t
 		if e = unix.Fstatat(fd, s, &st, unix.AT_SYMLINK_NOFOLLOW); e != nil {
@@ -226,6 +229,9 @@ func observe(root, p string) (dto.FileState, error) {
 			if er != nil {
 				return dto.FileState{}, er
 			}
+			if parent == nil {
+				parent = walked
+			}
 			return descriptor(i, parent, "", e), nil
 		}
 		kind := st.Mode & unix.S_IFMT
@@ -239,7 +245,7 @@ func observe(root, p string) (dto.FileState, error) {
 				return descriptor(i, &st, "", er), nil
 			}
 			unix.Close(fd)
-			fd = next
+			fd, walked = next, &st
 			continue
 		}
 		defer unix.Close(fd)

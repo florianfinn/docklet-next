@@ -458,3 +458,76 @@ func TestRootOpenRefusalIsClassified(t *testing.T) {
 		t.Fatal("helper did not finish")
 	}
 }
+
+// denyEmptyPathStat refuses only descriptor-relative (AT_EMPTY_PATH) stats on
+// the calling thread; named no-follow stats stay available.
+func denyEmptyPathStat() error {
+	filter := []unix.SockFilter{
+		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 0},
+		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_NEWFSTATAT, Jf: 3},
+		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 40},
+		{Code: unix.BPF_JMP | unix.BPF_JSET | unix.BPF_K, K: unix.AT_EMPTY_PATH, Jf: 1},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ERRNO | uint32(unix.EACCES)},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ALLOW},
+	}
+	program := unix.SockFprog{Len: uint16(len(filter)), Filter: &filter[0]}
+	return unix.Prctl(unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER, uintptr(unsafe.Pointer(&program)), 0, 0)
+}
+
+// When both fresh stats of a search-denied parent are refused, the walk's own
+// observation of it still makes a replacement refuse a stale confirmation.
+func TestRefusedParentStatsKeepWalkedIdentity(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission bits do not restrict root")
+	}
+	if subprocess(t, "TestRefusedParentStatsKeepWalkedIdentity", "RESOLVER_WALKED_PARENT_HELPER") {
+		return
+	}
+	e, f, q, o := fixture(t)
+	e.Host = &confirmationHost{fakeHost: f}
+	f.failStartup = true
+	parent := filepath.Join(f.target.Directory, "config")
+	t.Cleanup(func() { _ = os.Chmod(parent, 0700); _ = os.Chmod(parent+"-previous", 0700) })
+	f.observing = func() { require.NoError(t, os.Chmod(parent, 0400)) }
+	held, err := e.Run(t.Context(), q, *o)
+	require.NoError(t, err)
+	require.Equal(t, dto.RecoveryRequired, held.State)
+	type result struct {
+		err               error
+		before, unchanged dto.FileState
+		release           error
+	}
+	done := make(chan result, 1)
+	go func() {
+		runtime.LockOSThread()
+		r := result{}
+		step := func(err error) bool { r.err = err; return err == nil }
+		if !step(denySyscall(unix.SYS_FSTAT, unix.EACCES)) || !step(denyEmptyPathStat()) {
+			done <- r
+			return
+		}
+		if r.before, r.err = resolver.Current(f.target); r.err != nil {
+			done <- r
+			return
+		}
+		if r.unchanged, r.err = resolver.Current(f.target); r.err != nil {
+			done <- r
+			return
+		}
+		if !step(os.Rename(parent, parent+"-previous")) || !step(os.Mkdir(parent, 0700)) ||
+			!step(os.WriteFile(filepath.Join(parent, "static.yaml"), []byte("operator-version-two"), 0600)) || !step(os.Chmod(parent, 0400)) {
+			done <- r
+			return
+		}
+		_, r.release = e.Release(t.Context(), envelope(q), held, dto.ReleaseRequest{Confirmed: r.before, Actor: "admin-one"})
+		done <- r
+	}()
+	select {
+	case r := <-done:
+		require.NoError(t, r.err)
+		require.Equal(t, r.before, r.unchanged)
+		requireCode(t, r.release, dto.TargetChanged)
+	case <-time.After(5 * time.Second):
+		t.Fatal("helper did not finish")
+	}
+}
