@@ -30,5 +30,6 @@ The [design index](../design/README.md) holds the current contracts.
 | [M25 host operations and Edge correctness acceptance](m25-host-edge-correctness-acceptance.md) | Merged package with its acceptance fix, sandbox-found defects, method and limits on 2026-11-13 |
 | [M26 backup, access and security follow-ups acceptance](m26-backup-access-security-acceptance.md) | Merged package, review rounds, sandbox method and kit findings, maintainer matrix decision, method and limits on 2026-11-14 |
 | [M27 optional modules and proxy route management acceptance](m27-optional-modules-proxy-acceptance.md) | Merged package, review rounds, smoke and sandbox-found defects, maintainer decisions, method and limits on 2026-11-16 |
+| [M30 hub update experience and peer stack confirmation acceptance](m30-hub-update-acceptance.md) | Merged package, review rounds, acceptance-found defects, maintainer decisions Q-A3, D-X1 and D-X2, method and limits on 2026-11-20 |
 | [M28 proxy certificate resolvers, probe helper and setup clarity acceptance](m28-proxy-resolvers-acceptance.md) | Merged package, review rounds, acceptance-found defects, maintainer decisions D-A1 and D-A2, method and limits on 2026-11-20 |
 | [M29 first-run setup acceptance](m29-first-run-setup-acceptance.md) | Merged package, review rounds, sandbox-found defects, method and limits on 2026-11-19 |
