@@ -3,7 +3,7 @@
 Docker and Compose management for a small number of hosts, with a Go hub and
 agent core and a React interface. Built for one operator and a few users.
 
-**Status: 1.1.0.** A fresh or upgraded hub opens first-run setup; complete it right after the first start. Release images target linux/amd64.
+**Status: 1.2.0.** A fresh or upgraded hub opens first-run setup; complete it right after the first start. Release images target linux/amd64.
 The hub uses SQLite on local persistent storage; no database service or import of
 earlier docklet-hub, Arcane or pre-release data is supported.
 
@@ -51,7 +51,7 @@ name: docklet
 services:
   hub:
     # "Update Docklet" in the UI sets HUB_IMAGE in .env (in-place update).
-    image: ${HUB_IMAGE:-ghcr.io/florianfinn/docklet-next-hub:1.1.0}
+    image: ${HUB_IMAGE:-ghcr.io/florianfinn/docklet-next-hub:1.2.0}
     restart: unless-stopped
     stop_grace_period: 30s
     labels:
