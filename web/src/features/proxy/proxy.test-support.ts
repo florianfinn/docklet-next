@@ -101,6 +101,7 @@ export function fixture() {
     next: operation(),
     lost: false,
     operationReads: 0,
+    discovery: undefined as unknown[] | undefined,
   };
   const writes: { path: string; body: unknown; method: string }[] = [];
   const json = (data: unknown) =>
@@ -115,6 +116,7 @@ export function fixture() {
     const body = init?.body ? (JSON.parse(String(init.body)) as unknown) : undefined;
     if (method !== "GET") writes.push({ path, body, method });
     if (path.endsWith("/auth/mode")) return json({ mode: "local" });
+    if (path.endsWith("/discover") && state.discovery) return json(state.discovery);
     if (path.endsWith("/discover"))
       return json([
         {

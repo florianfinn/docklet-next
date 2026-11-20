@@ -5,12 +5,18 @@
 // Deviations: Original production proxy Manager implementation.
 
 import { useEffect, useState } from "react";
+import { PROXY_REASON_KEYS } from "@/data/wire-catalogue-proxy";
 import { useTranslations } from "use-intl";
 import type { ProxyApi } from "@/data/http/proxy-api";
 import { Button } from "@/shared/ui/button";
 import { TextField } from "@/shared/components/form-field";
 import { Choice, ErrorView, Reason } from "./controls";
 import type { CreateInstance, Discovery, Instance } from "./types";
+
+type Source = NonNullable<Discovery["sources"]>[number];
+// Sources without eligibility (older agents) stay selectable with the previous free fields.
+const selectable = (s: Source) => s.eligibility?.selectable !== false;
+const fields = (s?: Source) => ({ directory: s?.eligibility?.routeDirectory?.value ?? "", root: s?.eligibility?.rootFile ?? "" });
 
 type Host = { id: string; name: string };
 function Candidate({
@@ -27,12 +33,26 @@ function Candidate({
   create: (input: CreateInstance) => void;
 }) {
   const t = useTranslations("proxyContract.ui"),
-    contract = useTranslations("proxyContract");
-  const [source, setSource] = useState(c.sources?.[0]?.mountTarget ?? ""),
+    contract = useTranslations("proxyContract"),
+    all = useTranslations();
+  const sources = c.sources ?? [];
+  const initial = sources.find(selectable);
+  const [source, setSource] = useState(initial?.mountTarget ?? ""),
     [name, setName] = useState(c.identity.containerName);
-  const [directory, setDirectory] = useState(""),
-    [root, setRoot] = useState("");
-  const selected = c.sources?.find(s => s.mountTarget === source);
+  const [directory, setDirectory] = useState(fields(initial).directory),
+    [root, setRoot] = useState(fields(initial).root);
+  const selected = sources.find(s => s.mountTarget === source);
+  const fixed = selected?.eligibility?.routeDirectory?.fixed === true;
+  const reasonText = (code?: string) => {
+    const key = code ? PROXY_REASON_KEYS[code as keyof typeof PROXY_REASON_KEYS] : undefined;
+    return key ? all(key) : code ? t("unknownReason", { code }) : "";
+  };
+  const choose = (target: string) => {
+    setSource(target);
+    const next = fields(sources.find(s => s.mountTarget === target));
+    setDirectory(next.directory);
+    setRoot(next.root);
+  };
   return (
     <article className="grid min-w-0 gap-4 rounded-xl border bg-card p-4">
       <div className="min-w-0 [overflow-wrap:anywhere]">
@@ -43,30 +63,53 @@ function Candidate({
         {c.instanceId && <p>{t("assigned", { name: assigned ?? c.instanceId })}</p>}
       </div>
       <fieldset disabled={busy || !!c.instanceId} className="grid min-w-0 gap-4">
-        <Choice
-          id={`source-${c.identity.containerId}`}
-          label={t("source")}
-          value={source}
-          onChange={setSource}
-          placeholder={t("chooseSource")}
-          options={(c.sources ?? []).map(s => ({
-            value: s.mountTarget,
-            label: `${s.mountTarget} · ${contract(`sources.${s.kind}`)}${s.readOnly ? ` · ${t("readOnly")}` : ""}`,
-          }))}
-        />
+        {sources.length > 0 && !initial ? (
+          <p role="status" className="text-sm">
+            {t("noEligibleSource")}
+          </p>
+        ) : (
+          <Choice
+            id={`source-${c.identity.containerId}`}
+            label={t("source")}
+            value={source}
+            onChange={choose}
+            placeholder={t("chooseSource")}
+            options={sources.map(s => ({
+              value: s.mountTarget,
+              disabled: !selectable(s),
+              // Host or project path first; the container path is secondary.
+              label: [
+                `${s.kind === "project" && s.projectPath ? s.projectPath : s.canonical} → ${s.mountTarget}`,
+                contract(`sources.${s.kind}`),
+                ...(s.readOnly ? [t("readOnly")] : []),
+                ...(selectable(s) ? [] : [reasonText(s.eligibility?.reason)]),
+              ].join(" · "),
+            }))}
+          />
+        )}
+        {sources.length > 0 && !initial && sources.map(s => (
+          <p key={s.mountTarget} className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            {s.mountTarget} · {reasonText(s.eligibility?.reason)}
+          </p>
+        ))}
         {selected && <Reason code={selected.reason} />}
         <TextField id={`name-${c.identity.containerId}`} label={t("name")} value={name} onChange={setName} />
         <TextField
           id={`dir-${c.identity.containerId}`}
           label={t("routeDirectory")}
-          value={directory}
+          value={fixed && directory === "." ? t("sourceRoot") : directory}
           onChange={setDirectory}
+          disabled={fixed}
         />
+        <p className="text-sm text-muted-foreground">{t(fixed ? "routeDirectoryFixedHint" : selected?.eligibility ? "routeDirectoryHint" : "routeDirectoryLegacyHint")}</p>
         {c.kind === "caddy" && (
-          <TextField id={`root-${c.identity.containerId}`} label={t("rootFile")} value={root} onChange={setRoot} />
+          <>
+            <TextField id={`root-${c.identity.containerId}`} label={t("rootFile")} value={root} onChange={setRoot} />
+            <p className="text-sm text-muted-foreground">{t("rootFileHint")}</p>
+          </>
         )}
         <Button
-          disabled={!source || !name.trim() || !directory.trim() || (c.kind === "caddy" && !root.trim())}
+          disabled={!selected || !selectable(selected) || !name.trim() || !directory.trim() || (c.kind === "caddy" && !root.trim())}
           onClick={() =>
             create({
               environmentId: environment,
