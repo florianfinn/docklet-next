@@ -153,10 +153,12 @@ POST /environments/{id}/jobs/{jobId}/runs/{runId}/cancel
 POST /environments/{id}/jobs/{jobId}/runs/{runId}/resolve
 POST /environments/{id}/jobs/{jobId}/runs/{runId}/retry
 POST /environments/{id}/modules/proxy/apply
+POST /environments/{id}/modules/proxy/certificate-check
 POST /environments/{id}/modules/proxy/fence
 POST /environments/{id}/modules/proxy/inventory
 POST /environments/{id}/modules/proxy/read
 POST /environments/{id}/modules/proxy/release
+POST /environments/{id}/modules/proxy/resolvers
 POST /environments/{id}/networks
 POST /environments/{id}/networks/prune
 POST /environments/{id}/networks/{networkId}/connect
