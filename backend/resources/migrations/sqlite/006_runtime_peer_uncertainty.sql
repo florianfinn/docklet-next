@@ -5,5 +5,5 @@
 -- Deviations: Original peer identity confirmation contract for issue 531.
 
 -- +goose Up
-ALTER TABLE runtime_receipts ADD COLUMN acknowledged_uncertainty TEXT NOT NULL DEFAULT '';
-ALTER TABLE runtime_receipts ADD COLUMN peer_overrides TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE "runtime_receipts" ADD COLUMN "acknowledged_uncertainty" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "runtime_receipts" ADD COLUMN "peer_overrides" TEXT NOT NULL DEFAULT '{}';

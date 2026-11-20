@@ -12,8 +12,6 @@ import "time"
 // A not_received tombstone has no invented caller, target or admission timestamps.
 // StoreGeneration identifies this database; ExecutorGeneration binds the executor.
 type RuntimeReceipt struct {
-	AcknowledgedUncertainty string     `gorm:"column:acknowledged_uncertainty;not null;default:''"`
-	PeerOverrides           string     `gorm:"column:peer_overrides;not null;default:'{}'"`
 	RunID                   string     `gorm:"column:run_id;primaryKey;not null"`
 	Kind                    string     `gorm:"column:kind;not null"`
 	StoreGeneration         string     `gorm:"column:store_generation;not null"`
@@ -52,6 +50,8 @@ type RuntimeReceipt struct {
 	FinalWriteAt            time.Time  `gorm:"column:final_write_at;not null"`
 	OutputNextSeq           uint64     `gorm:"column:output_next_seq;not null;default:1"`
 	Result                  *string    `gorm:"column:result;type:text"`
+	AcknowledgedUncertainty string     `gorm:"column:acknowledged_uncertainty;not null;default:''"`
+	PeerOverrides           string     `gorm:"column:peer_overrides;not null;default:'{}'"`
 }
 
 func (RuntimeReceipt) TableName() string { return "runtime_receipts" }

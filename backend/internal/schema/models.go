@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models; M19 named targets and persisted condition models; frozen release baseline without retired update-all jobs. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts. M25 frozen baseline hosts model. M27 proxy contract foundation (#473/#474).
+// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model; M12 backup foundation; M15 application assignments; M17 history, stop-intent and service widget models; M19 named targets and persisted condition models; frozen release baseline without retired update-all jobs. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts. M25 frozen baseline hosts model. M27 proxy contract foundation (#473/#474). M30 frozen baseline runtime receipt model (#531).
 
 package schema
 
@@ -52,6 +52,9 @@ func Models() []any {
 		if _, frozen := model.(*baselineEnvironment); frozen {
 			models[i] = &environment.Environment{}
 		}
+		if _, frozen := model.(*baselineRuntimeReceipt); frozen {
+			models[i] = &activity.RuntimeReceipt{}
+		}
 	}
 	return append(append(append(models, candidates.Models()...), proxy.Models()...), &activity.RuntimeObservedRun{}, &updatepolicies.FailedCandidate{})
 }
@@ -59,7 +62,13 @@ func Models() []any {
 // BaselineModels freezes the model list used to generate release migration 001.
 // Add later models to Models, leaving this list and the baseline proof unchanged.
 func BaselineModels() []any {
-	return append(append(append(activity.Models(), history.Models()...), widget.Models()...),
+	retained := activity.Models()
+	for i, model := range retained {
+		if _, live := model.(*activity.RuntimeReceipt); live {
+			retained[i] = &baselineRuntimeReceipt{}
+		}
+	}
+	return append(append(append(retained, history.Models()...), widget.Models()...),
 		&runtimeintent.Row{},
 		&apikey.ApiKey{}, &backup.SystemBackupRecoveryConfig{},
 		&baselineEnvironment{}, &environment.AgentRestartRequest{}, &container.RecreateJournal{}, &container.PreviousImage{}, &container.OriginOverride{}, &event.Event{},
