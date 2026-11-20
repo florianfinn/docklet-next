@@ -75,7 +75,7 @@ func readAt(fd int, name string) ([]byte, uint32, bool, error) {
 	defer f.Close()
 	var st unix.Stat_t
 	if e = unix.Fstat(n, &st); e != nil {
-		return nil, 0, false, e
+		return nil, 0, false, refuse(e)
 	}
 	attrs, e := unix.Flistxattr(n, nil)
 	if e != nil {
@@ -85,10 +85,13 @@ func readAt(fd int, name string) ([]byte, uint32, bool, error) {
 		return nil, 0, false, dto.Fail(dto.UnsupportedMetadata, 409)
 	}
 	b, e := io.ReadAll(io.LimitReader(f, maxFile+1))
+	if e != nil {
+		return nil, 0, false, refuse(e)
+	}
 	if len(b) > maxFile {
 		return nil, 0, false, dto.Fail(dto.InputLimit, 422)
 	}
-	return b, st.Mode & 0777, true, e
+	return b, st.Mode & 0777, true, nil
 }
 func Read(root, p string) (File, error) {
 	fd, n, e := parent(root, p)
@@ -200,14 +203,20 @@ func observe(root, p string) (dto.FileState, error) {
 	for i, s := range parts {
 		var st unix.Stat_t
 		if e = unix.Fstatat(fd, s, &st, unix.AT_SYMLINK_NOFOLLOW); e != nil {
-			unix.Close(fd)
+			defer unix.Close(fd)
 			if errors.Is(e, unix.ENOENT) {
 				return dto.FileState{}, nil
 			}
 			if transient(e) {
 				return dto.FileState{}, e
 			}
-			return descriptor(i, nil, "", e), nil
+			// The obstructing parent (e.g. no search permission) is fingerprinted, so
+			// replacing it changes the confirmation.
+			var parent unix.Stat_t
+			if er := unix.Fstat(fd, &parent); er != nil {
+				return dto.FileState{}, er
+			}
+			return descriptor(i, &parent, "", e), nil
 		}
 		kind := st.Mode & unix.S_IFMT
 		if i < len(parts)-1 && kind == unix.S_IFDIR {
@@ -255,14 +264,20 @@ func content(dir int, name string, i int, st unix.Stat_t) (dto.FileState, error)
 	defer f.Close()
 	var now unix.Stat_t
 	if e = unix.Fstat(n, &now); e != nil {
-		return dto.FileState{}, e
+		if transient(e) {
+			return dto.FileState{}, e
+		}
+		return descriptor(i, &st, "", e), nil
 	}
 	if now.Dev != st.Dev || now.Ino != st.Ino || now.Mode&unix.S_IFMT != unix.S_IFREG {
 		return descriptor(i, &now, "", nil), nil
 	}
 	b, e := io.ReadAll(io.LimitReader(f, maxFile+1))
 	if e != nil {
-		return dto.FileState{}, e
+		if transient(e) {
+			return dto.FileState{}, e
+		}
+		return descriptor(i, &now, "", e), nil
 	}
 	if len(b) > maxFile {
 		return descriptor(i, &now, "", nil), nil
