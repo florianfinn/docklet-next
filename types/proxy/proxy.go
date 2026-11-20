@@ -26,12 +26,34 @@ const (
 	AdminAuthority     Authority = "admin-api"
 )
 
+type MountMode string
+
+const (
+	MountReadWrite MountMode = "rw"
+	MountReadOnly  MountMode = "ro"
+)
+
+type RouteDirectoryHint struct {
+	Value string `json:"value"`
+	Fixed bool   `json:"fixed"`
+}
+type SourceEligibility struct {
+	Selectable     bool                `json:"selectable"`
+	Reason         Reason              `json:"reason,omitempty"`
+	RouteDirectory *RouteDirectoryHint `json:"routeDirectory,omitempty"`
+	RootFile       string              `json:"rootFile,omitempty"`
+}
+
+// MountMode is display metadata; Eligibility alone controls source selection.
 type Source struct {
-	Kind        SourceKind `json:"kind" enum:"project,volume,bind,single-file,unknown"`
-	Canonical   string     `json:"canonical"`
-	MountTarget string     `json:"mountTarget"`
-	ReadOnly    bool       `json:"readOnly"`
-	Reason      Reason     `json:"reason,omitempty"`
+	MountMode   MountMode          `json:"mountMode,omitempty" enum:"rw,ro"`
+	ProjectPath string             `json:"projectPath,omitempty"`
+	Eligibility *SourceEligibility `json:"eligibility,omitempty"`
+	Kind        SourceKind         `json:"kind" enum:"project,volume,bind,single-file,unknown"`
+	Canonical   string             `json:"canonical"`
+	MountTarget string             `json:"mountTarget"`
+	ReadOnly    bool               `json:"readOnly"`
+	Reason      Reason             `json:"reason,omitempty"`
 }
 type Identity struct {
 	ContainerID   string `json:"containerId"`
@@ -79,25 +101,26 @@ type EntryPoint struct {
 	TLS     bool   `json:"tls"`
 }
 type Inventory struct {
-	Generation      string       `json:"generation"`
-	Identity        Identity     `json:"identity"`
-	Eligibility     Eligibility  `json:"eligibility"`
-	EntryPoints     []EntryPoint `json:"entryPoints"`
-	Resolvers       []string     `json:"resolvers"`
-	Providers       []string     `json:"providers"`
-	Plugins         []string     `json:"plugins"`
-	FileProvider    string       `json:"fileProvider,omitempty"`
-	Watch           bool         `json:"watch"`
-	ThrottleMillis  int64        `json:"throttleMillis"`
-	RootFile        string       `json:"rootFile,omitempty"`
-	Imports         []string     `json:"imports"`
-	AdminAddress    string       `json:"adminAddress,omitempty"`
-	AdminOff        bool         `json:"adminOff"`
-	Resume          bool         `json:"resume"`
-	PersistConfig   bool         `json:"persistConfig"`
-	RunningDiverged bool         `json:"runningDiverged"`
-	ImportLine      string       `json:"importLine,omitempty"`
-	ImportPresent   bool         `json:"importPresent"`
+	ResolverSummaries []ResolverSummary `json:"resolverSummaries,omitempty"`
+	Generation        string            `json:"generation"`
+	Identity          Identity          `json:"identity"`
+	Eligibility       Eligibility       `json:"eligibility"`
+	EntryPoints       []EntryPoint      `json:"entryPoints"`
+	Resolvers         []string          `json:"resolvers"`
+	Providers         []string          `json:"providers"`
+	Plugins           []string          `json:"plugins"`
+	FileProvider      string            `json:"fileProvider,omitempty"`
+	Watch             bool              `json:"watch"`
+	ThrottleMillis    int64             `json:"throttleMillis"`
+	RootFile          string            `json:"rootFile,omitempty"`
+	Imports           []string          `json:"imports"`
+	AdminAddress      string            `json:"adminAddress,omitempty"`
+	AdminOff          bool              `json:"adminOff"`
+	Resume            bool              `json:"resume"`
+	PersistConfig     bool              `json:"persistConfig"`
+	RunningDiverged   bool              `json:"runningDiverged"`
+	ImportLine        string            `json:"importLine,omitempty"`
+	ImportPresent     bool              `json:"importPresent"`
 }
 type File struct {
 	Path             string    `json:"path"`
@@ -171,6 +194,7 @@ type Acknowledgements struct {
 	Restart              bool     `json:"restart"`
 }
 type ApplyRequest struct {
+	Kind             OperationKind     `json:"kind,omitempty" enum:"route"`
 	ID               string            `json:"id" minLength:"1" maxLength:"128"`
 	Instance         Instance          `json:"instance"`
 	Generation       string            `json:"generation"`
@@ -182,22 +206,26 @@ type ApplyRequest struct {
 	Acknowledgements Acknowledgements  `json:"acknowledgements"`
 }
 type Operation struct {
-	ID           string       `json:"id"`
-	InstanceID   string       `json:"instanceId"`
-	Generation   string       `json:"generation"`
-	Registration string       `json:"registration"`
-	Digest       string       `json:"digest"`
-	State        State        `json:"state" enum:"pending,verified,applied-unverified,rejected,restored,recovery-required,released,not-applied"`
-	Phase        Phase        `json:"phase" enum:"admitted,staging,publishing,reloading,restarting,observing,marking,restoring"`
-	Reason       Reason       `json:"reason,omitempty"`
-	Evidence     EvidenceKind `json:"evidence,omitempty" enum:"routing,configuration,load"`
-	Target       string       `json:"target"`
-	Old          FileState    `json:"old"`
-	New          FileState    `json:"new"`
-	Current      *FileState   `json:"current,omitempty"`
-	CreatedAt    time.Time    `json:"createdAt"`
-	FinishedAt   *time.Time   `json:"finishedAt,omitempty"`
-	ReleasedBy   string       `json:"releasedBy,omitempty"`
+	Kind         OperationKind           `json:"kind,omitempty"`
+	Resolver     *ResolverReceipt        `json:"resolver,omitempty"`
+	Certificate  *CertificateObservation `json:"certificate,omitempty"`
+	Probe        *ProbeEvidence          `json:"probe,omitempty"`
+	ID           string                  `json:"id"`
+	InstanceID   string                  `json:"instanceId"`
+	Generation   string                  `json:"generation"`
+	Registration string                  `json:"registration"`
+	Digest       string                  `json:"digest"`
+	State        State                   `json:"state" enum:"pending,verified,applied-unverified,rejected,restored,recovery-required,released,not-applied,applied,rolled-back,refused"`
+	Phase        Phase                   `json:"phase" enum:"admitted,staging,publishing,reloading,restarting,observing,marking,restoring,backup,writing,recreating,applied,rolled-back,refused,recovery-required"`
+	Reason       Reason                  `json:"reason,omitempty"`
+	Evidence     EvidenceKind            `json:"evidence,omitempty" enum:"routing,configuration,load"`
+	Target       string                  `json:"target"`
+	Old          FileState               `json:"old"`
+	New          FileState               `json:"new"`
+	Current      *FileState              `json:"current,omitempty"`
+	CreatedAt    time.Time               `json:"createdAt"`
+	FinishedAt   *time.Time              `json:"finishedAt,omitempty"`
+	ReleasedBy   string                  `json:"releasedBy,omitempty"`
 	// Diagnostic names where an engine refused or failed (validator message, file and line).
 	Diagnostic *Diagnostic `json:"diagnostic,omitempty"`
 }
@@ -209,10 +237,11 @@ type Diagnostic struct {
 	Detail string `json:"detail,omitempty" maxLength:"4096"`
 }
 type Query struct {
-	ID           string   `json:"id"`
-	Instance     Instance `json:"instance"`
-	Generation   string   `json:"generation"`
-	Registration string   `json:"registration"`
+	Kind         OperationKind `json:"kind,omitempty"`
+	ID           string        `json:"id"`
+	Instance     Instance      `json:"instance"`
+	Generation   string        `json:"generation"`
+	Registration string        `json:"registration"`
 }
 type FenceResult struct {
 	Generation string     `json:"generation"`

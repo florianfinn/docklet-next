@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original production proxy Manager implementation.
 
+import {validProxySourceExtension, validResolverSummary} from "./proxy-decoder";
 import type { Discovery, Instance, Inventory, ReadResult } from "@/features/proxy/types";
 
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -22,7 +23,7 @@ const source = (v: unknown) =>
   record(v) &&
   member(v.kind, ["project", "volume", "bind", "single-file", "unknown"]) &&
   [v.canonical, v.mountTarget].every(text) &&
-  typeof v.readOnly === "boolean";
+  typeof v.readOnly === "boolean" && validProxySourceExtension(v);
 const discovery = (v: unknown) =>
   record(v) &&
   identity(v.identity) &&
@@ -48,6 +49,7 @@ const inventory = (v: unknown) =>
   ) &&
   Number.isFinite(v.throttleMillis) &&
   [v.resolvers, v.providers, v.plugins, v.imports].every(x => list(x, text)) &&
+  (v.resolverSummaries === undefined || list(v.resolverSummaries, validResolverSummary)) &&
   list(v.entryPoints, x => record(x) && text(x.name) && text(x.address) && typeof x.tls === "boolean");
 const file = (v: unknown) =>
   record(v) &&

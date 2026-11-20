@@ -146,9 +146,9 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 		a.mu.Unlock()
 		return dto.Operation{}, err
 	}
-	i := Intent{Request: q, Old: Bytes{FileState: q.Expected}, New: Bytes{FileState: q.Expected}}
+	i := Intent{Kind: dto.RouteOperation, Request: q, Old: Bytes{FileState: q.Expected}, New: Bytes{FileState: q.Expected}}
 	paths(&i)
-	o := dto.Operation{ID: q.ID, InstanceID: q.Instance.ID, Generation: a.Generation(), Registration: q.Registration, Digest: digest, State: dto.Pending, Phase: dto.Admitted, Target: q.Target, Old: q.Expected, New: q.Expected, CreatedAt: time.Now().UTC()}
+	o := dto.Operation{Kind: dto.RouteOperation, ID: q.ID, InstanceID: q.Instance.ID, Generation: a.Generation(), Registration: q.Registration, Digest: digest, State: dto.Pending, Phase: dto.Admitted, Target: q.Target, Old: q.Expected, New: q.Expected, CreatedAt: time.Now().UTC()}
 	ib, err := marshal(i)
 	if err != nil {
 		a.mu.Unlock()
@@ -209,6 +209,7 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 		return a.finish(ctx, i, withDiagnostic(o, err), dto.Rejected, reason(err, dto.InvalidGraph), "")
 	}
 	// The request, paths and baseline are protocol-owned, never engine-selected.
+	prepared.Kind = dto.RouteOperation
 	prepared.Request = q
 	paths(&prepared)
 	i = prepared

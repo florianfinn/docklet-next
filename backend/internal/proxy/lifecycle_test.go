@@ -189,10 +189,10 @@ func TestL6SettlementSurvivesUndecodableRows(t *testing.T) {
 	require.NoError(t, x.db.Create(&Journal{ID: "broken-one", Source: "host\x00" + x.request.Instance.Source.Canonical, Generation: x.a.Generation(), Digest: "example", Registration: x.request.Registration, State: dto.Pending, Phase: dto.Staging, Intent: []byte("{"), Result: []byte("{"), CreatedAt: time.Now().UTC()}).Error)
 	require.NoError(t, x.a.Settle(t.Context()))
 	q := dto.Query{ID: "broken-one", Instance: x.request.Instance, Generation: x.a.Generation(), Registration: x.request.Registration}
-	_, err := x.a.Query(t.Context(), q)
-	var p *dto.Problem
-	require.ErrorAs(t, err, &p)
-	require.Equal(t, dto.JournalLost, p.Code)
+	result, err := x.a.Query(t.Context(), q)
+	require.NoError(t, err)
+	require.Equal(t, dto.RecoveryRequired, result.State)
+	require.Equal(t, dto.UnknownOperationKind, result.Reason)
 	o, err := x.a.Release(t.Context(), dto.ReleaseRequest{Query: q, Confirmed: x.f.files["route.yml"].FileState, Actor: "example-admin"})
 	require.NoError(t, err)
 	require.Equal(t, dto.Released, o.State)

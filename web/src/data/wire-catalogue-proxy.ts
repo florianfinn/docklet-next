@@ -8,6 +8,10 @@ import type { components } from "@/api/generated/schema";
 import type { CatalogueKey } from "./wire-catalogue";
 type Schema=components["schemas"];
 export const PROXY_STATE_KEYS = {
+ "applied": "proxyContract.states.applied",
+ "rolled-back": "proxyContract.states.rolled-back",
+ "refused": "proxyContract.states.refused",
+
   "pending": "proxyContract.states.pending",
   "verified": "proxyContract.states.verified",
   "applied-unverified": "proxyContract.states.applied-unverified",
@@ -18,6 +22,14 @@ export const PROXY_STATE_KEYS = {
   "not-applied": "proxyContract.states.not-applied",
 } satisfies Record<Schema["ProxyOperation"]["state"], CatalogueKey>;
 export const PROXY_PHASE_KEYS = {
+  "backup": "proxyContract.phases.backup",
+  "writing": "proxyContract.phases.writing",
+  "recreating": "proxyContract.phases.recreating",
+  "applied": "proxyContract.phases.applied",
+  "rolled-back": "proxyContract.phases.rolled-back",
+  "refused": "proxyContract.phases.refused",
+  "recovery-required": "proxyContract.phases.recovery-required",
+
   "admitted": "proxyContract.phases.admitted",
   "staging": "proxyContract.phases.staging",
   "publishing": "proxyContract.phases.publishing",
@@ -47,6 +59,33 @@ export const PROXY_REFERENCE_KEYS = {
   "unresolved": "proxyContract.references.unresolved",
 } satisfies Record<Schema["ProxyReference"]["kind"], CatalogueKey>;
 export const PROXY_REASON_KEYS = {
+  "source-ineligible": "proxyContract.reasons.source-ineligible",
+  "route-directory-mismatch": "proxyContract.reasons.route-directory-mismatch",
+  "provider-directory-elsewhere": "proxyContract.reasons.provider-directory-elsewhere",
+  "caddy-config-implicit": "proxyContract.reasons.caddy-config-implicit",
+  "read-only": "proxyContract.reasons.read-only",
+  "route-changed": "proxyContract.reasons.route-changed",
+  "certificate-unavailable": "proxyContract.reasons.certificate-unavailable",
+  "probe-image-unavailable": "proxyContract.reasons.probe-image-unavailable",
+  "probe-client-missing": "proxyContract.reasons.probe-client-missing",
+  "probe-client-unsupported": "proxyContract.reasons.probe-client-unsupported",
+  "third-version": "proxyContract.reasons.third-version",
+  "backup-invalid": "proxyContract.reasons.backup-invalid",
+  "unsupported-layout": "proxyContract.reasons.unsupported-layout",
+  "env-conflict": "proxyContract.reasons.env-conflict",
+  "env-key-exists": "proxyContract.reasons.env-key-exists",
+  "env-duplicate": "proxyContract.reasons.env-duplicate",
+  "storage-not-writable": "proxyContract.reasons.storage-not-writable",
+  "unknown-operation-kind": "proxyContract.reasons.unknown-operation-kind",
+  "compose-load-failed": "proxyContract.reasons.compose-load-failed",
+  "compose-up-failed": "proxyContract.reasons.compose-up-failed",
+  "static-parse-failed": "proxyContract.reasons.static-parse-failed",
+  "effect-unsettled": "proxyContract.reasons.effect-unsettled",
+  "target-unclear": "proxyContract.reasons.target-unclear",
+  "identity-unclear": "proxyContract.reasons.identity-unclear",
+  "interrupted": "proxyContract.reasons.interrupted",
+  "not-implemented": "proxyContract.reasons.not-implemented",
+
   "no-observable-difference": "proxyContract.reasons.no-observable-difference",
   "not-observable": "proxyContract.reasons.not-observable",
   "container-changed": "proxyContract.reasons.container-changed",
@@ -90,3 +129,21 @@ export const PROXY_REASON_KEYS = {
   "engine-unavailable": "proxyContract.reasons.engine-unavailable",
   "target-changed": "proxyContract.reasons.target-changed",
 } satisfies Record<Schema["ProxyProblem"]["code"], CatalogueKey>;
+
+export const PROXY_LAYOUT_REASON_KEYS = {
+ "unmanaged-project": "proxyContract.layoutReasons.unmanaged-project",
+ "multiple-replicas": "proxyContract.layoutReasons.multiple-replicas",
+ "multiple-compose-files": "proxyContract.layoutReasons.multiple-compose-files",
+ "compose-include": "proxyContract.layoutReasons.compose-include",
+ "service-extends": "proxyContract.layoutReasons.service-extends",
+ "compose-anchor": "proxyContract.layoutReasons.compose-anchor",
+ "env-not-regular": "proxyContract.layoutReasons.env-not-regular",
+ "compose-env-selection": "proxyContract.layoutReasons.compose-env-selection",
+ "namespace-dependent": "proxyContract.layoutReasons.namespace-dependent",
+ "toml-static": "proxyContract.layoutReasons.toml-static",
+ "entrypoint-flags": "proxyContract.layoutReasons.entrypoint-flags",
+ "scalar-command": "proxyContract.layoutReasons.scalar-command",
+ "environment-static": "proxyContract.layoutReasons.environment-static",
+ "mixed-static-sources": "proxyContract.layoutReasons.mixed-static-sources",
+ "static-outside-project": "proxyContract.layoutReasons.static-outside-project",
+} satisfies Record<NonNullable<Schema["ProxyResolverReceipt"]["layoutReason"]>,CatalogueKey>;

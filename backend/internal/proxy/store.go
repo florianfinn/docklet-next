@@ -91,27 +91,58 @@ func (verifiedFile) TableName() string { return "proxy_verified_files" }
 func marshal(v any) ([]byte, error)    { return json.Marshal(v) }
 func decodeJournal(j Journal) (Intent, dto.Operation, error) {
 	var i Intent
-	var o dto.Operation
-	// Undecodable journal content is answered as journal-lost, never as a raw error.
-	if json.Unmarshal(j.Intent, &i) != nil || json.Unmarshal(j.Result, &o) != nil {
-		return i, o, dto.Fail(dto.JournalLost, 409)
+	o := journalReceipt(j)
+	kind, valid := payloadKind(j.Intent)
+	if valid && kind == dto.ResolverOperation {
+		if binding, result, ok := decodeResolverPayload(j.Intent, j.Result, j.ID, j.Generation, j.Registration, j.Digest, j.State); ok {
+			return Intent{Kind: kind, Request: binding}, result, nil
+		}
+	}
+	if !valid || kind.Effective() != dto.RouteOperation {
+		return i, deferredReceipt(o, kind), nil
+	}
+	if json.Unmarshal(j.Intent, &i) != nil || json.Unmarshal(j.Result, &o) != nil || validRequest(i.Request) != nil {
+		return Intent{}, deferredReceipt(journalReceipt(j), kind), nil
 	}
 	if !j.State.Valid() || !j.Phase.Valid() || o.State != j.State || o.Phase != j.Phase || o.Digest != j.Digest {
 		return i, o, dto.Fail(dto.JournalLost, 409)
+	}
+	if o.Kind.Effective() != dto.RouteOperation {
+		return Intent{}, deferredReceipt(journalReceipt(j), o.Kind), nil
 	}
 	return i, o, nil
 }
 func decodeRecord(r Record) (dto.ApplyRequest, dto.Operation, error) {
 	var q dto.ApplyRequest
-	var o dto.Operation
-	if err := json.Unmarshal(r.Request, &q); err != nil {
-		return q, o, err
+	o := recordReceipt(r)
+	kind, valid := payloadKind(r.Request)
+	if valid && kind == dto.ResolverOperation {
+		if binding, result, ok := decodeResolverPayload(r.Request, r.Result, r.ID, r.Generation, r.Registration, r.Digest, r.State); ok {
+			return binding, result, nil
+		}
 	}
-	err := json.Unmarshal(r.Result, &o)
-	if err == nil && (!r.State.Valid() || o.State != r.State) {
-		err = dto.Fail(dto.JournalLost, 409)
+	if !valid || kind.Effective() != dto.RouteOperation {
+		// Decode only the shared executor binding; never interpret resolver data as a route.
+		var binding struct {
+			ID           string       `json:"id"`
+			Instance     dto.Instance `json:"instance"`
+			Generation   string       `json:"generation"`
+			Registration string       `json:"registration"`
+		}
+		_ = json.Unmarshal(r.Request, &binding)
+		q = dto.ApplyRequest{ID: binding.ID, Instance: binding.Instance, Generation: binding.Generation, Registration: binding.Registration}
+		return q, deferredReceipt(o, kind), nil
 	}
-	return q, o, err
+	if json.Unmarshal(r.Request, &q) != nil || json.Unmarshal(r.Result, &o) != nil || validRequest(q) != nil {
+		return q, deferredReceipt(recordReceipt(r), kind), nil
+	}
+	if !r.State.Valid() || o.State != r.State {
+		return q, o, dto.Fail(dto.JournalLost, 409)
+	}
+	if o.Kind.Effective() != dto.RouteOperation {
+		return q, deferredReceipt(recordReceipt(r), o.Kind), nil
+	}
+	return q, o, nil
 }
 func unfinished(ctx context.Context, db *gorm.DB, table string) (string, error) {
 	var id string

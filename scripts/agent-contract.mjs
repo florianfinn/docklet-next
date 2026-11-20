@@ -41,9 +41,11 @@ export function agentFixture(spec, fixture) {
       .filter(([, op]) => op?.tags?.includes("Modules"))
       .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
     settings: Object.fromEntries(moduleDefinitions.map((d) => [d.settingKey, schemas.SettingsUpdate.properties[d.settingKey]])),
-    minimumContract: 19,
+    minimumContract: 20,
   };
   manifest.proxy = {
+    dnsProviders: document["x-proxy-dns-providers"],
+    minimumContract: 20,
     routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
       .filter(([, op]) => op?.tags?.includes("Proxy"))
       .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
@@ -312,7 +314,7 @@ function formatFixture(value, depth = 0) {
     return `[\n${value.map((item) => child + formatFixture(item, depth + 1)).join(",\n")}\n${indent}]`;
   }
   if (Object.values(value).every((item) => item === null || typeof item !== "object")) return JSON.stringify(value);
-  if (depth >= 3 && JSON.stringify(value).length <= 400) return JSON.stringify(value);
+  if (depth >= 3 && JSON.stringify(value).length <= 800) return JSON.stringify(value);
   const entries = Object.entries(value);
   if (!entries.length) return "{}";
   return `{\n${entries.map(([key, item]) => `${child}${JSON.stringify(key)}: ${formatFixture(item, depth + 1)}`).join(",\n")}\n${indent}}`;

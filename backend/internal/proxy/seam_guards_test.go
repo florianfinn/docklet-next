@@ -393,7 +393,7 @@ func TestReleaseReceiptGuardAfterConcurrentFinalization(t *testing.T) {
 	}
 }
 
-// Intent and result decoding errors are journal-lost independently of each other.
+// Malformed intent and result payloads remain visible for explicit recovery.
 func TestJournalDecodeErrorsAreIndependent(t *testing.T) {
 	for _, field := range []string{"intent", "result"} {
 		t.Run(field, func(t *testing.T) {
@@ -408,8 +408,10 @@ func TestJournalDecodeErrorsAreIndependent(t *testing.T) {
 				bad = append(append([]byte{}, j.Result[:len(j.Result)-1]...), []byte(`,"releasedBy":false}`)...)
 			}
 			require.NoError(t, x.db.Table("proxy_journal").Where("id = ?", x.request.ID).Update(field, bad).Error)
-			_, err = x.a.Query(t.Context(), x.query())
-			requireCode(t, err, dto.JournalLost)
+			result, queryErr := x.a.Query(t.Context(), x.query())
+			require.NoError(t, queryErr)
+			require.Equal(t, dto.RecoveryRequired, result.State)
+			require.Equal(t, dto.UnknownOperationKind, result.Reason)
 		})
 	}
 }

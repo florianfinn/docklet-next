@@ -8,6 +8,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
@@ -65,8 +66,10 @@ func (h *Hub) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, err
 		h.mu.Unlock()
 		return dto.Operation{}, dto.Fail(dto.RegistrationChanged, 409)
 	}
-	o := dto.Operation{ID: q.ID, InstanceID: q.Instance.ID, Generation: q.Generation, Registration: q.Registration, Digest: d, State: dto.Pending, Phase: dto.Admitted, Target: q.Target, Old: q.Expected, CreatedAt: time.Now().UTC()}
-	request, err := marshal(q)
+	o := dto.Operation{Kind: dto.RouteOperation, ID: q.ID, InstanceID: q.Instance.ID, Generation: q.Generation, Registration: q.Registration, Digest: d, State: dto.Pending, Phase: dto.Admitted, Target: q.Target, Old: q.Expected, CreatedAt: time.Now().UTC()}
+	stored := q
+	stored.Kind = dto.RouteOperation
+	request, err := marshal(stored)
 	if err != nil {
 		h.mu.Unlock()
 		return o, err
@@ -124,7 +127,7 @@ func (h *Hub) accept(ctx context.Context, q dto.ApplyRequest, prior, remote dto.
 	if remote.Registration != q.Registration || remote.ID != q.ID || remote.Digest != prior.Digest {
 		return h.recovery(ctx, prior, dto.OperationConflict)
 	}
-	if !remote.State.Valid() {
+	if remote.Kind.Effective() != prior.Kind.Effective() || !remote.State.ValidFor(remote.Kind) {
 		return h.recovery(ctx, prior, dto.JournalLost)
 	}
 	if err := h.persist(ctx, remote); err != nil {
@@ -209,7 +212,7 @@ func (h *Hub) query(ctx context.Context, id string, refusal dto.Reason) (dto.Ope
 	if err != nil {
 		return o, err
 	}
-	if o.State.Final() {
+	if o.State.Final() || deferredOperation(o) {
 		return o, nil
 	}
 	reg, err := h.Transport.Registration(ctx, q.Instance.EnvironmentID)
@@ -276,6 +279,16 @@ func (h *Hub) Release(ctx context.Context, id string, confirmed dto.FileState, a
 	if o.State != dto.RecoveryRequired {
 		return o, dto.Fail(dto.OperationConflict, 409)
 	}
+	if deferredOperation(o) && q.Instance.EnvironmentID == "" {
+		var instance instanceRow
+		if err := h.DB.WithContext(ctx).First(&instance, "id = ?", r.InstanceID).Error; err != nil {
+			return o, err
+		}
+		if err := json.Unmarshal(instance.Data, &q.Instance); err != nil {
+			return o, dto.Fail(dto.UnknownOperationKind, 409)
+		}
+	}
+	q.ID, q.Generation, q.Registration = r.ID, r.Generation, r.Registration
 	targetRegistration, err := h.Transport.Registration(ctx, q.Instance.EnvironmentID)
 	if err != nil {
 		return o, err

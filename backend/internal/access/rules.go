@@ -41,6 +41,11 @@ type Rule struct {
 
 // Rules is an exact operation allowlist. Missing entries fail closed.
 var Rules = map[string]Rule{
+	"check-proxy-certificate":      {Kind: Admin},
+	"create-proxy-resolver":        {Kind: Admin},
+	"check-host-proxy-certificate": {Kind: Admin},
+	"create-host-proxy-resolver":   {Kind: Admin},
+
 	"discover-proxy-instances":     {Kind: Admin},
 	"discover-proxy-containers":    {Kind: Admin},
 	"get-proxy-inventory":          {Kind: Admin},

@@ -17,6 +17,8 @@ import (
 )
 
 var commandRoutes = withVulnerabilityRoutes([]commandRoute{
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/modules/proxy/certificate-check", CommandName: "proxy.certificate.check"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/modules/proxy/resolvers", CommandName: "proxy.resolver.create"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/modules/proxy/discover", CommandName: "proxy.discover"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/modules/proxy/inventory", CommandName: "proxy.inventory"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/modules/proxy/read", CommandName: "proxy.read"},

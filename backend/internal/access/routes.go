@@ -9,6 +9,11 @@ package access
 // Routes describes the shared exported surface for pre-forwarding decisions.
 // Huma uses the matched operation and its actual parameters.
 var Routes = []Route{
+	{"POST", "/modules/proxy/instances/{instanceId}/certificate-check", "check-proxy-certificate"},
+	{"POST", "/modules/proxy/instances/{instanceId}/resolvers", "create-proxy-resolver"},
+	{"POST", "/environments/{id}/modules/proxy/certificate-check", "check-host-proxy-certificate"},
+	{"POST", "/environments/{id}/modules/proxy/resolvers", "create-host-proxy-resolver"},
+
 	{"GET", "/modules/proxy/discover", "discover-proxy-instances"},
 	{"GET", "/environments/{id}/modules/proxy/discover", "discover-proxy-containers"},
 	{"POST", "/environments/{id}/modules/proxy/inventory", "get-proxy-inventory"},

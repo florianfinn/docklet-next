@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 3a07b03cb978befcb51af68d9ce74309e119bb38171e17d4585bc31a9bce9245
+// Revision: f6a58a4feb2c3f07292dd1b03151e48974e4317fc339a7b9e91999bed2a4048b
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -2479,6 +2479,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/modules/proxy/certificate-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check-host-proxy-certificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/modules/proxy/discover": {
         parameters: {
             query?: never;
@@ -2569,6 +2585,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["release-host-proxy-operation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/modules/proxy/resolvers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["create-host-proxy-resolver"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4957,6 +4989,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/modules/proxy/instances/{instanceId}/certificate-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check-proxy-certificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/modules/proxy/instances/{instanceId}/operations": {
         parameters: {
             query?: never;
@@ -4967,6 +5015,22 @@ export interface paths {
         get: operations["list-proxy-operations"];
         put?: never;
         post: operations["create-proxy-operation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/modules/proxy/instances/{instanceId}/resolvers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["create-proxy-resolver"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7621,6 +7685,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["ProjectUpdateTagResponse"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseProxyCertificateObservation: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseProxyCertificateObservation.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["ProxyCertificateObservation"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -11715,8 +11791,55 @@ export interface components {
             };
             id: string;
             instance: components["schemas"]["ProxyInstance"];
+            /** @enum {string} */
+            kind?: "route";
             registration: string;
             target: string;
+        };
+        ProxyCertificateCheckRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ProxyCertificateCheckRequest.json
+             */
+            readonly $schema?: string;
+            file: string;
+            host: string;
+            router: string;
+            sourceHash: string;
+        };
+        ProxyCertificateEpoch: {
+            containerId: string;
+            startedAt: string;
+        };
+        ProxyCertificateObservation: {
+            chainTrusted: boolean;
+            epoch: components["schemas"]["ProxyCertificateEpoch"];
+            error?: string;
+            hostnameMatch: boolean;
+            instanceId: string;
+            /** Format: date-time */
+            observedAt: string;
+            peer: components["schemas"]["ProxyCertificatePeer"];
+            route: components["schemas"]["ProxyCertificateRoute"];
+            /** @enum {string} */
+            validity: "valid" | "expired" | "not-yet-valid";
+        };
+        ProxyCertificatePeer: {
+            issuer: string;
+            /** Format: date-time */
+            notAfter: string;
+            /** Format: date-time */
+            notBefore: string;
+            sans: string[] | null;
+            sha256: string;
+            subject: string;
+        };
+        ProxyCertificateRoute: {
+            entryPoint: string;
+            host: string;
+            name: string;
+            sni: string;
         };
         ProxyChange: {
             advanced?: string;
@@ -11748,6 +11871,17 @@ export interface components {
             name: string;
             rootFile?: string;
             routeDirectory: string;
+        };
+        ProxyDNSProviderDefinition: {
+            credentialSets: (string[] | null)[] | null;
+            /** @enum {string} */
+            provider: "cloudflare" | "hetzner" | "ionos" | "inwx" | "netcup" | "desec" | "duckdns" | "httpreq";
+            variables: components["schemas"]["ProxyDNSProviderVariable"][] | null;
+        };
+        ProxyDNSProviderVariable: {
+            aliasOf?: string;
+            name: string;
+            required: boolean;
         };
         ProxyDiagnostic: {
             detail?: string;
@@ -11798,6 +11932,19 @@ export interface components {
             hash: string;
             present: boolean;
         };
+        ProxyHostCertificateCheckRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ProxyHostCertificateCheckRequest.json
+             */
+            readonly $schema?: string;
+            file: string;
+            host: string;
+            instance: components["schemas"]["ProxyInstance"];
+            router: string;
+            sourceHash: string;
+        };
         ProxyIdentity: {
             containerId: string;
             containerName: string;
@@ -11839,6 +11986,7 @@ export interface components {
             persistConfig: boolean;
             plugins: string[] | null;
             providers: string[] | null;
+            resolverSummaries?: components["schemas"]["ProxyResolverSummary"][] | null;
             resolvers: string[] | null;
             resume: boolean;
             rootFile?: string;
@@ -11851,6 +11999,7 @@ export interface components {
             path: string;
         };
         ProxyOperation: {
+            certificate?: components["schemas"]["ProxyCertificateObservation"];
             /** Format: date-time */
             createdAt: string;
             current?: components["schemas"]["ProxyFileState"];
@@ -11863,15 +12012,18 @@ export interface components {
             generation: string;
             id: string;
             instanceId: string;
+            kind?: string;
             new: components["schemas"]["ProxyFileState"];
             old: components["schemas"]["ProxyFileState"];
             /** @enum {string} */
-            phase: "admitted" | "staging" | "publishing" | "reloading" | "restarting" | "observing" | "marking" | "restoring";
+            phase: "admitted" | "staging" | "publishing" | "reloading" | "restarting" | "observing" | "marking" | "restoring" | "backup" | "writing" | "recreating" | "applied" | "rolled-back" | "refused" | "recovery-required";
+            probe?: components["schemas"]["ProxyProbeEvidence"];
             reason?: string;
             registration: string;
             releasedBy?: string;
+            resolver?: components["schemas"]["ProxyResolverReceipt"];
             /** @enum {string} */
-            state: "pending" | "verified" | "applied-unverified" | "rejected" | "restored" | "recovery-required" | "released" | "not-applied";
+            state: "pending" | "verified" | "applied-unverified" | "rejected" | "restored" | "recovery-required" | "released" | "not-applied" | "applied" | "rolled-back" | "refused";
             target: string;
         };
         ProxyOperationRequest: {
@@ -11889,9 +12041,15 @@ export interface components {
             };
             target: string;
         };
+        ProxyProbeEvidence: {
+            /** @enum {string} */
+            client: "helper" | "wget";
+            imageId?: string;
+            reason?: string;
+        };
         ProxyProblem: {
             /** @enum {string} */
-            code: "no-observable-difference" | "not-observable" | "container-changed" | "logs-unavailable" | "generation-mismatch" | "operation-conflict" | "module-busy" | "stale-hash" | "source-read-only" | "unknown-operation" | "operation-fenced" | "registration-changed" | "journal-lost" | "invalid-input" | "input-limit" | "exec-failed" | "exec-running" | "proxy-rejected" | "restore-failed" | "invalid-graph" | "incomplete-inventory" | "opaque-input" | "single-file-mount" | "refused-bind" | "read-only-mount" | "unknown-source" | "unsupported-metadata" | "watch-off" | "unsupported-format" | "template-input" | "rule-syntax-v2" | "shared-across-files" | "persistence-off" | "relative-import" | "import-missing" | "acknowledgement-required" | "probe-unavailable" | "probe-option-unavailable" | "admin-unavailable" | "agent-unavailable" | "engine-unavailable" | "target-changed";
+            code: "no-observable-difference" | "not-observable" | "container-changed" | "logs-unavailable" | "generation-mismatch" | "operation-conflict" | "module-busy" | "stale-hash" | "source-read-only" | "unknown-operation" | "operation-fenced" | "registration-changed" | "journal-lost" | "invalid-input" | "input-limit" | "exec-failed" | "exec-running" | "proxy-rejected" | "restore-failed" | "invalid-graph" | "incomplete-inventory" | "opaque-input" | "single-file-mount" | "refused-bind" | "read-only-mount" | "unknown-source" | "unsupported-metadata" | "watch-off" | "unsupported-format" | "template-input" | "rule-syntax-v2" | "shared-across-files" | "persistence-off" | "relative-import" | "import-missing" | "acknowledgement-required" | "probe-unavailable" | "probe-option-unavailable" | "admin-unavailable" | "agent-unavailable" | "engine-unavailable" | "target-changed" | "source-ineligible" | "route-directory-mismatch" | "provider-directory-elsewhere" | "caddy-config-implicit" | "read-only" | "route-changed" | "certificate-unavailable" | "probe-image-unavailable" | "probe-client-missing" | "probe-client-unsupported" | "third-version" | "backup-invalid" | "unsupported-layout" | "env-conflict" | "env-key-exists" | "env-duplicate" | "storage-not-writable" | "unknown-operation-kind" | "compose-load-failed" | "compose-up-failed" | "static-parse-failed" | "effect-unsettled" | "target-unclear" | "identity-unclear" | "interrupted" | "not-implemented";
             detail?: string;
             generation?: string;
             /** Format: int64 */
@@ -11911,6 +12069,7 @@ export interface components {
             generation: string;
             id: string;
             instance: components["schemas"]["ProxyInstance"];
+            kind?: string;
             registration: string;
         };
         ProxyReadResult: {
@@ -11940,7 +12099,128 @@ export interface components {
             generation: string;
             id: string;
             instance: components["schemas"]["ProxyInstance"];
+            kind?: string;
             registration: string;
+        };
+        ProxyResolverApplyRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ProxyResolverApplyRequest.json
+             */
+            readonly $schema?: string;
+            generation: string;
+            id: string;
+            instance: components["schemas"]["ProxyInstance"];
+            registration: string;
+            request: components["schemas"]["ProxyResolverRequest"];
+        };
+        ProxyResolverCA: {
+            /** @enum {string} */
+            kind: "letsencrypt" | "letsencrypt-staging" | "custom";
+            url?: string;
+        };
+        ProxyResolverChallenge: {
+            /** Format: int64 */
+            delayBeforeCheck: number;
+            entryPoint?: string;
+            /** @enum {string} */
+            kind: "http" | "dns";
+            /** @enum {string} */
+            provider?: "cloudflare" | "hetzner" | "ionos" | "inwx" | "netcup" | "desec" | "duckdns" | "httpreq";
+            resolvers?: string[] | null;
+        };
+        ProxyResolverDiagnostic: {
+            /** @enum {string} */
+            code: "compose-load-failed" | "compose-up-failed" | "static-parse-failed";
+            /** Format: int64 */
+            exitCode?: number;
+            /** Format: int64 */
+            line?: number;
+            service?: string;
+        };
+        ProxyResolverEnvelope: {
+            generation: string;
+            id: string;
+            instance: components["schemas"]["ProxyInstance"];
+            intent: components["schemas"]["ProxyResolverIntent"];
+            /** @enum {string} */
+            kind: "resolver";
+            registration: string;
+        };
+        ProxyResolverFile: {
+            /** @enum {string} */
+            kind: "static" | "compose" | "env";
+            new: components["schemas"]["ProxyFileState"];
+            old: components["schemas"]["ProxyFileState"];
+            path: string;
+        };
+        ProxyResolverIntent: {
+            ca: components["schemas"]["ProxyResolverCA"];
+            challenge: components["schemas"]["ProxyResolverChallenge"];
+            email: string;
+            name: string;
+            storage: string;
+            variables: components["schemas"]["ProxyResolverVariableIntent"][] | null;
+        };
+        ProxyResolverReceipt: {
+            diagnostic?: components["schemas"]["ProxyResolverDiagnostic"];
+            files: components["schemas"]["ProxyResolverFile"][] | null;
+            intent: components["schemas"]["ProxyResolverIntent"];
+            /** @enum {string} */
+            layoutReason?: "unmanaged-project" | "multiple-replicas" | "multiple-compose-files" | "compose-include" | "service-extends" | "compose-anchor" | "env-not-regular" | "compose-env-selection" | "namespace-dependent" | "toml-static" | "entrypoint-flags" | "scalar-command" | "environment-static" | "mixed-static-sources" | "static-outside-project";
+            /** @enum {string} */
+            phase: "admitted" | "backup" | "writing" | "recreating" | "observing" | "applied" | "rolled-back" | "refused" | "restoring" | "recovery-required";
+            recreateCommitted: boolean;
+            /** Format: date-time */
+            recreateStartedAt?: string;
+            replacement?: components["schemas"]["ProxyResolverReplacement"];
+        };
+        ProxyResolverReplacement: {
+            canonical: string;
+            containerId: string;
+            /** @enum {string} */
+            kind: "project" | "volume" | "bind" | "single-file" | "unknown";
+            mountTarget: string;
+            name: string;
+            project: string;
+            service: string;
+            startedAt: string;
+        };
+        ProxyResolverRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ProxyResolverRequest.json
+             */
+            readonly $schema?: string;
+            ca: components["schemas"]["ProxyResolverCA"];
+            challenge: components["schemas"]["ProxyResolverChallenge"];
+            email: string;
+            name: string;
+            storage: string;
+            variables: components["schemas"]["ProxyResolverVariable"][] | null;
+        };
+        ProxyResolverSummary: {
+            ca: components["schemas"]["ProxyResolverCA"];
+            challenge: components["schemas"]["ProxyResolverChallenge"];
+            email?: string;
+            name: string;
+            storage: string;
+            variables: components["schemas"]["ProxyResolverVariableSummary"][] | null;
+        };
+        ProxyResolverVariable: {
+            name: string;
+            value?: string;
+        };
+        ProxyResolverVariableIntent: {
+            /** @enum {string} */
+            mode: "new" | "reuse";
+            name: string;
+        };
+        ProxyResolverVariableSummary: {
+            configured: boolean;
+            name: string;
         };
         ProxyRoute: {
             /** @enum {string} */
@@ -11963,6 +12243,10 @@ export interface components {
             tls?: boolean;
             upstreams: string[] | null;
         };
+        ProxyRouteDirectoryHint: {
+            fixed: boolean;
+            value: string;
+        };
         ProxySettings: {
             /**
              * Format: uri
@@ -11976,11 +12260,21 @@ export interface components {
         };
         ProxySource: {
             canonical: string;
+            eligibility?: components["schemas"]["ProxySourceEligibility"];
             /** @enum {string} */
             kind: "project" | "volume" | "bind" | "single-file" | "unknown";
+            /** @enum {string} */
+            mountMode?: "rw" | "ro";
             mountTarget: string;
+            projectPath?: string;
             readOnly: boolean;
             reason?: string;
+        };
+        ProxySourceEligibility: {
+            reason?: string;
+            rootFile?: string;
+            routeDirectory?: components["schemas"]["ProxyRouteDirectoryHint"];
+            selectable: boolean;
         };
         PruneImagesInputBody: {
             /**
@@ -25365,6 +25659,104 @@ export interface operations {
                 };
             };
             /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-host-proxy-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProxyHostCertificateCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseProxyCertificateObservation"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Proxy refusal */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -25433,6 +25825,15 @@ export interface operations {
             };
             /** @description Proxy refusal */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -25521,6 +25922,15 @@ export interface operations {
                 };
             };
             /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -25593,6 +26003,15 @@ export interface operations {
             };
             /** @description Proxy refusal */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -25682,6 +26101,15 @@ export interface operations {
                 };
             };
             /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -25762,6 +26190,15 @@ export interface operations {
                 };
             };
             /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -25834,6 +26271,104 @@ export interface operations {
             };
             /** @description Proxy refusal */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-host-proxy-resolver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProxyResolverApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseProxyOperation"];
+                };
+            };
+            /** @description Invalid request path */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Proxy refusal */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -37573,6 +38108,15 @@ export interface operations {
                 };
             };
             /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -37630,6 +38174,15 @@ export interface operations {
             };
             /** @description Proxy refusal */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -37707,6 +38260,15 @@ export interface operations {
                 };
             };
             /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -37766,6 +38328,15 @@ export interface operations {
             };
             /** @description Proxy refusal */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -37845,6 +38416,15 @@ export interface operations {
                 };
             };
             /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -37912,6 +38492,95 @@ export interface operations {
                 };
             };
             /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-proxy-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProxyCertificateCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseProxyCertificateObservation"];
+                };
+            };
+            /** @description Proxy refusal */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -37971,6 +38640,15 @@ export interface operations {
             };
             /** @description Proxy refusal */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -38050,6 +38728,95 @@ export interface operations {
                 };
             };
             /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-proxy-resolver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instanceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProxyResolverRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseProxyOperation"];
+                };
+            };
+            /** @description Proxy refusal */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -38109,6 +38876,15 @@ export interface operations {
             };
             /** @description Proxy refusal */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -38180,6 +38956,15 @@ export interface operations {
             };
             /** @description Proxy refusal */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProxyProblem"] | components["schemas"]["ModulesModuleProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Proxy refusal */
+            501: {
                 headers: {
                     [name: string]: unknown;
                 };

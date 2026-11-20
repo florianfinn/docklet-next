@@ -135,6 +135,14 @@ func (a *Agent) Query(ctx context.Context, q dto.Query) (dto.Operation, error) {
 		a.mu.Unlock()
 		return o, err
 	}
+	if deferredOperation(o) {
+		a.mu.Unlock()
+		if q.Registration != j.Registration || (o.InstanceID != "" && q.Instance.ID != o.InstanceID) {
+			return o, dto.Fail(dto.RegistrationChanged, 409)
+		}
+		o.InstanceID = q.Instance.ID
+		return o, nil
+	}
 	if q.Registration != j.Registration || q.Instance.ID != i.Request.Instance.ID {
 		a.mu.Unlock()
 		return o, dto.Fail(dto.RegistrationChanged, 409)
@@ -244,7 +252,7 @@ func (a *Agent) Settle(ctx context.Context) error {
 		return err
 	}
 	// Journal content never fails startup: each row settles on its own, and an
-	// undecodable row stays locked until it is queried or released as journal-lost.
+	// undecodable row stays locked and visible for explicit release.
 	for _, j := range rows {
 		i, _, err := decodeJournal(j)
 		if err == nil {
@@ -317,7 +325,10 @@ func (a *Agent) Release(ctx context.Context, q dto.ReleaseRequest) (dto.Operatio
 		return dto.Operation{}, err
 	}
 	i, o, err := decodeJournal(j)
-	if err != nil {
+	if err == nil && o.Kind == dto.ResolverOperation && o.State.Final() {
+		return o, nil
+	}
+	if err != nil || deferredOperation(o) {
 		return a.releaseUndecodable(ctx, j, q)
 	}
 	if q.Registration != j.Registration || q.Instance.ID != i.Request.Instance.ID {
@@ -350,11 +361,17 @@ func (a *Agent) Release(ctx context.Context, q dto.ReleaseRequest) (dto.Operatio
 // releaseUndecodable finishes a journal row whose content cannot be decoded,
 // without host effects, so its source lock is freed.
 func (a *Agent) releaseUndecodable(ctx context.Context, j Journal, q dto.ReleaseRequest) (dto.Operation, error) {
-	if q.Registration != j.Registration || a.active[q.ID] {
+	receipt := journalReceipt(j)
+	if q.Registration != j.Registration || (receipt.InstanceID != "" && q.Instance.ID != receipt.InstanceID) || a.active[q.ID] {
 		return dto.Operation{}, dto.Fail(dto.OperationConflict, 409)
 	}
+	if j.State == dto.Released && receipt.FinishedAt != nil {
+		kind, _ := payloadKind(j.Intent)
+		return deferredReceipt(receipt, kind), nil
+	}
+	kind, _ := payloadKind(j.Intent)
 	now := time.Now().UTC()
-	o := dto.Operation{ID: j.ID, InstanceID: q.Instance.ID, Generation: j.Generation, Registration: j.Registration, Digest: j.Digest, State: dto.Released, Phase: dto.Admitted, Reason: dto.JournalLost, ReleasedBy: q.Actor, Current: &q.Confirmed, CreatedAt: j.CreatedAt, FinishedAt: &now}
+	o := dto.Operation{ID: j.ID, InstanceID: q.Instance.ID, Generation: j.Generation, Registration: j.Registration, Digest: j.Digest, State: dto.Released, Phase: dto.Admitted, Kind: kind.Effective(), Reason: dto.UnknownOperationKind, ReleasedBy: q.Actor, Current: &q.Confirmed, CreatedAt: j.CreatedAt, FinishedAt: &now}
 	if j.Phase.Valid() {
 		o.Phase = j.Phase
 	}

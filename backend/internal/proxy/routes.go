@@ -67,6 +67,23 @@ type ReleaseInput struct {
 	}
 }
 
+type CertificateCheckInput struct {
+	InstanceInput
+	Body dto.CertificateCheckRequest
+}
+type HostCertificateCheckInput struct {
+	HostInput
+	Body dto.HostCertificateCheckRequest
+}
+type CreateResolverInput struct {
+	InstanceInput
+	Body dto.ResolverRequest
+}
+type HostResolverInput struct {
+	HostInput
+	Body dto.ResolverApplyRequest
+}
+
 func out[T any](v T, err error) (*handlerutil.Out[T], error) {
 	if err != nil {
 		if missing(err) {
@@ -84,6 +101,10 @@ func register[I, O any](api huma.API, m *Module, agent bool, id, method, p strin
 	middleware.RegisterWithPermission(api, huma.Operation{OperationID: id, Method: method, Path: p, Tags: []string{"Proxy"}, Security: handlerutil.DefaultOperationSecurity(), Middlewares: huma.Middlewares{middleware.ModuleGate(api, s, agent, features.Proxy), hubAdmissionResponse(s, agent)}}, authz.PermSettingsWrite, fn)
 }
 func (m *Module) RegisterRoutes(api huma.API, agent bool) {
+	if api.OpenAPI().Extensions == nil {
+		api.OpenAPI().Extensions = map[string]any{}
+	}
+	api.OpenAPI().Extensions["x-proxy-dns-providers"] = dto.DNSProviders()
 	const host = "/environments/{id}/modules/proxy"
 	register(api, m, agent, "discover-proxy-containers", "GET", host+"/discover", func(ctx context.Context, _ *HostInput) (*handlerutil.Out[[]dto.Discovery], error) {
 		return out(m.Runtime.Discover(ctx))
@@ -106,6 +127,31 @@ func (m *Module) RegisterRoutes(api huma.API, agent bool) {
 	register(api, m, agent, "release-host-proxy-operation", "POST", host+"/release", func(ctx context.Context, i *HostReleaseInput) (*handlerutil.Out[dto.Operation], error) {
 		return out(m.Agent.Release(ctx, i.Body))
 	})
+	register(api, m, agent, "create-host-proxy-resolver", "POST", host+"/resolvers", func(ctx context.Context, i *HostResolverInput) (*handlerutil.Out[dto.Operation], error) {
+		return out(m.Agent.CreateResolver(ctx, i.Body))
+	})
+	register(api, m, agent, "check-host-proxy-certificate", "POST", host+"/certificate-check", func(ctx context.Context, i *HostCertificateCheckInput) (*handlerutil.Out[dto.CertificateObservation], error) {
+		return out(m.Agent.CheckCertificate(ctx, i.Body))
+	})
+	if !agent {
+		register(api, m, false, "check-proxy-certificate", "POST", "/modules/proxy/instances/{instanceId}/certificate-check", func(ctx context.Context, i *CertificateCheckInput) (*handlerutil.Out[dto.CertificateObservation], error) {
+			if err := validateCertificateCheck(i.Body); err != nil {
+				return nil, err
+			}
+			return out(dto.CertificateObservation{}, m.stubInstance(ctx, i.InstanceID))
+		})
+		register(api, m, false, "create-proxy-resolver", "POST", "/modules/proxy/instances/{instanceId}/resolvers", func(ctx context.Context, i *CreateResolverInput) (*handlerutil.Out[dto.Operation], error) {
+			if err := i.Body.Validate(); err != nil {
+				return nil, err
+			}
+			return out(dto.Operation{}, m.stubInstance(ctx, i.InstanceID))
+		})
+	}
+	// Keep schemas reachable in the exported document even before an executor uses them.
+	api.OpenAPI().Extensions["x-proxy-persistence"] = map[string]any{
+		"resolver": api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.ResolverEnvelope](), true, ""),
+		"provider": api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.DNSProviderDefinition](), true, ""),
+	}
 	// Cleanup is S1's /environments/{id}/modules/{module}/data management
 	// route. It calls the registered hook even while the module is disabled.
 	if !agent {
@@ -155,7 +201,7 @@ func (m *Module) RegisterRoutes(api huma.API, agent bool) {
 			if op == nil || len(op.Tags) != 1 || op.Tags[0] != "Proxy" {
 				continue
 			}
-			for _, status := range []string{"403", "409", "422", "503"} {
+			for _, status := range []string{"403", "409", "422", "501", "503"} {
 				op.Responses[status] = &huma.Response{Description: "Proxy refusal", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{problem, moduleProblem, frameworkProblem}}}}}
 			}
 		}
