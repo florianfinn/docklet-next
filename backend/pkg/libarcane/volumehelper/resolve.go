@@ -20,7 +20,11 @@ import (
 	"github.com/moby/moby/client"
 )
 
-type Image struct{ Ref, ID string }
+// Image is the resolved local tools image; Pulled reports a registry pull.
+type Image struct {
+	Ref, ID string
+	Pulled  bool
+}
 type ImageUnavailable struct{ Err error }
 
 func (e *ImageUnavailable) Error() string { return "failed to resolve helper image: " + e.Err.Error() }
@@ -51,11 +55,14 @@ func registryUnavailable(message string) bool {
 	lower := strings.ToLower(message)
 	return strings.Contains(lower, "dial tcp") || strings.Contains(lower, "no such host")
 }
+
+// pullFailure classifies the daemon's answer locally and keeps only a neutral
+// cause: an authenticated pull's error text may reflect registry credentials.
 func pullFailure(err error) error {
 	if unavailable(err) {
-		return &ImageUnavailable{err}
+		return &ImageUnavailable{errors.New("helper image pull refused")}
 	}
-	return &DockerError{err}
+	return &DockerError{errors.New("helper image pull failed")}
 }
 
 // PullOptions supplies registry authentication for a reference; nil pulls anonymously.
@@ -80,7 +87,7 @@ func Resolve(ctx context.Context, cli *client.Client, configured string, auth Pu
 	options := client.ImagePullOptions{}
 	if auth != nil {
 		if options, err = auth(ctx, ref); err != nil {
-			return Image{}, &DockerError{fmt.Errorf("helper image credentials: %w", err)}
+			return Image{}, &DockerError{errors.New("helper image credentials unavailable")}
 		}
 	}
 	pullReader, err := cli.ImagePull(ctx, ref, options)
@@ -88,7 +95,7 @@ func Resolve(ctx context.Context, cli *client.Client, configured string, auth Pu
 		if ctx.Err() != nil {
 			return Image{}, &DockerError{ctx.Err()}
 		}
-		return Image{}, pullFailure(fmt.Errorf("failed to resolve helper image: %w", err))
+		return Image{}, pullFailure(err)
 	}
 	if pullReader == nil {
 		return Image{}, &DockerError{errors.New("helper image pull returned no response body")}
@@ -131,5 +138,5 @@ func Resolve(ctx context.Context, cli *client.Client, configured string, auth Pu
 	if err != nil {
 		return Image{}, &DockerError{fmt.Errorf("inspect pulled helper image: %w", err)}
 	}
-	return Image{Ref: ref, ID: inspected.ID}, nil
+	return Image{Ref: ref, ID: inspected.ID, Pulled: true}, nil
 }

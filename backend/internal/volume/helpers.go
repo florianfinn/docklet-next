@@ -133,7 +133,17 @@ func (s *VolumeService) getVolumeHelperImageInternal(ctx context.Context, docker
 	}
 
 	image, err := volumehelper.Resolve(ctx, dockerClient, s.toolsImageInternal(), s.HelperPullOptions)
+	if err == nil && image.Pulled {
+		s.RecordHelperPull(ctx, image.Ref)
+	}
 	return image.Ref, err
+}
+
+// RecordHelperPull keeps the image service's pull bookkeeping for tools pulls.
+func (s *VolumeService) RecordHelperPull(ctx context.Context, ref string) {
+	if s.imageService != nil {
+		s.imageService.RecordHelperPull(ctx, ref)
+	}
 }
 
 // HelperPullOptions applies the stored registry credentials to tools image pulls.

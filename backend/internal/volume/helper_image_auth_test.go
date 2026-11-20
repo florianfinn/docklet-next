@@ -61,12 +61,23 @@ func TestHelperImagePullUsesStoredRegistryCredentials(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	cli := newVolumeServiceTestDockerClientInternal(t, server)
+	registries := registry.NewContainerRegistryService(db, nil, kv.NewKVService(db), nil)
 	svc := &VolumeService{
 		dockerService: docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(cli),
-		imageService:  image.NewImageService(db, nil, registry.NewContainerRegistryService(db, nil, kv.NewKVService(db), nil), nil, nil, nil, nil, nil),
+		imageService:  image.NewImageService(db, nil, registries, nil, nil, nil, nil, nil),
 	}
 	ref, err := svc.getVolumeHelperImageInternal(t.Context(), cli)
 	require.NoError(t, err)
 	require.NotEmpty(t, ref)
 	require.NotEmpty(t, auth.Load())
+	// The pull is booked like PullImage did; a local hit books nothing.
+	usage, err := registries.GetRegistryPullUsage(t.Context())
+	require.NoError(t, err)
+	require.Len(t, usage.Registries, 1)
+	require.EqualValues(t, 1, usage.Registries[0].ObservedPulls)
+	_, err = svc.getVolumeHelperImageInternal(t.Context(), cli)
+	require.NoError(t, err)
+	usage, err = registries.GetRegistryPullUsage(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, usage.Registries[0].ObservedPulls)
 }

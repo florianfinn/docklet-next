@@ -111,8 +111,9 @@ func TestResolveHelperImage_ReturnsPullErrorWithoutRuntimeFallback(t *testing.T)
 
 	require.Error(t, err)
 	require.Empty(t, image)
-	require.ErrorContains(t, err, "failed to resolve helper image")
-	require.ErrorContains(t, err, "pull failed")
+	// The daemon's text is not kept (it may reflect registry credentials).
+	require.ErrorContains(t, err, "helper image pull failed")
+	require.NotContains(t, err.Error(), "500")
 }
 
 func newTestDockerClientInternal(t *testing.T, server *httptest.Server) *client.Client {
