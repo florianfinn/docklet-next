@@ -15,6 +15,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -88,6 +89,9 @@ func NewRuntimeSender(target RuntimeRemoteTarget, access remenv.AgentAccessCheck
 	return &RuntimeSender{target: target, access: access, client: &copyClient, tunnels: tunnels}, nil
 }
 func (s *RuntimeSender) Execute(ctx context.Context, envelope activitytypes.RuntimeExecutionEnvelope) (activitytypes.RuntimeExecutionOutcome, error) {
+	if s.target.AgentContractVersion < activitytypes.RuntimePeerContractVersion && envelope.Options.AcknowledgedUncertainty != "" {
+		return activitytypes.RuntimeExecutionOutcome{}, remenv.ErrAgentUpdateRequired
+	}
 	body, err := json.Marshal(envelope, json.FormatNilSliceAsNull(true))
 	if err != nil {
 		return activitytypes.RuntimeExecutionOutcome{}, ErrRuntimeTransport
@@ -148,7 +152,7 @@ func (s *RuntimeSender) roundTrip(ctx context.Context, method, path, query strin
 	if accessCtx.Err() != nil {
 		return 0, nil, ErrRuntimeTransport
 	}
-	headers := map[string]string{"Content-Type": "application/json", "Accept": "application/json", remenv.HeaderAgentToken: s.target.Token}
+	headers := map[string]string{"Content-Type": "application/json", "Accept": "application/json", remenv.HeaderAgentToken: s.target.Token, activitytypes.RuntimeHubContractHeader: strconv.Itoa(contract.AgentHubVersion)}
 	var status int
 	var contentType string
 	var response []byte
@@ -231,10 +235,19 @@ func (s *RuntimeSender) Register(ctx context.Context, registration activitytypes
 }
 func (s *RuntimeSender) Resolve(ctx context.Context, request activitytypes.RuntimeTargetRequest) (activitytypes.RuntimeTargetMetadata, error) {
 	var result activitytypes.RuntimeTargetMetadata
+	if request.AcknowledgedUncertainty != "" && s.target.AgentContractVersion < activitytypes.RuntimePeerContractVersion {
+		return result, remenv.ErrAgentUpdateRequired
+	}
 	err := s.metadata(ctx, "/api/environments/0/runtime-target", request, &result)
 	if err == nil && (result.Target.Kind != request.Target.Kind || !runtimeTargetValidInternal(result.Target) ||
 		(result.Target.ID != request.Target.ID && (request.Target.Kind != "container" || runtimeFullContainerID(request.Target.ID) || !runtimeFullContainerID(result.Target.ID)))) {
 		err = ErrRuntimeTransport
+	}
+	if err == nil && result.PeerOverrides != nil {
+		if request.AcknowledgedUncertainty == "" || imageDTO.SafeRuntimePeerOverrides(result.PeerOverrides) == nil {
+			return activitytypes.RuntimeTargetMetadata{}, ErrRuntimeTransport
+		}
+		result.PeerOverrides = imageDTO.SafeRuntimePeerOverrides(result.PeerOverrides)
 	}
 	return result, err
 }
@@ -253,6 +266,9 @@ func (s *RuntimeSender) metadata(ctx context.Context, path string, value, result
 			if imageDTO.ValidProblemCode(problem.Problem.Code) {
 				refusal := imageDTO.Failure(problem.Problem.Code, status)
 				refusal.Problem.Blocker = imageDTO.SafeRuntimeIdentityBlocker(problem.Problem.Code, problem.Problem.Blocker)
+				if s.target.AgentContractVersion < activitytypes.RuntimePeerContractVersion {
+					refusal = runtimePeerLegacyProblem(refusal)
+				}
 				return refusal
 			}
 		}

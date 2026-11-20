@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps. M24 S6: observed recovery and update UI follow-ups.
 
+import { runtimePeerAudit } from "./runtime-peer-audit";
 import { operationReasonKey } from "../operation-reason";
 import type { components } from "@/api/generated/schema";
 import type { ActionKind, ActionStatus, DeployStepKey, EventKind, EventLevel, OutputStream, StepState } from "@/domain/model";
@@ -269,7 +270,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
         : job && JOB_STEPS.has(step.name) ? { code: `activity.jobStep.${step.name}`, params: {} } : coded(step.code, step.name),
       startedAt: step.startedAt, finishedAt: step.endedAt,
     })),
-    log: detail.messages?.length ? detail.messages.map((item) => jobSummary(item.message, item.code) ?? coded(item.code, item.message)) : run.latestMessage ? [jobSummary(run.latestMessage) ?? coded(run.messageCode, run.latestMessage)] : [],
+    log: detail.messages?.length ? detail.messages.map((item) => runtimePeerAudit(item.code, item.payload) ?? jobSummary(item.message, item.code) ?? coded(item.code, item.message)) : run.latestMessage ? [jobSummary(run.latestMessage) ?? coded(run.messageCode, run.latestMessage)] : [],
     output,
     outputTruncated: detail.outputTruncated,
   }, { summary: { stepsAvailable: true } });

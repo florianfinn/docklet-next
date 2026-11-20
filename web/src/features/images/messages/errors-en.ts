@@ -4,10 +4,12 @@
 // License: Apache-2.0
 // Deviations: Original production image and registry UI implementation for issue #230; M17 shared history and preference reason catalogue keys. M24 recovery evidence, validation and reason contracts.
 
+import { enCommon } from "@/shared/messages/en";
 import { enBackend } from "@/data/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
 
 export const enImageErrors = {
+ "runtime_invalid-acknowledgement": enCommon.runtimePeers.invalid,
   "runtime_stack-blocker": "Runtime actions are blocked by stack “{name}”: {reason}. Fix that stack to continue.",
   "runtime_archived-stack-blocker": "Runtime actions are blocked by archived stack “{name}”: {reason}. Fix that stack to continue.",
   "runtime_blocker-selection": "its Compose selection is unsupported",

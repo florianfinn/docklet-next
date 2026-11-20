@@ -15,6 +15,10 @@ import (
 // PrepareRuntimeTarget accepts the legacy container lookup vocabulary only at
 // the trusted compatibility boundary; Execute and receiver Execute stay canonical.
 func (a *RuntimeServiceAdapter) PrepareRuntimeTarget(ctx context.Context, target RuntimeTarget) (RuntimeResolvedTarget, error) {
+	return a.PrepareAcknowledgedRuntimeTarget(ctx, target, "")
+}
+
+func (a *RuntimeServiceAdapter) PrepareAcknowledgedRuntimeTarget(ctx context.Context, target RuntimeTarget, digest string) (RuntimeResolvedTarget, error) {
 	if target.Kind == "container" && !runtimeFullContainerID(target.ID) {
 		if a == nil || a.containers == nil {
 			return RuntimeResolvedTarget{}, errors.New("runtime services unavailable")
@@ -28,7 +32,7 @@ func (a *RuntimeServiceAdapter) PrepareRuntimeTarget(ctx context.Context, target
 		}
 		target.ID = inspected.ID
 	}
-	return a.ResolveRuntimeTarget(ctx, target)
+	return a.ResolveAcknowledgedRuntimeTarget(ctx, target, digest)
 }
 
 func runtimeLegacyTargetMatches(request RuntimeTarget, row *RuntimeReceipt) bool {

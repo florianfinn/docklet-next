@@ -71,19 +71,19 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 		identity, err := sender.Register(ctx, activitytypes.RuntimeRegistration{ManagerID: settings.GetSettingsConfig().InstanceID.Value, RegistrationID: id})
 		return sender, identity, err
 	}
-	resolve := func(ctx context.Context, id string, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
+	resolve := func(ctx context.Context, id string, target activity.RuntimeTarget, digest string) (activity.RuntimeResolvedTarget, error) {
 		if id == "0" {
-			return adapter.ResolveRuntimeTarget(ctx, target)
+			return adapter.ResolveAcknowledgedRuntimeTarget(ctx, target, digest)
 		}
 		sender, identity, err := remoteIdentity(ctx, id)
 		if err != nil {
 			return activity.RuntimeResolvedTarget{}, err
 		}
-		metadata, err := sender.Resolve(ctx, activitytypes.RuntimeTargetRequest{Registration: identity, Target: target})
-		return activity.RuntimeResolvedTarget{Target: metadata.Target, ComposeManaged: metadata.ComposeManaged, Origin: metadata.Origin, ComposeProjectLabel: metadata.ComposeProjectLabel, Protected: metadata.Protected}, err
+		metadata, err := sender.Resolve(ctx, activitytypes.RuntimeTargetRequest{Registration: identity, Target: target, AcknowledgedUncertainty: digest})
+		return activity.RuntimeResolvedTarget{PeerOverrides: metadata.PeerOverrides, Target: metadata.Target, ComposeManaged: metadata.ComposeManaged, Origin: metadata.Origin, ComposeProjectLabel: metadata.ComposeProjectLabel, Protected: metadata.Protected}, err
 	}
-	runtime = activity.NewRuntimeService(service, activity.RuntimeResolverFunc(func(ctx context.Context, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
-		return resolve(ctx, activity.RuntimeEnvironmentFromContext(ctx), target)
+	runtime = activity.NewRuntimeService(service, activity.RuntimeAcknowledgedResolverFunc(func(ctx context.Context, target activity.RuntimeTarget, digest string) (activity.RuntimeResolvedTarget, error) {
+		return resolve(ctx, activity.RuntimeEnvironmentFromContext(ctx), target, digest)
 	}))
 	generation, err := runtime.InitializeGeneration(ctx)
 	if err != nil {
@@ -107,7 +107,7 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 	if err := runtime.ConfigureLocal(activity.RuntimeLocalConfig{ApplicationContext: runtimeCtx, Store: local, Executor: adapter}); err != nil {
 		return runtimeResult{}, err
 	}
-	receiver, err := activity.NewRuntimeReceiver(runtime, activity.RuntimeResolverFunc(adapter.PrepareRuntimeTarget))
+	receiver, err := activity.NewRuntimeReceiver(runtime, activity.RuntimeAcknowledgedResolverFunc(adapter.PrepareAcknowledgedRuntimeTarget))
 	if err != nil {
 		return runtimeResult{}, err
 	}
@@ -117,17 +117,26 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 	if err != nil {
 		return runtimeResult{}, err
 	}
+	prepareLifecycle := func(ctx context.Context, id string, target activity.RuntimeTarget, store activity.RuntimeStoreBinding, request updaterDTO.LifecycleRequest, digest string) (*updaterDTO.LifecycleIntent, error) {
+		if id == "0" {
+			return adapter.PrepareImageLifecycle(ctx, target.ID, store.RegistrationID, request)
+		}
+		sender, identity, err := remoteIdentity(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		metadata, err := sender.Resolve(ctx, activitytypes.RuntimeTargetRequest{Registration: identity, Target: target, Lifecycle: &request, AcknowledgedUncertainty: digest})
+		return metadata.Lifecycle, err
+	}
 	httpService, err := activity.NewRuntimeHTTPService(runtime, activity.RuntimeHTTPPorts{ApplicationContext: runtimeCtx, Agent: cfg.AgentMode, GuardContainer: containers.GuardRuntimeOrigin, InvalidateInventory: environments.ReadSnapshots().Forget,
-		PrepareLifecycle: func(ctx context.Context, id string, target activity.RuntimeTarget, store activity.RuntimeStoreBinding, request updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error) {
+		PrepareAcknowledgedTarget: func(ctx context.Context, id string, target activity.RuntimeTarget, digest string) (activity.RuntimeResolvedTarget, error) {
 			if id == "0" {
-				return adapter.PrepareImageLifecycle(ctx, target.ID, store.RegistrationID, request)
+				return adapter.PrepareAcknowledgedRuntimeTarget(ctx, target, digest)
 			}
-			sender, identity, err := remoteIdentity(ctx, id)
-			if err != nil {
-				return nil, err
-			}
-			metadata, err := sender.Resolve(ctx, activitytypes.RuntimeTargetRequest{Registration: identity, Target: target, Lifecycle: &request})
-			return metadata.Lifecycle, err
+			return resolve(ctx, id, target, digest)
+		}, PrepareAcknowledgedLifecycle: prepareLifecycle,
+		PrepareLifecycle: func(ctx context.Context, id string, target activity.RuntimeTarget, store activity.RuntimeStoreBinding, request updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error) {
+			return prepareLifecycle(ctx, id, target, store, request, "")
 		}, Store: func(ctx context.Context, id string) (activity.RuntimeStoreBinding, error) {
 			if id == "0" {
 				return runtime.LocalStore(), nil
@@ -141,7 +150,7 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 			if id == "0" {
 				return adapter.PrepareRuntimeTarget(ctx, target)
 			}
-			return resolve(ctx, id, target)
+			return resolve(ctx, id, target, "")
 		}})
 	if err != nil {
 		return runtimeResult{}, err

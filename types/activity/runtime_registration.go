@@ -8,6 +8,7 @@ package activity
 
 import (
 	"github.com/florianfinn/docklet-next/types/container"
+	"github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/updater"
 )
 
@@ -19,16 +20,18 @@ type RuntimeRegistration struct {
 }
 
 type RuntimeTargetRequest struct {
-	Lifecycle    *updater.LifecycleRequest `json:"lifecycle,omitempty"`
-	Registration RuntimeExecutorIdentity   `json:"registration"`
-	Target       RuntimeTarget             `json:"target"`
+	AcknowledgedUncertainty string                    `json:"acknowledgedUncertainty,omitempty"`
+	Lifecycle               *updater.LifecycleRequest `json:"lifecycle,omitempty"`
+	Registration            RuntimeExecutorIdentity   `json:"registration"`
+	Target                  RuntimeTarget             `json:"target"`
 }
 
 type RuntimeTargetMetadata struct {
-	Origin              *container.OriginFields  `json:"origin,omitempty"`
-	ComposeProjectLabel bool                     `json:"composeProjectLabel,omitempty"`
-	Protected           bool                     `json:"protected,omitempty"`
-	Lifecycle           *updater.LifecycleIntent `json:"lifecycle,omitempty"`
-	Target              RuntimeTarget            `json:"target"`
-	ComposeManaged      bool                     `json:"composeManaged"`
+	PeerOverrides       *image.RuntimePeerOverrides `json:"peerOverrides,omitempty"`
+	Origin              *container.OriginFields     `json:"origin,omitempty"`
+	ComposeProjectLabel bool                        `json:"composeProjectLabel,omitempty"`
+	Protected           bool                        `json:"protected,omitempty"`
+	Lifecycle           *updater.LifecycleIntent    `json:"lifecycle,omitempty"`
+	Target              RuntimeTarget               `json:"target"`
+	ComposeManaged      bool                        `json:"composeManaged"`
 }

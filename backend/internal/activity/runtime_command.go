@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
@@ -59,6 +60,7 @@ type RuntimeCommand struct {
 	Operation          RuntimeOperation
 	Target             RuntimeTarget
 	Options            RuntimeOptions
+	PeerOverrides      *imageDTO.RuntimePeerOverrides
 }
 
 type runtimeCanonicalCommandInternal struct {
@@ -111,6 +113,10 @@ func runtimeCanonicalizeExecutorInternal(command RuntimeCommand, claimedDigest s
 // Both intakes use exactly this validator, owned copy and fixed-array encoder.
 // Store/actor validation is structural; it cannot authenticate a wire identity.
 func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonicalCommandInternal, error) {
+	acknowledgement, ackErr := runtimeAcknowledgement(command.Options.AcknowledgedUncertainty)
+	if ackErr != nil {
+		return runtimeCanonicalCommandInternal{}, ackErr
+	}
 	invalid := func() (runtimeCanonicalCommandInternal, error) {
 		return runtimeCanonicalCommandInternal{}, errRuntimeInvalidInternal
 	}
@@ -314,6 +320,7 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			return invalid()
 		}
 	}
+	command.Options.AcknowledgedUncertainty = acknowledgement
 	// Arrays give a fixed-field, length-delimited encoding, independent of object
 	// order. The nullable parent is explicit; display and transport are excluded.
 	// Text validation rejects invalid UTF-8 rather than allowing JSON replacement
@@ -333,6 +340,9 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			services = []string{}
 		}
 		options = services
+	}
+	if acknowledgement != "" {
+		options = [2]any{options, acknowledgement}
 	}
 	optionsDigest := runtimeDigestInternal(options)
 	digest := runtimeDigestInternal([5]any{string(command.Operation), command.Target.Kind, command.Target.ID, options, command.Target.ParentProjectID})

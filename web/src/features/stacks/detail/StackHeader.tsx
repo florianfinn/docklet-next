@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #27 production text, source errors and capability boundaries. M10 #231: preserve progress text, scoped controls and localized timestamps. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M24 S6: observed recovery and update UI follow-ups.
 
+import { useStackDefinitionHint } from "@/shared/hooks/use-stack-definition-hint";
 import { useIsUser } from "@/data/use-principal";
 import { useStackCapability } from "@/shared/hooks/use-stack-capability";
 import { useCapability } from "@/data/use-capability";
@@ -38,6 +39,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const t = useTranslations("stacks.detail");
   const dt = useAdapterText();
   const cmd = useStackCommands();
+ const definitionHint = useStackDefinitionHint(stack);
   const command = useStackCapability(stack.id, stack.hostId);
   const user = useIsUser();
   const redeploy = useCapability("redeployStack", { kind: "stack", id: stack.id });
@@ -123,7 +125,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
           </div>
         </div>
       </div>
-      {stack.definitionHint === "definition-invalid" && <Alert><TriangleAlert /><AlertDescription>{stopText("definitionInvalid")}</AlertDescription></Alert>}
+      {stack.definitionHint === "definition-invalid" && <Alert><TriangleAlert /><AlertDescription>{definitionHint}</AlertDescription></Alert>}
       {host?.status === "offline" && (
         <Alert className="border-orange/30 bg-orange/8 text-orange">
           <TriangleAlert />

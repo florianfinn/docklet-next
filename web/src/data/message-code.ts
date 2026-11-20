@@ -42,7 +42,13 @@ export function renderMessage(message: MessageCode, locale: AppLocale): string {
     values[key] = typeof value === "object" ? renderMessage(value, locale) : value;
   }
   const translate = translators[locale] as unknown as (key: string, values: Record<string, string | number>) => string;
-  const key = guardedKey ?? message.code;
+  if (message.code === "runtime.peer-acknowledged") {
+ const count = Number(values.count);
+ const peers = Array.from({ length: Math.min(count,16) }, (_,i) => values[`peer${i}`]).filter((v): v is string => typeof v === "string");
+ values.peers = peers.join(", ");
+ if (count > 16) values.peers += `; ${translate("common.runtimePeers.more", { count: count - 16 })}`;
+ }
+ const key = guardedKey ?? message.code;
   if (!guardedKey && !translators[locale].has(key as never)) return message.sourceText ?? message.code;
   try {
     return translate(key, values);

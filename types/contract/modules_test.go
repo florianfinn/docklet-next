@@ -20,17 +20,17 @@ import (
 )
 
 func TestModuleV19Foundation(t *testing.T) {
-	require.Equal(t, 19, AgentHubVersion)
+	require.Equal(t, 20, AgentHubVersion)
 	require.Equal(t, 18, MinimumAgentVersion)
 	require.True(t, AgentCompatible(18, AgentHubV18Fingerprint))
 	require.False(t, ModuleCompatible(18, AgentHubFingerprint))
 	require.False(t, ModuleCompatible(19, "different"))
-	require.True(t, ModuleCompatible(19, AgentHubFingerprint))
+	require.True(t, ModuleCompatible(20, AgentHubFingerprint))
 	legacy, err := os.ReadFile("testdata/agent-hub-v18.json")
 	require.NoError(t, err)
 	sum := sha256.Sum256(legacy)
 	require.Equal(t, AgentHubV18Fingerprint, hex.EncodeToString(sum[:]))
-	raw, err := os.ReadFile("testdata/agent-hub-v19.json")
+	raw, err := os.ReadFile("testdata/agent-hub-v20.json")
 	require.NoError(t, err)
 	var fixture struct {
 		Modules struct {

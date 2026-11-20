@@ -26,7 +26,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/base"
 	containerDTO "github.com/florianfinn/docklet-next/types/container"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
-	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 )
 
@@ -63,17 +62,20 @@ func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation 
 		middleware.RegisterWithPermission(api, op, runtimePermissionInternal(operation), func(ctx context.Context, input *runtimeProjectHTTPInput) (*huma.StreamResponse, error) {
 			options := RuntimeOptions{}
 			if operation == RuntimeDeployProject || operation == RuntimeRedeployProject {
-				var deploy projecttypes.DeployOptions
+				var deploy activitytypes.RuntimeDeployAdmissionRequest
 				if len(bytes.TrimSpace(input.RawBody)) != 0 && !bytes.Equal(bytes.TrimSpace(input.RawBody), []byte("null")) {
 					if err := runtimeDecodeLegacyBody(input.RawBody, &deploy); err != nil {
 						return nil, huma.Error400BadRequest("Invalid deployment options")
 					}
 				}
-				options.Deploy = &deploy
+				options.Deploy = &deploy.DeployOptions
+				options.AcknowledgedUncertainty = deploy.AcknowledgedUncertainty
 			} else {
-				if len(bytes.TrimSpace(input.RawBody)) != 0 {
-					return nil, huma.Error400BadRequest("Runtime command has no request body")
+				var request activitytypes.RuntimePeerAdmissionRequest
+				if len(bytes.TrimSpace(input.RawBody)) != 0 && runtimeDecodeLegacyBody(input.RawBody, &request) != nil {
+					return nil, huma.Error400BadRequest("Invalid runtime acknowledgement")
 				}
+				options.AcknowledgedUncertainty = request.AcknowledgedUncertainty
 				if operation == RuntimeRestartProject {
 					options.RestartServices = input.Services
 				}
@@ -103,6 +105,12 @@ func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation 
 					return nil, huma.Error400BadRequest("Invalid verified image update request")
 				}
 				options.ContainerImage = &updaterDTO.ContainerImageRequest{ExpectedManifest: request.ExpectedManifest, AutoRestore: request.AutoRestore}
+			} else if operation == RuntimeStartContainer || operation == RuntimeStopContainer || operation == RuntimeRestartContainer {
+				var request activitytypes.RuntimePeerAdmissionRequest
+				if len(bytes.TrimSpace(input.RawBody)) != 0 && runtimeDecodeLegacyBody(input.RawBody, &request) != nil {
+					return nil, huma.Error400BadRequest("Invalid runtime acknowledgement")
+				}
+				options.AcknowledgedUncertainty = request.AcknowledgedUncertainty
 			} else if len(bytes.TrimSpace(input.RawBody)) != 0 {
 				return nil, huma.Error400BadRequest("Runtime command has no request body")
 			}

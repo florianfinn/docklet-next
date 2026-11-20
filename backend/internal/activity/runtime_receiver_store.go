@@ -83,6 +83,9 @@ func runtimeReceiveTxInternal(tx *gorm.DB, now time.Time, c runtimeCanonicalComm
 		Message: string(activitytypes.CodeRunStarted), Payload: database.JSON{"actorId": actor.ID, "operation": string(c.command.Operation)}}); err != nil {
 		return nil, err
 	}
+	if err := runtimePeerEvidenceTx(tx, now, row.RunID, c.command.Options.AcknowledgedUncertainty, c.command.PeerOverrides); err != nil {
+		return nil, err
+	}
 	// Reuse the accepted writer, including its idempotent worker phase contract.
 	accepted, err := runtimeLocalAcceptTxInternal(tx, now, id)
 	if err != nil {

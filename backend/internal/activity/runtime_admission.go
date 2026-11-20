@@ -43,7 +43,7 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	target := canonical.command.Target
 	// Give the resolver a separate copy of nullable fields as well.
 	target.ParentProjectID, target.Name = copyPtrInternal(target.ParentProjectID), copyPtrInternal(target.Name)
-	resolved, err := s.resolver.ResolveRuntimeTarget(context.WithValue(ctx, runtimeEnvironmentContextKey{}, command.Store.EnvironmentID), target)
+	resolved, err := resolveRuntimeAcknowledged(context.WithValue(ctx, runtimeEnvironmentContextKey{}, command.Store.EnvironmentID), s.resolver, target, canonical.command.Options.AcknowledgedUncertainty)
 	if err != nil {
 		return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
 	}
@@ -68,6 +68,7 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	}
 	canonical.command.Target.Name = copyPtrInternal(resolved.Target.Name)
 	canonical.replacementRunID = resolved.ReplacementRunID
+	canonical.command.PeerOverrides = resolved.PeerOverrides
 	result, _, err = s.admissionPassInternal(ctx, canonical, true)
 	return result, err
 }
@@ -145,6 +146,9 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 					OperationID: string(c.command.Operation), TargetKind: target.Kind, TargetID: target.ID,
 					TargetName: target.Name, ParentProjectID: target.ParentProjectID, GateScope: c.gateScope, GateKey: c.gateKey})
 				if err != nil {
+					return err
+				}
+				if err := runtimePeerEvidenceTx(tx, now, row.RunID, c.command.Options.AcknowledgedUncertainty, c.command.PeerOverrides); err != nil {
 					return err
 				}
 				if c.command.Operation == RuntimeRecreateContainer {

@@ -13,10 +13,10 @@ import (
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
 	containerDTO "github.com/florianfinn/docklet-next/types/container"
-	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 func runtimeHTTPContract(api huma.API, operation RuntimeOperation, op *huma.Operation) {
@@ -51,12 +51,14 @@ func runtimeHTTPContract(api huma.API, operation RuntimeOperation, op *huma.Oper
 func runtimeHTTPBodyContract(api huma.API, operation RuntimeOperation, op *huma.Operation) {
 	op.RequestBody.Required = false
 	if operation == RuntimeDeployProject || operation == RuntimeRedeployProject {
-		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[projecttypes.DeployOptions](), true, "")}}
+		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[activitytypes.RuntimeDeployAdmissionRequest](), true, "")}}
 	} else if operation == RuntimeRecreateContainer {
 		op.RequestBody.Required = true
 		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[containerDTO.RecreateRequest](), true, "")}}
 	} else if operation == RuntimeUpdateContainer {
 		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[updaterDTO.VerifiedImageRequest](), true, "")}}
+	} else if strings.HasSuffix(string(operation), "project") || operation == RuntimeStartContainer || operation == RuntimeStopContainer || operation == RuntimeRestartContainer {
+		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[activitytypes.RuntimePeerAdmissionRequest](), true, "")}}
 	} else {
 		op.RequestBody.Content = map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{Not: &huma.Schema{}}}}
 	}

@@ -45,7 +45,7 @@ func (s *RuntimeService) retainedImageIntent(ctx context.Context, run string, c 
 	if json.Unmarshal([]byte(row.Payload), &intent) != nil || c.Options.Lifecycle == nil || !c.Options.Lifecycle.Request.Equal(intent.Request) {
 		return c, &runtimeConflictInternal{}
 	}
-	c.Options = RuntimeOptions{Lifecycle: &intent}
+	c.Options = RuntimeOptions{Lifecycle: &intent, AcknowledgedUncertainty: c.Options.AcknowledgedUncertainty}
 	return c, nil
 }
 

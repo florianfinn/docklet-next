@@ -13,6 +13,8 @@ const HOST_CREDENTIAL_MESSAGE = "environment.api_key.regenerated" satisfies Cata
 const HOST_CREDENTIAL_EVENT_TITLE = "runMessages.events.labels.environment_host_key_regenerated" satisfies CatalogueKey;
 
 export const MESSAGE_CODE_KEYS = {
+ "runtime.peer-acknowledged": "common.runtimePeers.audit",
+ "runtime.invalid-acknowledgement": "common.runtimePeers.invalid",
 "proxy.operation.released":"runMessages.events.labels.proxy_operation_released",
   "update.self-failed": "images.errors.update_self-failed",
   "update.outcome-unknown": "images.errors.update_outcome-unknown",

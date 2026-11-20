@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	containerDTO "github.com/florianfinn/docklet-next/types/container"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	mobycontainer "github.com/moby/moby/api/types/container"
@@ -56,6 +57,10 @@ var _ RuntimeExecutor = (*RuntimeServiceAdapter)(nil)
 var _ RuntimeTargetResolver = (*RuntimeServiceAdapter)(nil)
 
 func (a *RuntimeServiceAdapter) ResolveRuntimeTarget(ctx context.Context, target RuntimeTarget) (RuntimeResolvedTarget, error) {
+	return a.ResolveAcknowledgedRuntimeTarget(ctx, target, "")
+}
+
+func (a *RuntimeServiceAdapter) ResolveAcknowledgedRuntimeTarget(ctx context.Context, target RuntimeTarget, digest string) (RuntimeResolvedTarget, error) {
 	if a == nil {
 		return RuntimeResolvedTarget{}, errors.New("runtime services unavailable")
 	}
@@ -64,14 +69,14 @@ func (a *RuntimeServiceAdapter) ResolveRuntimeTarget(ctx context.Context, target
 		if a.projects == nil || target.ID == "" || target.ParentProjectID != nil {
 			return RuntimeResolvedTarget{}, errors.New("invalid runtime stack target")
 		}
-		ref, found, err := a.projects.ResolveRuntimeProjectIdentity(ctx, target.ID, "")
+		ref, found, used, err := a.resolveProjectIdentity(ctx, target.ID, "", digest)
 		if err != nil {
 			return RuntimeResolvedTarget{}, err
 		}
 		if !found || ref.ID != target.ID {
 			return RuntimeResolvedTarget{}, errors.New("runtime stack identity unavailable")
 		}
-		return RuntimeResolvedTarget{Target: RuntimeTarget{Kind: "stack", ID: ref.ID, Name: &ref.Name}}, nil
+		return RuntimeResolvedTarget{Target: RuntimeTarget{Kind: "stack", ID: ref.ID, Name: &ref.Name}, PeerOverrides: used}, nil
 	case "container":
 		if a.containers == nil || a.projects == nil || !runtimeFullContainerID(target.ID) {
 			return RuntimeResolvedTarget{}, errors.New("invalid canonical container ID")
@@ -93,7 +98,8 @@ func (a *RuntimeServiceAdapter) ResolveRuntimeTarget(ctx context.Context, target
 		if composeName, managed := inspect.Config.Labels["com.docker.compose.project"]; managed {
 			resolved.ComposeManaged = true
 			if composeName != "" {
-				ref, found, err := a.projects.ResolveRuntimeProjectIdentity(ctx, "", composeName)
+				ref, found, used, err := a.resolveProjectIdentity(ctx, "", composeName, digest)
+				resolved.PeerOverrides = used
 				if err != nil {
 					return RuntimeResolvedTarget{}, err
 				}
@@ -148,7 +154,7 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 		}
 		return port.ExecuteContainerImage(ctx, command.Target.ID, *command.Target.Name, command.Operation == RuntimeRestoreContainerImage, command.Actor)
 	}
-	resolved, err := a.ResolveRuntimeTarget(ctx, command.Target)
+	resolved, err := a.ResolveAcknowledgedRuntimeTarget(ctx, command.Target, command.Options.AcknowledgedUncertainty)
 	if err != nil {
 		return refuse("runtime.target-unavailable", 503, err)
 	}
@@ -167,6 +173,11 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if sink, ok := ctx.Value(runtimePeerSinkKey{}).(func(*imageDTO.RuntimePeerOverrides) error); ok {
+		if err := sink(resolved.PeerOverrides); err != nil {
+			return err
+		}
 	}
 	ctx = updaterDTO.WithExecutionIdentity(ctx, updaterDTO.ExecutionIdentity{RunID: command.ProposedRunID, RegistrationID: command.Store.RegistrationID})
 	ctx = context.WithValue(ctx, dockertypes.ProgressWriterKey{}, output)
@@ -267,4 +278,17 @@ func (a *RuntimeServiceAdapter) prepareDeployPoint(ctx context.Context, command 
 		port.PrepareDeployPoint(merged, command.Target.ID, command.ProposedRunID, command.Store.RegistrationID)
 	}
 	return merged
+}
+
+func (a *RuntimeServiceAdapter) resolveProjectIdentity(ctx context.Context, id, name, digest string) (projecttypes.Reference, bool, *imageDTO.RuntimePeerOverrides, error) {
+	if port, ok := a.projects.(interface {
+		ResolveRuntimeProjectIdentityAcknowledged(context.Context, string, string, string) (projecttypes.Reference, bool, *imageDTO.RuntimePeerOverrides, error)
+	}); ok {
+		return port.ResolveRuntimeProjectIdentityAcknowledged(ctx, id, name, digest)
+	}
+	if digest != "" {
+		return projecttypes.Reference{}, false, nil, errRuntimeInvalidInternal
+	}
+	ref, found, err := a.projects.ResolveRuntimeProjectIdentity(ctx, id, name)
+	return ref, found, nil, err
 }

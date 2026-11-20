@@ -27,8 +27,10 @@ export function useCommandError() {
  if (error instanceof SettingsProblemError) return settingsErrorMessage(error, all);
     if (error instanceof AdapterOutcomeError) {
       const outcome = error.outcome;
+ if (outcome.kind === "error" && outcome.code === "runtime.invalid-acknowledgement") return all("common.runtimePeers.invalid");
       if (outcome.kind === "error" && outcome.code === "runtime.target-unavailable" && outcome.blocker) {
         const blocker = outcome.blocker;
+ if (blocker.reason === "compose.duplicate" || blocker.reason === "compose.env-file-missing") return all("common.runtimePeers.duplicate", { name: blocker.name });
         const reason = all(blocker.reason === "compose.selection-unsupported" ? "images.errors.runtime_blocker-selection" : "images.errors.runtime_blocker-identity");
         return all(blocker.archived ? "images.errors.runtime_archived-stack-blocker" : "images.errors.runtime_stack-blocker", { name: blocker.name, reason });
       }

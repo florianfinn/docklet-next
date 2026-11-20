@@ -57,6 +57,8 @@ export const GUARDED_WIRE_ENUMS = [
 ] as const;
 
 export const EXEMPT_WIRE_ENUMS = [
+ { property: "ImageRuntimeIdentityPeer.reason", reason: "Validated by runtime-blocker.ts and rendered through common.runtimePeers reason texts by the confirmation dialog and audit mapper; runtime-peer-confirmation.test.tsx exercises both locales." },
+ { property: "ProjectDetails.definitionReason", reason: "Rendered by use-stack-definition-hint.ts through common.runtimePeers reason texts; runtime identity marker and repair proofs retain the existing coverage limit." },
  ...["ProxyOperation.phase", "ProxyInstance.kind", "ProxyDiscovery.kind", "ProxyCreateInstanceRequest.kind", "ProxySource.kind", "ProxyReference.kind"].map((property) => ({ property, reason: "S2 contract foundation has no production proxy page; S5 owns these rendered consumers and their render proofs. Total typed bilingual maps are frozen in wire-catalogue-proxy.ts. Outcome state/reason consumers already have guarded render proofs." })),
 {property:"EnvironmentHubAddressCandidate.kind",reason:"Address classification (ip or domain) read only by the discovery ranker and prefill; candidate labels come from their source, never from this wire value."},
 {property:"ProxyChange.kind",reason:"Request action discriminator selected by the proxy editor; action captions come from feature labels and never display this transport selector."},
@@ -69,7 +71,7 @@ export const EXEMPT_WIRE_ENUMS = [
   { property: "HistoryCondition.reason", reason: "Transport evidence for runtime conditions, never rendered: web/src/data/http/runtime-conditions.ts." },
   { property: "HistoryContainerSample.state", reason: "Transport sample input for hub aggregation, never rendered." },
   { property: "ImagePullProgressFrame.status", reason: "Mapped to a domain progress phase before display: web/src/data/http/image-mapping.ts." },
-  { property: "ImageRuntimeIdentityBlocker.reason", reason: "Validated by web/src/data/runtime-blocker.ts and mapped to two fixed blocker texts in web/src/data/use-command-error.ts." },
+  { property: "ImageRuntimeIdentityBlocker.reason", reason: "Validated by web/src/data/runtime-blocker.ts and mapped to localized peer confirmation, duplicate, and legacy refusal text." },
   { property: "ProjectWorkspaceProblem.code", reason: "Mapped to the workspace permission text in web/src/data/http/workspace.ts; the code itself is never rendered." },
   { property: "VolumeWorkspaceProblem.code", reason: "Mapped to the workspace permission text in web/src/data/http/workspace.ts; the code itself is never rendered." },
   { property: "ImageUpdateInfo.state", reason: "Mapped to a domain update variant before display: web/src/data/http/update-mapping.ts." },

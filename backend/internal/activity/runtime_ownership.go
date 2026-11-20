@@ -8,6 +8,7 @@ package activity
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"gorm.io/gorm"
@@ -83,6 +84,14 @@ func (s *RuntimeService) RetainedCommand(ctx context.Context, command RuntimeCom
 	}
 	if !runtimeLegacyTargetMatches(command.Target, &row) {
 		return RuntimeCommand{}, false, &runtimeConflictInternal{}
+	}
+	if command.Options.AcknowledgedUncertainty != row.AcknowledgedUncertainty {
+		return RuntimeCommand{}, false, &runtimeConflictInternal{}
+	}
+	if row.PeerOverrides != "" && row.PeerOverrides != "{}" {
+		if json.Unmarshal([]byte(row.PeerOverrides), &command.PeerOverrides) != nil {
+			return RuntimeCommand{}, false, errRuntimeInvalidInternal
+		}
 	}
 	command.Store = runtimeStoreFromRowInternal(&row)
 	command.Target = RuntimeTarget{Kind: *row.TargetKind, ID: *row.TargetID, Name: copyPtrInternal(row.TargetName), ParentProjectID: copyPtrInternal(row.ParentProjectID)}

@@ -173,6 +173,8 @@ export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule
 
 export interface Stack {
   definitionHint?: "definition-invalid";
+ definitionReason?: "compose.identity-unreadable" | "compose.selection-unsupported" | "compose.env-file-missing";
+ definitionFile?: string;
   path?: string;
   reportedStatus?: string;
   serviceCount?: number;

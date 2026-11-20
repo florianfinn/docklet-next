@@ -9,8 +9,13 @@ package contract
 // AgentHubV18Fingerprint preserves the supported pre-module contract boundary.
 const AgentHubV18Fingerprint = "425ca5dd725baecb39fc5d66bebde3eb260296f9344255eb4dc79c9fd0fac182"
 
+const AgentHubV19Fingerprint = "cd658728da4e2de1b4d1c625544b9ef2e48bad0bfba685f7d11cc1651e4d5414"
+
 // AgentCompatible rejects older contracts and a changed schema at the same version.
 func AgentCompatible(version int, fingerprint string) bool {
+	if version == 19 {
+		return fingerprint == AgentHubV19Fingerprint
+	}
 	if version == 18 {
 		return version >= MinimumAgentVersion && fingerprint == AgentHubV18Fingerprint
 	}
@@ -33,5 +38,5 @@ func AgentRecoveryRoute(method, path string) bool {
 
 // ModuleCompatible is stricter than the baseline v18 host surface.
 func ModuleCompatible(version int, fingerprint string) bool {
-	return version >= 19 && fingerprint == AgentHubFingerprint
+	return version == 19 && fingerprint == AgentHubV19Fingerprint || version >= 20 && fingerprint == AgentHubFingerprint
 }

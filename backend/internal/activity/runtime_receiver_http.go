@@ -128,6 +128,10 @@ func runtimeReceiverHTTPInternal(receiver *RuntimeReceiver, ctx huma.Context) {
 				runtimeHTTPErrorInternal(ctx, 400, "Recreate edit too large")
 				return
 			}
+			if envelope.Options.AcknowledgedUncertainty != "" && !runtimePeerHubCapable(ctx) {
+				runtimeHTTPErrorInternal(ctx, 409, "Hub update required")
+				return
+			}
 			result, err = receiver.Execute(ctx.Context(), envelope)
 		} else {
 			var request activitytypes.RuntimeCancellation
