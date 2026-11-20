@@ -304,6 +304,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     return task.catch(async (error: unknown) => {
       check(version);
       if (!(error instanceof AdapterOutcomeError) || error.outcome.kind !== "error" || error.outcome.code !== "runtime.target-unavailable" || error.outcome.status !== 409 || !error.outcome.blocker) throw error;
+      // Recreate and container image update/restore admissions carry no acknowledgement; they stay refused.
+      if (kind === "container" && (recreate || command === "update" || command === "restore")) throw error;
       const blocker = error.outcome.blocker;
       const legacy = host !== "0" && !blocker.peerId && ["compose.identity-unreadable", "compose.selection-unsupported"].includes(blocker.reason);
       if (!blocker.confirmable && !legacy) throw error;

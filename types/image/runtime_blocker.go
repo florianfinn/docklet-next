@@ -65,6 +65,38 @@ func SafeRuntimeIdentityBlocker(code string, value *RuntimeIdentityBlocker) *Run
 	return &copy
 }
 
+// RuntimeDisplayName maps a user-entered stack name to a value safeRuntimeName
+// accepts: disallowed runes become spaces, runs collapse, and the result is cut
+// to 128 bytes. An empty result falls back to the peer ID.
+func RuntimeDisplayName(name, peerID string) string {
+	if safeRuntimeName(name) {
+		return name
+	}
+	var b strings.Builder
+	space := false
+	for _, r := range strings.ToValidUTF8(name, " ") {
+		if r == '/' || r == '\\' || r == ':' || unicode.IsControl(r) || unicode.IsSpace(r) {
+			space = true
+			continue
+		}
+		if space && b.Len() > 0 {
+			if b.Len()+1+utf8.RuneLen(r) > 128 {
+				break
+			}
+			b.WriteByte(' ')
+		}
+		space = false
+		if b.Len()+utf8.RuneLen(r) > 128 {
+			break
+		}
+		b.WriteRune(r)
+	}
+	if out := b.String(); safeRuntimeName(out) {
+		return out
+	}
+	return peerID
+}
+
 func safeRuntimeName(name string) bool {
 	if !utf8.ValidString(name) || len(name) > 128 || strings.TrimSpace(name) == "" || strings.ContainsAny(name, "/\\:") {
 		return false

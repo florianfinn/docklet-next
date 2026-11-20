@@ -69,7 +69,7 @@ func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.C
 			if UnsupportedUpdateLayout(err) != nil {
 				reason = "compose.selection-unsupported"
 			}
-			unknown = append(unknown, imageDTO.RuntimeIdentityPeer{PeerID: row.ID, Name: cmp.Or(row.Name, row.ID), Reason: reason, Archived: row.IsArchived, File: runtimeIdentityDisplayFile(file)})
+			unknown = append(unknown, imageDTO.RuntimeIdentityPeer{PeerID: row.ID, Name: imageDTO.RuntimeDisplayName(row.Name, row.ID), Reason: reason, Archived: row.IsArchived, File: runtimeIdentityDisplayFile(file)})
 		}
 	}
 	if targetErr != nil {
@@ -94,7 +94,7 @@ func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.C
 				break
 			}
 		}
-		blocker := &imageDTO.RuntimeIdentityBlocker{Name: cmp.Or(peer.row.Name, peer.row.ID), PeerID: peer.row.ID, Archived: peer.row.IsArchived, Reason: "compose.duplicate", File: runtimeIdentityDisplayFile(peer.file)}
+		blocker := &imageDTO.RuntimeIdentityBlocker{Name: imageDTO.RuntimeDisplayName(peer.row.Name, peer.row.ID), PeerID: peer.row.ID, Archived: peer.row.IsArchived, Reason: "compose.duplicate", File: runtimeIdentityDisplayFile(peer.file)}
 		return empty, false, nil, runtimeIdentityProblem(blocker)
 	}
 	if current.file != "" {
@@ -118,11 +118,6 @@ func runtimeIdentityProblem(blocker *imageDTO.RuntimeIdentityBlocker) error {
 	problem := imageDTO.Failure("runtime.target-unavailable", 409)
 	problem.Problem.Blocker = imageDTO.SafeRuntimeIdentityBlocker(problem.Problem.Code, blocker)
 	return problem
-}
-
-func (s *ProjectService) runtimeComposeName(ctx context.Context, row *Project) (string, error) {
-	name, _, err := s.runtimeComposeEvidence(ctx, row)
-	return name, err
 }
 
 // Both metadata discovery and executable selection use the same strict identity
@@ -167,13 +162,6 @@ func (s *ProjectService) runtimeComposeEvidence(ctx context.Context, row *Projec
 		return model.Name, "\x00", nil
 	}
 	return model.Name, "", nil
-}
-
-func derefRuntimeDirName(name *string) string {
-	if name == nil {
-		return ""
-	}
-	return *name
 }
 
 func runtimeIdentityDisplayFile(file string) string {

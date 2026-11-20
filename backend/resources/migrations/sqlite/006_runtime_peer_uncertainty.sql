@@ -7,7 +7,3 @@
 -- +goose Up
 ALTER TABLE runtime_receipts ADD COLUMN acknowledged_uncertainty TEXT NOT NULL DEFAULT '';
 ALTER TABLE runtime_receipts ADD COLUMN peer_overrides TEXT NOT NULL DEFAULT '{}';
-
--- +goose Down
-ALTER TABLE runtime_receipts DROP COLUMN peer_overrides;
-ALTER TABLE runtime_receipts DROP COLUMN acknowledged_uncertainty;

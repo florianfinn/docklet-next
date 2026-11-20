@@ -7,6 +7,8 @@
 import { afterEach, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { queryKeys } from "@/data/query-keys";
 import { IntlProvider } from "use-intl";
 import { catalogs } from "@/app/i18n/catalog";
 import { AdapterContext } from "@/data/use-adapter";
@@ -19,7 +21,9 @@ import producerFixture from "./runtime-peer.fixture.json";
 
 afterEach(cleanup);
 function dialog(f: ReturnType<typeof runtimeFixture>, locale: "en-US" | "de" = "en-US") {
- return render(<AdapterContext.Provider value={f.adapter}><IntlProvider locale={locale} messages={catalogs[locale]}><MemoryRouter><RuntimePeerDialog /></MemoryRouter></IntlProvider></AdapterContext.Provider>);
+ const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+ client.setQueryData(queryKeys.hosts, [{ id: "direct", name: "Example host" }]);
+ return render(<QueryClientProvider client={client}><AdapterContext.Provider value={f.adapter}><IntlProvider locale={locale} messages={catalogs[locale]}><MemoryRouter><RuntimePeerDialog /></MemoryRouter></IntlProvider></AdapterContext.Provider></QueryClientProvider>);
 }
 function refused(blocker: unknown = producerFixture, status = 409, data?: unknown) { return response({ success: false, error: { code: "runtime.target-unavailable", blocker }, ...(data ? { data } : {}) }, status); }
 function admission(f: ReturnType<typeof runtimeFixture>) { return envelope({ activityId: RUN_ID, code: "run.started", activity: f.state.run }, 202); }
@@ -89,10 +93,26 @@ it("hard duplicates never offer confirmation; old-agent uncertainty only offers 
  expect(screen.queryByRole("alertdialog")).toBeNull(); expect(f.commands()).toHaveLength(1);
  f.state.command = () => refused({ name: "peer", reason: "compose.identity-unreadable", archived: false });
  const task = f.helper.runStackCommand("direct~target", "restart").catch((error: unknown) => error);
- await screen.findByText("Update the agent on direct to confirm this action.");
+ await screen.findByText("Update the agent on Example host to confirm this action.");
  expect(screen.queryByRole("button", { name: "Run anyway" })).toBeNull();
  fireEvent.click(screen.getByRole("button", { name: "Cancel" })); await task; expect(f.commands()).toHaveLength(2);
  f.helper.reset();
+});
+
+it.each([
+ ["recreate", (f: ReturnType<typeof runtimeFixture>) => f.helper.recreateContainer("0~web", { image: "registry.example.com/app:2" })],
+ ["update", (f: ReturnType<typeof runtimeFixture>) => f.helper.installContainerUpdate("0~web", { expectedManifest: `sha256:${"b".repeat(64)}` })],
+ ["update without input", (f: ReturnType<typeof runtimeFixture>) => f.helper.installContainerUpdate("0~web")],
+ ["restore", (f: ReturnType<typeof runtimeFixture>) => f.helper.restoreContainerImage("0~web")],
+] as const)("container %s has no acknowledgement carrier, so it stays refused without a confirm control", async (_, run) => {
+ const f = runtimeFixture(); dialog(f);
+ f.state.command = () => refused();
+ const task = run(f).then(() => "resolved", (error: unknown) => error);
+ const first = await Promise.race([task, screen.findByRole("alertdialog").then(() => "dialog")]);
+ f.helper.reset(); await task;
+ expect(first).not.toBe("dialog");
+ expect(first).toMatchObject({ outcome: { code: "runtime.target-unavailable", blocker: { reason: "compose.name-undeterminable" } } });
+ expect(f.commands()).toHaveLength(1);
 });
 
 it.each(["identity", "admitted", "server-error"] as const)("%s cannot replay a potentially executed action", async (mode) => {
