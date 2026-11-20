@@ -12,21 +12,24 @@ CA (Pebble).
 
 ## Integrated steps
 
-Steps were pushed to the feature branch as commits, without step PRs, and CI ran
-on every pushed head.
+The tools foundation landed separately on main through #532 and #534. The
+remaining steps were pushed to the feature branch as commits, without step PRs,
+and CI ran on every pushed head.
 - Codex workers built S0, S1, S4 and S5.
 - The Claude main thread planned the milestone, built S3 and made every
   correction after reviews and acceptance runs.
-- Each review came from the other provider than the code it checked.
+- Claude reviewed the Codex-built steps. Codex reviewed the main-thread
+  corrections, the tools default pin and the closing integration. S0 also had
+  a Claude recheck before its independent Codex delta review.
 
 | Issue | Step | Review outcome |
 | --- | --- | --- |
 | #493 | S0 `docklet-probe` in the tools image (#532), then the published tools image 0.2.0 and its default pin (#534) | The first review failed with two blockers, which were fixed; the delta review passed. |
 | #491 | S1 contract foundation: resolver, certificate and eligibility vocabulary, OpenAPI, agent contract 20 | The first review failed on an error response echoing submitted input. Verify 1 failed on a second echo path; verify 2 passed. |
-| #528 | S3 setup clarity: modules navigation group, instance select, per-source eligibility with server revalidation | First reviewed in the closing review, with no S3 finding. |
+| #528 | S3 setup clarity: modules navigation group, instance select, per-source eligibility with server revalidation | First reviewed in the closing review; a nonblocking test-synchronisation finding was deferred to #539. |
 | #493 | S4 probe client: helper probes in the target network namespace, certificate observation, manual check, wget fallback | The first review failed on tools image pulls that ignored stored registry credentials. Delta 1 found credentials possibly reflected in pull error text, delta 2 a duplicated pull audit event. Delta 3 passed. |
 | #492 | S5 resolver operation: journaled backup, write, Traefik recreate, observation, rollback and recovery | The first review failed with three blockers: a reservation stuck after a failed adoption, a refused default-mode `.env`, recovery wedged by changed file metadata. Deltas 1 to 4 failed with 3, 2, 1 and 1 blockers, all in the confirmation and error-classification class. Delta 4 swept every error producer; delta 5 passed. |
-| #491 | Closing integration (#535) | The closing review failed on two points: a Traefik service without a compose `command:` could not get a resolver, and a service borrowing another service's namespaces was not refused. The verification passed. |
+| #491 | Closing integration (#535) | The closing review failed with one blocker: a Traefik service without a compose `command:` could not get a resolver. A selected related non-blocker, admission of a service borrowing another service's namespaces, was also fixed before merge. The verification passed. |
 
 CI caught one more defect: hub and agent failed to start without a reachable
 Docker daemon, because the startup sweep of probe containers returned its error.
