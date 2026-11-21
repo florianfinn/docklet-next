@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Fresh, read-only project identity for runtime control. M34 #548: recorded Compose environment inputs.
+// Deviations: Fresh, read-only project identity for runtime control. M34 #548: recorded Compose environment inputs. M35 #558: ID-only targets read their own row.
 
 package project
 
@@ -24,11 +24,9 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 	return ref, found, err
 }
 
-// Every persisted row contributes fresh evidence. A peer whose model cannot be
-// read is that stack's own problem and is skipped (#547). A shared Compose name
-// refuses only name-addressed lookups, whose parent must be unambiguous; a
-// project-ID action proceeds and the duplicate is a warning on both stacks.
-// The acknowledgement stays accepted for agent contract 20 but is never needed.
+// ID-only actions read fresh evidence from their target alone. A supplied name
+// requires the full ownership scan; unreadable peers are skipped and duplicate
+// names refuse. The contract-20 acknowledgement is accepted but never needed.
 func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.Context, projectID, composeName, _ string) (projecttypes.Reference, bool, *imageDTO.RuntimePeerOverrides, error) {
 	ctx = s.composeInputContext(ctx)
 	empty := projecttypes.Reference{}
@@ -36,7 +34,11 @@ func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.C
 		return empty, false, nil, nil
 	}
 	var rows []Project
-	if err := s.db.WithContext(ctx).Find(&rows).Error; err != nil {
+	query := s.db.WithContext(ctx)
+	if projectID != "" && composeName == "" {
+		query = query.Where("id = ?", projectID)
+	}
+	if err := query.Find(&rows).Error; err != nil {
 		return empty, false, nil, fmt.Errorf("list runtime project identities: %w", err)
 	}
 	type evidence struct {
@@ -100,10 +102,15 @@ func runtimeIdentityProblem(blocker *imageDTO.RuntimeIdentityBlocker) error {
 
 // Both metadata discovery and executable selection use the same strict identity
 // loader. Neither path uses a cache, prepares binds, or writes project files.
+var (
+	runtimeProjectInputs = (*ProjectService).resolvedProjectInputContext
+	runtimeLoadIdentity  = projects.LoadComposeIdentity
+)
+
 func (s *ProjectService) runtimeComposeEvidence(ctx context.Context, row *Project) (string, string, error) {
 	ctx = s.composeInputContext(ctx)
 	var inputErr error
-	ctx, _, inputErr = s.resolvedProjectInputContext(ctx, row.Path)
+	ctx, _, inputErr = runtimeProjectInputs(s, ctx, row.Path)
 	if inputErr != nil {
 		return "", "", inputErr
 	}
@@ -122,11 +129,11 @@ func (s *ProjectService) runtimeComposeEvidence(ctx context.Context, row *Projec
 		return "", "", err
 	}
 	name := projects.NormalizeProjectName(row.Name)
-	metadata, missing, err := projects.LoadComposeIdentity(ctx, discovered, name, root, autoInject)
+	metadata, missing, err := runtimeLoadIdentity(ctx, discovered, name, root, autoInject)
 	if err != nil {
 		return "", runtimeMissingIdentityFile(row.Path, missing), err
 	}
-	model, executableMissing, err := projects.LoadComposeIdentity(ctx, selected, name, root, autoInject)
+	model, executableMissing, err := runtimeLoadIdentity(ctx, selected, name, root, autoInject)
 	if err != nil {
 		return "", runtimeMissingIdentityFile(row.Path, executableMissing), err
 	}
