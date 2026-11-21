@@ -2,7 +2,7 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original phase 2a stack update consumer for issue #231; agent hints compare product versions (#235).
+// Deviations: Original phase 2a stack update consumer for issue #231; agent hints compare product versions (#235). M35 #555: revisionless unavailable status.
 
 import { AdapterOutcomeError } from "../capability";
 import { compareProductVersion } from "@/domain/product-version";
@@ -11,7 +11,9 @@ import { record, text, id, bool, revision, date, optionalDate, list, choice, rea
 import { observation } from "./update-validation";
 export function baseline(value: unknown): UpdateBaseline {
   const o = record(value);
-  for (const key of ["targetIdentity", "savedRevision", "observedRevision"]) if (!/^[a-f0-9]{64}$/.test(text(o[key]))) throw invalidUpdate();
+  // An unavailable status with a known reason may omit revisions (agents before M35); it is shown, never submitted.
+  const revisionless = o.available === false && (o.code === "update.config-drift" || o.code === "update.baseline-unavailable");
+  for (const key of ["targetIdentity", "savedRevision", "observedRevision"]) if (!(revisionless && key !== "targetIdentity" && text(o[key]) === "") && !/^[a-f0-9]{64}$/.test(text(o[key]))) throw invalidUpdate();
   return { targetIdentity: id(o.targetIdentity), savedRevision: text(o.savedRevision), observedRevision: text(o.observedRevision), available: bool(o.available), autoExcluded: bool(o.autoExcluded), code: reason(o.code), ...(o.sourceRunId === undefined ? {} : { sourceRunId: id(o.sourceRunId) }) };
 }
 export function points(value: unknown, target?: string): UpdatePoint[] {

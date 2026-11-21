@@ -112,7 +112,7 @@ export const deStacks: typeof enStacks = {
     running: "Läuft gerade",
     duration: "{seconds} s",
     restoreTitle: "Wiederherstellungspunkte",
-    restoreHint: "Vorheriges Image und vorherige Konfiguration für eine manuelle Wiederherstellung. Docklet kehrt nie automatisch zurück; Anwendungsdaten werden nicht zurückgesetzt.",
+    restoreHint: "Vorheriges Image und vorherige Konfiguration für eine manuelle Wiederherstellung. „Update mit Prüfung“ und geplante Updates stellen bei einem Fehlschlag automatisch wieder her. Anwendungsdaten werden nicht zurückgesetzt.",
     restoreNone: "Nach einem Update oder Redeploy liegt hier der vorherige Stand bereit.",
     restore: "Manuell wiederherstellen",
     restoreConfirmTitle: "Vorherigen Stand wiederherstellen?",

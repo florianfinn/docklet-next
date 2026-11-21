@@ -2,11 +2,12 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original W5/W6/W7 service and stopped-definition UI gestures.
+// Deviations: Original W5/W6/W7 service and stopped-definition UI gestures. M35 #555 menu check.
 
 import { ActionsMenu } from "@/shared/components/action-menu";
 import { useStackMenu } from "../overview/stack-menu";
 import { screen, waitFor } from "@testing-library/react";
+import { useLocation } from "react-router";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { renderStackDetail } from "@/data/message-code";
@@ -134,4 +135,17 @@ it("S4 renders the concrete missing-env-file marker and removes it after repair"
   expect(screen.queryByText(/Service-Umgebungsdatei fehlt/) === null).toBe(true);
   const unsafe = mapStack({ ...row, definitionFile: "../outside.env" }, "0", [], { stale: false });
   expect(unsafe.definitionFile).toBeUndefined();
+});
+
+it("the list menu's Check for updates runs the check in place over HTTP (#555)", async () => {
+  const demo = createDemoAdapter(); const stack = renderStackDetail(await demo.getStack("media"), "de");
+  const check = vi.fn(async (_id: string) => {});
+  const adapter = { ...demo, kind: "http" as const, checkStackUpdates: check };
+  function Where() { return <span data-testid="where">{useLocation().pathname}</span>; }
+  renderWithApp(<><StackMenuFixture stack={stack} /><Where /></>, adapter);
+  const before = screen.getByTestId("where").textContent;
+  await userEvent.click(screen.getByRole("button", { name: "Actions" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "Updates prüfen" }));
+  await waitFor(() => expect(check).toHaveBeenCalledExactlyOnceWith(stack.id));
+  expect(screen.getByTestId("where").textContent).toBe(before);
 });

@@ -28,7 +28,7 @@ it.each([false, true])("before any check missing baseline shows guidance and kee
   await waitFor(() => expect(restore.hasAttribute("disabled")).toBe(false)); await userEvent.click(restore);
   const dialog = within(screen.getByRole("dialog")); await userEvent.click(await dialog.findByRole("checkbox"));
   expect(dialog.getByRole("button", { name: t.restore }).hasAttribute("disabled")).toBe(false);
-  await userEvent.click(dialog.getByRole("button", { name: t.restore })); await dialog.findByText(t.accepted);
+  await userEvent.click(dialog.getByRole("button", { name: t.restore })); await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
   expect(f.writes()).toHaveLength(1); expect(f.writes()[0]!.path.endsWith("/restore")).toBe(true);
 });
 it.each(["update", "restore", "delete", "pull"] as const)("%s dialog bounds long command values within the viewport", async (kind) => {
@@ -41,7 +41,9 @@ it.each(["update", "restore", "delete", "pull"] as const)("%s dialog bounds long
   if (kind === "restore") {
     const consent = (await screen.findByRole("checkbox")).closest("label")!;
     expect(consent.classList.contains("min-w-0")).toBe(true);
-    expect(consent.querySelector("span.break-all") !== null).toBe(true);
+    // The consent names the replacement, not the machine revision.
+    expect(consent.querySelector("span.min-w-0") !== null).toBe(true);
+    expect(/[a-f0-9]{64}/.test(consent.textContent ?? "")).toBe(false);
     const footer = within(dialog).getByRole("button", { name: t.restore }).parentElement!;
     expect(footer.classList.contains("flex-col-reverse")).toBe(true); expect(footer.classList.contains("sm:flex-row")).toBe(true);
   }

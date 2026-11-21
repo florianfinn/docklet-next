@@ -11,7 +11,7 @@ import { StackHeader } from "@/features/stacks/detail/StackHeader";
 import { StackUpdatePanel } from "./update-panel";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { renderWithApp } from "@/test/render";
 import { catalogs } from "@/app/i18n/catalog";
 import { UpdateRadarWidget } from "@/features/dashboard/widgets/UpdateRadarWidget";
@@ -41,11 +41,11 @@ it("unavailable descriptor disables send without any effect", async () => {
   expect(screen.getByRole("button", { name: t.update }).hasAttribute("disabled")).toBe(true); expect(f.writes()).toHaveLength(0);
 });
 it("restore does not require a current baseline, but requires explicit replacement consent", async () => {
-  const f = await ready(); f.state.baseline.available = false; f.state.baseline.code = "update.baseline-unavailable";
-  renderWithApp(<StackUpdateDialog stackId="direct~project" point={point} onClose={() => {}} />, f.adapter);
+  const f = await ready(); f.state.baseline.available = false; f.state.baseline.code = "update.baseline-unavailable"; const closed = vi.fn();
+  renderWithApp(<StackUpdateDialog stackId="direct~project" point={point} onClose={closed} />, f.adapter);
   const ack = await screen.findByRole("checkbox"), send = screen.getByRole("button", { name: t.restore });
   expect(send.hasAttribute("disabled")).toBe(true); await userEvent.click(ack);
-  expect(send.hasAttribute("disabled")).toBe(false); await userEvent.click(send); await screen.findByText(t.accepted);
+  expect(send.hasAttribute("disabled")).toBe(false); await userEvent.click(send); await waitFor(() => expect(closed).toHaveBeenCalledTimes(1));
   expect(JSON.parse(String(f.writes()[0]!.init.body))).toMatchObject({ replaceConfiguration: true, expectedRevision: f.state.baseline.savedRevision, pointId: point.id });
 });
 it("cold policy shows sending and separate stale/check/apply status after remount", async () => {
@@ -115,7 +115,8 @@ it("100 stack observation panels do not fan out scoped descriptor reads", async 
 it("changing host during a held dialog admission does not publish to the new dialog", async () => {
   const f = await ready(), held = deferred<Response>(), started = deferred<void>();
   f.state.hold = (path, init) => { if (path.endsWith("/update") && init.method === "POST") { started.resolve(); return held.promise; } };
-  function SwitchingDialog() { const [host, setHost] = useState("direct"); return <><button onClick={() => setHost("other")}>Switch host</button><StackUpdateDialog stackId={`${host}~project`} onClose={() => {}} /></>; }
+  const closed = vi.fn();
+  function SwitchingDialog() { const [host, setHost] = useState("direct"); return <><button onClick={() => setHost("other")}>Switch host</button><StackUpdateDialog stackId={`${host}~project`} onClose={closed} /></>; }
   renderWithApp(<SwitchingDialog />, f.adapter);
   const send = await screen.findByRole("button", { name: t.update }); await waitFor(() => expect(send.hasAttribute("disabled")).toBe(false)); await userEvent.click(send); await started.promise;
   // The test actor changes the same mounted consumer while the old POST ignores abort.
@@ -123,7 +124,7 @@ it("changing host during a held dialog admission does not publish to the new dia
   await waitFor(() => expect(screen.getByRole("button", { name: t.update }).hasAttribute("disabled")).toBe(false));
   await act(async () => { held.resolve(response({ success: true, data: { code: "run.started", activityId: f.run.id, activity: f.run } }, 202)); });
   expect(screen.queryByRole("alert") === null).toBe(true);
-  expect(screen.queryByText(t.accepted) === null).toBe(true);
+  expect(closed).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: t.update }).hasAttribute("disabled")).toBe(false);
 });
 
@@ -142,7 +143,7 @@ it("the radar service observation opens a service update review", async () => {
   await userEvent.click(screen.getByRole("button", { name: t.service.replace("{name}", "app") }));
   const dialog = await screen.findByRole("dialog", { name: t.update });
   const send = within(dialog).getByRole("button", { name: t.update }); await waitFor(() => expect(send.hasAttribute("disabled")).toBe(false)); await userEvent.click(send);
-  await within(dialog).findByText(t.accepted);
+  await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
   expect(JSON.parse(String(f.writes()[0]!.init.body))).toEqual({ expectedRevision: f.state.baseline.savedRevision, services: ["app"] });
 });
 

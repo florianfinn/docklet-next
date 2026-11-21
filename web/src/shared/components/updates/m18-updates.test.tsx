@@ -75,13 +75,14 @@ it("goal 1: scheduled mode cannot borrow check authority", async () => {
 
 it.each(["update.service-coupled", "update.image-binding-unsupported"])("goal 4: service selection and %s whole-stack hint", async (code) => {
   const f = updateFixture(); f.state.code = code; await f.adapter.getCurrentUser();
-  renderWithApp(<StackUpdateDialog stackId="direct~project" services={["app"]} onClose={() => {}} />, f.adapter);
+  const closed = vi.fn();
+  renderWithApp(<StackUpdateDialog stackId="direct~project" services={["app"]} onClose={closed} />, f.adapter);
   const send = await screen.findByRole("button", { name: t.update }); await waitFor(() => expect(send.hasAttribute("disabled")).toBe(false));
   await userEvent.click(send); await screen.findByRole("alert");
   expect(JSON.parse(String(f.writes()[0]!.init.body))).toMatchObject({ services: ["app"] });
   expect(screen.queryByText(t.wholeStack) !== null).toBe(true);
   const select = screen.getByRole("combobox"); await waitFor(() => expect(select.hasAttribute("disabled")).toBe(false)); select.focus(); await userEvent.keyboard("{Enter}"); await userEvent.click(await screen.findByRole("option", { name: t.update }));
-  f.state.code = ""; await userEvent.click(send); await screen.findByText(t.accepted);
+  f.state.code = ""; await userEvent.click(send); await waitFor(() => expect(closed).toHaveBeenCalledTimes(1));
   expect(JSON.parse(String(f.writes()[1]!.init.body))).not.toHaveProperty("services");
 });
 
@@ -128,7 +129,7 @@ it.each(["project_deploy", "project_redeploy"] as const)("goal 6: failed %s reco
   renderWithApp(<DeployRecovery run={run} />, f.adapter);
   const restore = await screen.findByRole("button", { name: t.previousDeployment }); await waitFor(() => expect(restore.hasAttribute("disabled")).toBe(false)); await userEvent.click(restore);
   const dialog = within(await screen.findByRole("dialog")); const ack = await dialog.findByRole("checkbox"), send = dialog.getByRole("button", { name: t.restore });
-  expect(send.hasAttribute("disabled")).toBe(true); await userEvent.click(ack); await userEvent.click(send); await dialog.findByText(t.accepted);
+  expect(send.hasAttribute("disabled")).toBe(true); await userEvent.click(ack); await userEvent.click(send); await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
   expect(JSON.parse(String(f.writes()[0]!.init.body))).toMatchObject({ pointId: point.id, replaceConfiguration: true });
 });
 

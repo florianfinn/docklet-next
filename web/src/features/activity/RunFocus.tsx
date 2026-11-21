@@ -1,4 +1,5 @@
 import { JobUpdateOutcomes } from "@/shared/components/updates/job-update-outcomes";
+import { summaryStepsAvailable } from "./summary-presentation";
 import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
 import { DeployRecovery } from "@/shared/components/updates/deploy-recovery";
 import { useTranslations } from "use-intl";
@@ -30,7 +31,7 @@ export function RunFacts({ run, now, className }: { run: ActionRun; now: number;
   const t = useTranslations("activity.dialog");
   const done = run.steps.filter((s) => s.state === "done").length;
   const items = [
-    ["progress", t("progress"), run.outcomeState === "unknown" ? "–" : `${done}/${run.steps.length} · ${withPercent(run.progress)}`],
+    ["progress", t("progress"), run.outcomeState === "unknown" || run.steps.length === 0 || !summaryStepsAvailable(run) ? "–" : `${done}/${run.steps.length} · ${withPercent(run.progress)}`],
     ["elapsed", t("elapsed"), `${elapsedSeconds(run, now)} s`],
     ["target", t("target"), run.target],
     ["services", t("services"), run.services.join(", ") || t("none")],
@@ -67,7 +68,6 @@ export function RunErrorBox({ run }: { run: ActionRun }) {
  * height and is the only scroll area.
  */
 export function RunFocusBody({ run, now, fill = false, outputOpen = false, className }: { run: ActionRun; now: number; fill?: boolean; outputOpen?: boolean; className?: string }) {
-  const t = useTranslations("activity");
   const { step } = runPhase(run);
   const Icon = RUN_ICON[run.status];
   return (
@@ -79,7 +79,8 @@ export function RunFocusBody({ run, now, fill = false, outputOpen = false, class
         </RunIconTile>
         <RunStatusLine run={run} className="max-w-full text-base" />
         <p className="h-4 max-w-full truncate text-xs text-muted-foreground" title={step?.detail}>
-          {run.status === "running" ? (step?.detail ?? run.target) : t(`dialog.result.${run.status}`)}
+          {/* The status line above already names the result. */}
+          {run.status === "running" ? (step?.detail ?? run.target) : run.target}
         </p>
       </div>
       <div className="shrink-0">

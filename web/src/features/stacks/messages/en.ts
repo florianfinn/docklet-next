@@ -111,7 +111,7 @@ export const enStacks = {
     running: "Running now",
     duration: "{seconds} s",
     restoreTitle: "Restore points",
-    restoreHint: "Previous image and previous configuration for a manual restore. Docklet never rolls back automatically; application data is not reset.",
+    restoreHint: "Previous image and configuration for a manual restore. Update with check and scheduled updates restore automatically when the update fails. Application data is not reset.",
     restoreNone: "After an update or redeploy, the previous state is available here.",
     restore: "Restore manually",
     restoreConfirmTitle: "Restore previous state?",

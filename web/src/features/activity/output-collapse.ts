@@ -9,6 +9,25 @@ export interface OutputRow {
   frames: number;
 }
 
+/**
+ * Compose progress is stored as `{"log":"…"}` frames. Display, folding, copy and
+ * download show the line itself, decoded once; any other frame stays verbatim.
+ */
+export function presentOutputText(text: string): string {
+  if (!text.startsWith("{")) return text;
+  try {
+    const frame: unknown = JSON.parse(text);
+    if (frame !== null && typeof frame === "object" && !Array.isArray(frame)) {
+      const keys = Object.keys(frame);
+      const log = (frame as { log?: unknown }).log;
+      if (keys.length === 1 && keys[0] === "log" && typeof log === "string") return log.replace(/\r?\n$/, "");
+    }
+  } catch {
+    // Not a frame; shown as it is.
+  }
+  return text;
+}
+
 const LAYER_STATUS = /^\s*([0-9a-f]{12})\s+(?:Pulling fs layer|Waiting|Downloading|Verifying Checksum|Download complete|Extracting|Pull complete|Already exists)\b/;
 
 /**
@@ -17,7 +36,7 @@ const LAYER_STATUS = /^\s*([0-9a-f]{12})\s+(?:Pulling fs layer|Waiting|Downloadi
  * frame; every other line stays as it is, in chronological order.
  */
 export function collapseOutput(lines: readonly RunOutputLine[]): OutputRow[] {
-  const sorted = [...lines].sort((a, b) => a.at.localeCompare(b.at));
+  const sorted = lines.map((line) => ({ ...line, text: presentOutputText(line.text) })).sort((a, b) => a.at.localeCompare(b.at));
   const rows: OutputRow[] = [];
   const open = new Map<string, number>();
   let command = 0;
