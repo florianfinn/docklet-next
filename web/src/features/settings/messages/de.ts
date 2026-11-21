@@ -258,6 +258,7 @@ export const deSettings: typeof enSettings = {
       currentVersion: "Installierte Version: {version}",
       targetVersion: "Zielversion: {version}",
       check: "Erneut prüfen",
+      checkedAt: "zuletzt geprüft {time}",
       viewRun: "Update-Aktivität anzeigen",
       manual: "Manueller Befehl {number}",
       confirmHub: "Docklet auf {version} aktualisieren. Ein Hilfscontainer aktualisiert diesen Compose-Dienst und seine Image-Referenz. Die Verbindung pausiert beim Neustart von Docklet. Diese Seite wird neu geladen, sobald die neue Version als gesund bestätigt ist.",

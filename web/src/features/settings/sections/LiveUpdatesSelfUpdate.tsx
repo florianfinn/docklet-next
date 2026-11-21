@@ -2,12 +2,12 @@
 // Revision: 48f47c93878ecf1c27491d0214db80d5b38b547d
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original capability-gated Compose self-update controls and confirmation; M21 R1 host-named controls and settled-state polling.
+// Deviations: Original capability-gated Compose self-update controls and confirmation; M21 R1 host-named controls and settled-state polling; recheck refreshes the release list and shows its time.
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router";
-import { useTranslations } from "use-intl";
+import { useFormatter, useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
 import { identityLifetime } from "@/data/identity-lifetime";
@@ -18,18 +18,29 @@ import { useImageError } from "@/features/images/use-image-error";
 import { useUpdateAction } from "@/shared/components/updates/use-update-action";
 import { CodeBlock } from "@/shared/components/code-block";
 import { Button } from "@/shared/ui/button";
+import { Spinner } from "@/shared/ui/spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/shared/ui/dialog";
 
 export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?: string }) {
   const adapter = useAdapter(), all = useTranslations(), t = useTranslations("settings.updates.selfUpdate"), errorText = useImageError();
   const location = useLocation(), heading = useRef<HTMLHeadingElement>(null), button = useRef<HTMLButtonElement>(null), focusedFor = useRef<string>(undefined);
   const cap = useCapability("selfUpdate", selfUpdateRef(hostId));
-  const query = useQuery({ queryKey: ["settings", "self-update", hostId], queryFn: () => adapter.getSelfUpdate(hostId), enabled: cap.available,
+  const client = useQueryClient(), format = useFormatter(), queryKey = ["settings", "self-update", hostId];
+  const query = useQuery({ queryKey, queryFn: () => adapter.getSelfUpdate(hostId), enabled: cap.available,
     // A live check reaches the agent; repeat it only while an operation is unsettled.
     refetchInterval: (q) => q.state.data?.operation && q.state.data.operation.phase !== "settled" ? 10_000 : false });
   const [confirm, setConfirm] = useState<string>(), [started, setStarted] = useState<string>();
+  const [rechecking, setRechecking] = useState(false), [checkedAt, setCheckedAt] = useState<Date>();
+  // An explicit recheck asks the hub for a fresh release list; the query state shows a failure.
+  const recheck = async () => {
+    setRechecking(true);
+    try {
+      await client.fetchQuery({ queryKey, queryFn: () => adapter.getSelfUpdate(hostId, { refresh: true }), staleTime: 0 });
+      setCheckedAt(new Date());
+    } catch { setCheckedAt(undefined); } finally { setRechecking(false); }
+  };
   const action = useUpdateAction(hostId);
-  useEffect(() => identityLifetime(adapter).listen(() => { setConfirm(undefined); setStarted(undefined); }), [adapter]);
+  useEffect(() => identityLifetime(adapter).listen(() => { setConfirm(undefined); setStarted(undefined); setCheckedAt(undefined); }), [adapter]);
   const state = selfUpdateState(query.data), op = query.data?.operation;
   const running = !!op && op.phase !== "settled";
   const enabled = cap.available && !query.isError && canSelfUpdate(state) && !action.busy && !running;
@@ -47,14 +58,14 @@ export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?:
     <h4 ref={heading} tabIndex={-1} className="font-semibold">{title}</h4>
     {!cap.available ? <p role="status">{cap.reason}</p> : <>
       {query.data && <p>{t("currentVersion", { version: query.data.version })}</p>}
-      <p role="status">{all(SELF_UPDATE_STATE_KEYS[query.isError ? "unavailable" : state.state])}</p>
+      <p role="status">{all(SELF_UPDATE_STATE_KEYS[query.isError ? "unavailable" : state.state])}{checkedAt && !rechecking && <span className="text-muted-foreground"> · {t("checkedAt", { time: format.dateTime(checkedAt, { timeStyle: "short" }) })}</span>}</p>
       {codeKey && <p>{all(codeKey)}</p>}
       {query.isError && <p role="alert">{errorText(query.error)}</p>}
       {state.candidate && <p>{t("targetVersion", { version: state.candidate.version })}</p>}
       {op && <p>{all(SELF_UPDATE_PHASE_KEYS[op.phase])}{op.outcome && <> · {all(SELF_UPDATE_OUTCOME_KEYS[op.outcome])}</>}{opCodeKey && <> · {all(opCodeKey)}</>}</p>}
       <div className="flex flex-wrap gap-2">
         <Button ref={button} type="button" variant="outline" disabled={!enabled} aria-label={title} onClick={() => setConfirm(state.candidate!.version)}>{t(hostId === "0" ? "hub" : "agent")}</Button>
-        <Button type="button" variant="outline" disabled={query.isFetching} aria-label={name ? t("checkFor", { name }) : undefined} onClick={() => { void query.refetch(); }}>{t("check")}</Button>
+        <Button type="button" variant="outline" disabled={query.isFetching || rechecking} aria-label={name ? t("checkFor", { name }) : undefined} onClick={() => { void recheck(); }}>{rechecking && <Spinner data-icon="inline-start" />}{t("check")}</Button>
         {runId && <Button type="button" variant="outline" onClick={() => openActivity(runId)}>{t("viewRun")}</Button>}
       </div>
       {state.manual.map((command, index) => <CodeBlock key={`${index}:${command}`} code={command} label={t("manual", { number: index + 1 })} />)}

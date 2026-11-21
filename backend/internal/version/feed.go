@@ -2,7 +2,7 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original Docklet Next release feed client and selectors.
+// Deviations: Original Docklet Next release feed client and selectors; throttled forced refresh for explicit rechecks.
 
 package version
 
@@ -19,6 +19,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samber/hot"
@@ -36,6 +37,11 @@ const (
 	releaseFeedPageSize  = 100
 	releaseFeedPageBytes = 8 << 20
 	releaseFeedTTL       = 3 * time.Hour
+	// Forced refreshes closer together reuse the previous result, which keeps
+	// repeated clicks within the unauthenticated GitHub API budget.
+	releaseFeedMinRefresh = 30 * time.Second
+	// The browser gives a check 15 seconds; a refresh leaves room for the rest.
+	releaseFeedRefreshTimeout = 8 * time.Second
 )
 
 // Release is one published stable product release. Values are immutable once
@@ -70,6 +76,10 @@ type releaseFeed struct {
 	// lookup resolves http feed hosts per request; tests replace it.
 	lookup func(ctx context.Context, host string) ([]netip.Addr, error)
 	cache  *hot.HotCache[struct{}, []Release]
+
+	refreshMu  sync.Mutex
+	refreshed  time.Time
+	refreshErr error
 }
 
 func newReleaseFeed(client *http.Client, disabled bool, raw string) *releaseFeed {
@@ -183,6 +193,29 @@ func (f *releaseFeed) releases(_ context.Context) ([]Release, error) {
 	return slices.Clone(cached), nil
 }
 
+// refresh replaces the cached list with a fresh fetch. A disabled or invalid
+// feed is left to releases, which reports it on the following read.
+func (f *releaseFeed) refresh(ctx context.Context) error {
+	if f == nil || f.disabled || f.invalid != nil {
+		return nil
+	}
+	f.refreshMu.Lock()
+	defer f.refreshMu.Unlock()
+	if !f.refreshed.IsZero() && time.Since(f.refreshed) < releaseFeedMinRefresh {
+		return f.refreshErr
+	}
+	ctx, cancel := context.WithTimeout(ctx, releaseFeedRefreshTimeout)
+	defer cancel()
+	f.refreshed, f.refreshErr = time.Now(), nil
+	releases, err := f.fetch(ctx)
+	if err != nil {
+		f.refreshErr = errReleaseFeedUnavailable()
+		return f.refreshErr
+	}
+	f.cache.Set(struct{}{}, releases)
+	return nil
+}
+
 type feedEntryInternal struct {
 	Tag         string `json:"tag_name"`
 	Draft       bool   `json:"draft"`
@@ -272,6 +305,11 @@ func releaseFromEntryInternal(entry feedEntryInternal) (Release, bool) {
 		link = u.String()
 	}
 	return Release{Version: parsed.String(), Tag: entry.Tag, URL: link, Notes: entry.Body, PublishedAt: entry.PublishedAt, parsed: parsed}, true
+}
+
+// RefreshReleases fetches the release list again for an explicit recheck.
+func (s *VersionService) RefreshReleases(ctx context.Context) error {
+	return s.feed.refresh(ctx)
 }
 
 // NewestRelease returns the newest published stable release; ok is false when

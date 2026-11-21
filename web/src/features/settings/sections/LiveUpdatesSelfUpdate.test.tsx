@@ -134,3 +134,22 @@ it("B19 confirmation becomes preparing immediately while intake has no response"
   expect(f.adapter.selfUpdate).toHaveBeenCalledTimes(1);
   await act(async () => { session.clear(); accept({ accepted: true, opId: "operation", runId: "update-run", phase: "reserved" }); });
 });
+
+for (const locale of ["en-US", "de"] as const) {
+  it(`${locale} recheck refreshes the release list, shows progress and the check time`, async () => {
+    const current: SelfUpdateCheck = { version: "1.0.0", eligibility: { state: "current", manual: [] } };
+    let release!: (value: SelfUpdateCheck) => void;
+    const getSelfUpdate = vi.fn(async (_host: string, options?: { refresh?: boolean }) => options?.refresh ? new Promise<SelfUpdateCheck>(resolve => { release = resolve; }) : current);
+    const f = mount(locale, current, { overrides: { getSelfUpdate } }); const user = userEvent.setup();
+    await waitFor(() => expect(screen.queryByText(f.t(SELF_UPDATE_STATE_KEYS.current)) !== null).toBe(true));
+    const button = screen.getByRole("button", { name: f.t("settings.updates.selfUpdate.check") }) as HTMLButtonElement;
+    await user.click(button);
+    expect(getSelfUpdate).toHaveBeenLastCalledWith("0", { refresh: true });
+    await waitFor(() => expect(button.disabled).toBe(true));
+    expect(button.querySelector("[data-icon='inline-start']") !== null).toBe(true);
+    await act(async () => { release(check); });
+    await waitFor(() => expect(screen.queryByText(f.t("settings.updates.selfUpdate.targetVersion", { version: "1.0.1" })) !== null).toBe(true));
+    expect(button.disabled).toBe(false);
+    expect(screen.getByRole("status").textContent?.includes(locale === "de" ? "zuletzt geprüft" : "last checked")).toBe(true);
+  });
+}

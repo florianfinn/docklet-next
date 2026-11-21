@@ -257,6 +257,7 @@ export const enSettings = {
       currentVersion: "Installed version: {version}",
       targetVersion: "Target version: {version}",
       check: "Check again",
+      checkedAt: "last checked {time}",
       viewRun: "View update activity",
       manual: "Manual command {number}",
       confirmHub: "Update Docklet to {version}. A helper updates this Compose service and its image pin. The connection will pause while Docklet restarts. This page reloads after the new version is confirmed healthy.",

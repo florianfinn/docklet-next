@@ -2,7 +2,7 @@
 // Revision: 48f47c93878ecf1c27491d0214db80d5b38b547d
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original self-update intake and identity-owned activity/version following.
+// Deviations: Original self-update intake and identity-owned activity/version following; explicit recheck refreshes the release list.
 
 import { CancelledError } from "@tanstack/react-query";
 import type { HubUpdateSession } from "./hub-update-session";
@@ -97,9 +97,9 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
     timers.set(id, setTimeout(() => { void poll(); }, delay));
   }
   return {
-    async getSelfUpdate(host: string): Promise<SelfUpdateCheck> {
+    async getSelfUpdate(host: string, options?: { refresh?: boolean }): Promise<SelfUpdateCheck> {
       await allowed(host);
-      const value = await request(`/environments/${encodeURIComponent(host)}/system/upgrade/check`) as SelfUpdateCheck;
+      const value = await request(`/environments/${encodeURIComponent(host)}/system/upgrade/check${options?.refresh ? "?refresh=true" : ""}`) as SelfUpdateCheck;
       if (!validSelfUpdateCheck(value)) throw runtimeError("update.check-unavailable");
       // Recover following after navigation or a browser refresh from the durable operation.
       if (host === "0") hubSession?.observe(value.operation);

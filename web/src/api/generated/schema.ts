@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: fe1ee1bb16315152532423c88b5a7f05384edcba0792620b3649dddda579fa11
+// Revision: 067740484879c23d2cc5d4aac49f1c603579646396d6cc3ffd1ba93dd0efd167
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -29820,7 +29820,10 @@ export interface operations {
     };
     "check-upgrade": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Fetch the release list again before checking (hub only, at most every 30 seconds) */
+                refresh?: boolean;
+            };
             header?: never;
             path: {
                 id: string;

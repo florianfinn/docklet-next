@@ -310,7 +310,8 @@ export interface ImagesApi {
 export type SetupInput = Pick<HubSettings, "general" | "auth" | "hostDefaults"> & { modules?: ModuleChoices };
 
 export interface SettingsApi extends ModulesApi {
-  getSelfUpdate(hostId: string): Promise<import("@/domain/self-update").SelfUpdateCheck>;
+  /** `refresh` makes the hub fetch the release list again (explicit recheck). */
+  getSelfUpdate(hostId: string, options?: { refresh?: boolean }): Promise<import("@/domain/self-update").SelfUpdateCheck>;
   selfUpdate(hostId: string, input: import("@/domain/self-update").SelfUpdateInput): Promise<string>;
   getSetupStatus(): Promise<boolean>;
   getConnectedSettings(): Promise<Pick<HubSettings, "general" | "activity" | "hostDefaults">>;
