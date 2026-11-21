@@ -23,6 +23,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Activity discovery and bounded recovery](activity-discovery.md) | List projection, lazy detail demand, recovery state table and behavioural guards for #225 and #223 |
 | [Run gate and single-hub operation](run-gate.md) | Activity states, gated admission, cancellation, restart recovery and one hub per database |
 | [Runtime control and log lifecycle](runtime-control.md) | Opaque-key retries, bounded outcome evidence and unknown recovery, logs/session closure and staged v4 foundation activation |
+| [Independent stacks and recorded env files](stack-env-and-peers.md) | Unreadable or duplicate stacks never block other stacks; env files recorded by Compose |
 | [In-app updates](app-updates.md) | Narrow Compose helper, correlated hub/agent operations, frozen recovery contract and manual failure recovery |
 | [Images and updates](images-updates.md) | Host image guards, safe registry credentials, update policies, scheduled apply, restore points and lifecycle prerequisites |
 | [Image identity and initial update reads](images-updates-identity.md) | Classic/containerd identity, initial policy/schedule/baseline DTOs, producer fixtures and candidate regression proofs |
@@ -73,6 +74,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Capacity, run gate and density](capacity-gate.md) | M23 single disk source and time axis, run gate confirmation read and supported containers per host |
 | [Practical acceptance](practical-acceptance.md) | Approved sandbox procedure |
 | [Proxy UI concept](proxy-ui-concept.md) | Development-only Traefik/Caddy UI, live lab bridge and three routing-map placements |
+| [Proxy UI adoption](proxy-ui-adoption.md) | Prototype presentation on the real proxy model with suggestions and tooltips |
 | [Proxy import analysis](proxy-import-analysis.md) | Dated read-only findings from a real Traefik edge and their constraints on the proxy module |
 | [Optional modules](optional-modules.md) | M27 design: in-image modules on the feature registry, access-then-gate refusal, admission fence, setup step and host compatibility |
 | [Proxy module](proxy-module.md) | M27 design: agent-owned Traefik and Caddy writes, journaled write protocol with recovery and release, verification evidence and measured baseline |
