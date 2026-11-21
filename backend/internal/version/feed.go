@@ -2,7 +2,7 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original Docklet Next release feed client and selectors; one lock-guarded cache with throttled forced refresh for explicit rechecks.
+// Deviations: Original Docklet Next release feed client and selectors; sequence-ordered cache with throttled forced refresh for explicit rechecks.
 
 package version
 
@@ -42,7 +42,9 @@ const (
 	// Forced refreshes closer together reuse the previous result, which keeps
 	// repeated clicks within the unauthenticated GitHub API budget.
 	releaseFeedMinRefresh = 30 * time.Second
-	// The browser gives a check 15 seconds; a refresh leaves room for the rest.
+	// Ordinary reads wait for their fetch; this bounds that wait.
+	releaseFeedFetchTimeout = 10 * time.Second
+	// The browser gives the refresh 12 seconds; it never waits for another fetch.
 	releaseFeedRefreshTimeout = 8 * time.Second
 )
 
@@ -78,14 +80,22 @@ type releaseFeed struct {
 	// lookup resolves http feed hosts per request; tests replace it.
 	lookup func(ctx context.Context, host string) ([]netip.Addr, error)
 
-	// mu covers every fetch and cache write, so an older fetch can never replace
-	// a newer list. Readers wait for a running fetch (at most its timeout).
+	// mu guards the fields below and is never held during a fetch. Every fetch
+	// takes a sequence number at its start; only a later start may replace the
+	// stored list, so an older fetch that finishes last cannot undo a newer one.
 	mu        sync.Mutex
+	started   uint64
+	stored    uint64
 	list      []Release
-	listAt    time.Time // last successful fetch
+	listAt    time.Time // last stored successful fetch
 	failedAt  time.Time // last failed fetch
 	forcedAt  time.Time // last explicit refresh
 	forcedErr error
+	// loadMu lets ordinary reads share one fetch; refreshMu serialises explicit
+	// refreshes. Neither waits for the other, so a refresh never queues behind
+	// a slow ordinary fetch.
+	loadMu    sync.Mutex
+	refreshMu sync.Mutex
 }
 
 func newReleaseFeed(client *http.Client, disabled bool, raw string) *releaseFeed {
@@ -97,18 +107,36 @@ func newReleaseFeed(client *http.Client, disabled bool, raw string) *releaseFeed
 	return f
 }
 
-// loadLocked fetches the list and stores it; the caller holds mu. The fetch
-// does not end with the request that triggered it.
-func (f *releaseFeed) loadLocked(ctx context.Context, timeout time.Duration) error {
+// load fetches the list and stores it unless a later-started fetch already
+// stored one. The fetch does not end with the request that triggered it.
+func (f *releaseFeed) load(ctx context.Context, timeout time.Duration) error {
+	f.mu.Lock()
+	f.started++
+	seq := f.started
+	f.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 	releases, err := f.fetch(ctx)
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if err != nil {
 		f.failedAt = time.Now()
 		return errReleaseFeedUnavailable()
 	}
-	f.list, f.listAt, f.failedAt = releases, time.Now(), time.Time{}
+	if seq > f.stored {
+		f.list, f.listAt, f.failedAt, f.stored = releases, time.Now(), time.Time{}, seq
+	}
 	return nil
+}
+
+// due reports whether an ordinary read should fetch: the list is past its TTL
+// and the last failure is older than the retry wait.
+func (f *releaseFeed) due() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fresh := !f.listAt.IsZero() && time.Since(f.listAt) < releaseFeedTTL
+	waiting := !f.failedAt.IsZero() && time.Since(f.failedAt) < releaseFeedRetry
+	return !fresh && !waiting
 }
 
 // parseReleaseFeedURL accepts https anywhere and http for hosts that are checked
@@ -191,13 +219,15 @@ func (f *releaseFeed) releases(ctx context.Context) ([]Release, error) {
 	if f.invalid != nil {
 		return nil, errReleaseFeedUnavailable()
 	}
+	if f.due() {
+		f.loadMu.Lock()
+		if f.due() {
+			_ = f.load(ctx, releaseFeedFetchTimeout)
+		}
+		f.loadMu.Unlock()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	fresh := !f.listAt.IsZero() && time.Since(f.listAt) < releaseFeedTTL
-	waiting := !f.failedAt.IsZero() && time.Since(f.failedAt) < releaseFeedRetry
-	if !fresh && !waiting {
-		_ = f.loadLocked(ctx, defaultRequestTimeout)
-	}
 	if f.listAt.IsZero() || time.Since(f.listAt) >= releaseFeedStale {
 		return nil, errReleaseFeedUnavailable()
 	}
@@ -210,14 +240,19 @@ func (f *releaseFeed) refresh(ctx context.Context) error {
 	if f == nil || f.disabled || f.invalid != nil {
 		return nil
 	}
+	f.refreshMu.Lock()
+	defer f.refreshMu.Unlock()
 	f.mu.Lock()
-	defer f.mu.Unlock()
-	if !f.forcedAt.IsZero() && time.Since(f.forcedAt) < releaseFeedMinRefresh {
-		return f.forcedErr
+	recent, last := !f.forcedAt.IsZero() && time.Since(f.forcedAt) < releaseFeedMinRefresh, f.forcedErr
+	f.mu.Unlock()
+	if recent {
+		return last
 	}
-	f.forcedAt = time.Now()
-	f.forcedErr = f.loadLocked(ctx, releaseFeedRefreshTimeout)
-	return f.forcedErr
+	err := f.load(ctx, releaseFeedRefreshTimeout)
+	f.mu.Lock()
+	f.forcedAt, f.forcedErr = time.Now(), err
+	f.mu.Unlock()
+	return err
 }
 
 type feedEntryInternal struct {

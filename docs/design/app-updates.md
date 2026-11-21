@@ -17,8 +17,9 @@ installation; RepoDigest ordering and OCI display labels do not determine policy
 
 The hub keeps the release list for three hours; after a failed fetch it waits a
 minute before the next attempt and serves a list up to 24 hours old meanwhile.
-One lock covers every fetch and cache write, so an older fetch never replaces a
-newer list. "Check again" first calls the hub-only `POST /system/releases/refresh`,
+Each fetch is numbered at its start and only a later start may replace the
+stored list, so an older fetch never undoes a newer one; ordinary reads share one
+fetch, and a refresh never waits behind it. "Check again" first calls the hub-only `POST /system/releases/refresh`,
 which fetches the list once more (at most every 30 seconds), and then checks the
 host. Agents take their candidate
 from the same list, and the frozen agent check route stays unchanged. A failed

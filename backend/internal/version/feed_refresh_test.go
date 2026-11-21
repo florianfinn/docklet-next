@@ -159,19 +159,23 @@ func TestReleaseFeedOlderLoadCannotReplaceARefresh(t *testing.T) {
 			gate.set(`[`+feedEntryJSON("v1.3.0")+`,`+feedEntryJSON("v1.2.0")+`]`, false)
 			refreshed := make(chan error, 1)
 			go func() { refreshed <- svc.RefreshReleases(context.Background()) }()
-			// The refresh either waits for the older fetch or (if unguarded) finishes first.
+			// The refresh must not queue behind the older fetch (browser deadline).
 			select {
 			case err := <-refreshed:
-				refreshed <- err
-			case <-time.After(200 * time.Millisecond):
+				require.NoError(t, err)
+			case <-time.After(2 * time.Second):
+				close(gate.release)
+				t.Fatal("the refresh waited for the older fetch")
 			}
-			close(gate.release)
-			<-older
-			require.NoError(t, <-refreshed)
-
 			newest, _, err := svc.NewestRelease(t.Context())
 			require.NoError(t, err)
-			require.Equal(t, "1.3.0", newest.Version)
+			require.Equal(t, "1.3.0", newest.Version, "the refresh is visible while the older fetch still runs")
+			close(gate.release)
+			<-older
+
+			newest, _, err = svc.NewestRelease(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, "1.3.0", newest.Version, "the older fetch finishing last does not undo the refresh")
 		})
 	}
 }
@@ -191,4 +195,25 @@ func TestReleaseFeedWaitsBeforeRetryingAFailedFetch(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "1.2.0", newest.Version)
 	require.Equal(t, 2, feed.count())
+}
+
+func TestReleaseFeedConcurrentReadsShareOneFetch(t *testing.T) {
+	gate := &gatedFeedInternal{body: `[` + feedEntryJSON("v1.2.0") + `]`, started: make(chan struct{}), release: make(chan struct{})}
+	svc := NewVersionService(gate.client(), false, "", "1.2.0", "", nil, nil)
+	var wg sync.WaitGroup
+	wg.Go(func() { _, _, _ = svc.NewestRelease(context.Background()) })
+	<-gate.started
+	for range 10 {
+		wg.Go(func() {
+			newest, _, err := svc.NewestRelease(context.Background())
+			if err != nil || newest.Version != "1.2.0" {
+				t.Errorf("reader got %q, %v", newest.Version, err)
+			}
+		})
+	}
+	close(gate.release)
+	wg.Wait()
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	require.Equal(t, 1, gate.requests)
 }
