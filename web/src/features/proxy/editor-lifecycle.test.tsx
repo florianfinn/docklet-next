@@ -46,12 +46,8 @@ describe("proxy editor snapshot and identity ownership", () => {
     );
     const user = await edit();
     expect(screen.queryByText("Current TLS: certificates from resolver existing-resolver.") !== null).toBe(true);
-    const known = screen.getByRole("combobox", { name: "Existing middleware" });
-    known.focus();
-    await user.keyboard("{ArrowDown}");
-    await screen.findByRole("option", { name: "headers" });
-    expect(screen.queryByRole("option", { name: "unused-auth" }) !== null).toBe(true);
-    await user.click(screen.getByRole("option", { name: "unused-auth" }));
+    expect(screen.queryByRole("button", { name: "unused-auth" }) !== null).toBe(true);
+    await user.click(screen.getByRole("button", { name: "unused-auth" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(writes(f).length).toBe(1));
     const body = writes(f)[0]!.body as {
@@ -169,7 +165,7 @@ describe("proxy editor snapshot and identity ownership", () => {
       await held;
     });
     expect(screen.queryByRole("heading", { name: "Proxy" }) === null).toBe(true);
-    expect(screen.queryByRole("article", { name: "app" }) === null).toBe(true);
+    expect(screen.queryByRole("button", { name: "Actions for app" }) === null).toBe(true);
     expect(writes(f).length).toBe(0);
   });
 });

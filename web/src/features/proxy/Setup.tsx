@@ -4,6 +4,9 @@
 // License: Apache-2.0
 // Deviations: Original production proxy Manager implementation.
 
+import { Detail } from "./presentation";
+import { IconTile, ToneBadge } from "@/shared/components/tone";
+import { Server } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PROXY_REASON_KEYS } from "@/data/wire-catalogue-proxy";
 import { useTranslations } from "use-intl";
@@ -56,10 +59,8 @@ function Candidate({
   return (
     <article className="grid min-w-0 gap-4 rounded-xl border bg-card p-4">
       <div className="min-w-0 [overflow-wrap:anywhere]">
-        <h3 className="font-semibold">{c.identity.containerName}</h3>
-        <p className="text-sm">
-          {c.image} {c.version}
-        </p>
+        <div className="flex items-center gap-3"><IconTile tone="accent"><Server /></IconTile><h3 className="font-semibold">{c.identity.containerName}</h3><ToneBadge tone="cyan">{contract(`kinds.${c.kind}`)}</ToneBadge></div>
+        <dl><Detail label={t("container")}>{c.image} {c.version}</Detail></dl>
         {c.instanceId && <p>{t("assigned", { name: assigned ?? c.instanceId })}</p>}
       </div>
       <fieldset disabled={busy || !!c.instanceId} className="grid min-w-0 gap-4">
@@ -109,6 +110,7 @@ function Candidate({
           </>
         )}
         <Button
+          className="justify-self-start"
           disabled={!selected || !selectable(selected) || !name.trim() || !directory.trim() || (c.kind === "caddy" && !root.trim())}
           onClick={() =>
             create({
@@ -177,6 +179,7 @@ export function Setup({
       />
       <Button
         variant="outline"
+        className="justify-self-start"
         disabled={!environment || busy}
         onClick={() => {
           setState({});

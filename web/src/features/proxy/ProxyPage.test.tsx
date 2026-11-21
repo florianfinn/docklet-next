@@ -103,7 +103,7 @@ describe("production proxy Manager HTTP integration", () => {
         </Providers>
       </StrictMode>,
     );
-    await screen.findByRole("article", { name: "app" });
+    await screen.findByRole("button", { name: "Actions for app" });
     await act(async () => {
       unblock();
       await bodyFinished;
@@ -125,7 +125,7 @@ describe("production proxy Manager HTTP integration", () => {
     await workspace(f);
     expect(screen.getAllByRole("button", { name: /Actions for/ }).length).toBe(1);
     for (const name of ["text-only", "infrastructure", "label-read-only"])
-      expect(within(screen.getByRole("article", { name })).queryByRole("button") === null).toBe(true);
+      expect(within(screen.getByText(name, { selector: "p" }).closest("tr")!).queryByRole("button") === null).toBe(true);
     expect(screen.getByRole("link", { name: "Open stack editor" }).getAttribute("href")).toBe(
       "/stacks/host-one~project-one?tab=editor",
     );
@@ -265,14 +265,14 @@ describe("production proxy Manager HTTP integration", () => {
   it("re-reads operations after a lost response and never repeats create", async () => {
     const f = await workspace();
     f.state.lost = true;
-    await userEvent.click(screen.getByRole("button", { name: "New route" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add route" }));
     fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "new-app" } });
     fireEvent.change(screen.getByLabelText("Host / domain"), { target: { value: "new.example.com" } });
     fireEvent.change(screen.getByLabelText("Backend host"), { target: { value: "backend.example.com" } });
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
     // Asserted before any text wait: the unknown outcome blocks further writes.
-    expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Add route" }).hasAttribute("disabled")).toBe(true);
     expect(operationWrites(f).length).toBe(1);
     expect(screen.queryByText(/Write outcome is not confirmed/) !== null).toBe(true);
     expect(
@@ -307,7 +307,7 @@ describe("production proxy Manager HTTP integration", () => {
     expect(screen.queryByText(/Write outcome is not confirmed/) === null).toBe(true);
     await user.click(within(dialog!).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
-    expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "Add route" }).hasAttribute("disabled")).toBe(false);
     expect(
       f.fetcher.mock.calls.filter(([url, init]) => String(url).endsWith("/operations") && init?.method === "POST")
         .length,

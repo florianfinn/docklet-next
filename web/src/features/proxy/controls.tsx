@@ -58,14 +58,16 @@ export function ConfirmCheck({
   checked,
   onChange,
   children,
+  disabled,
 }: {
   checked: boolean;
+  disabled?: boolean;
   onChange: (value: boolean) => void;
   children: ReactNode;
 }) {
   return (
     <label className="flex items-start gap-3 text-sm leading-relaxed">
-      <Checkbox checked={checked} onCheckedChange={v => onChange(v === true)} />
+      <Checkbox disabled={disabled} checked={checked} onCheckedChange={v => onChange(v === true)} />
       <span>{children}</span>
     </label>
   );

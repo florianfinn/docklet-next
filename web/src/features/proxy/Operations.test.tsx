@@ -87,7 +87,7 @@ describe("operation receipts through HTTP decoder to production renderer", () =>
       confirmed: { present: true, hash: changedHash },
     });
     await screen.findByText("Released");
-    expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "Add route" }).hasAttribute("disabled")).toBe(false);
   });
   it("keeps recovery without a current target unreleasable", async () => {
     const f = fixture();

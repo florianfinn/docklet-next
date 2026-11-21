@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original bounded probe client and certificate observation integration.
 
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { CancelledError, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
@@ -23,7 +23,7 @@ function certificateHost(instance: Instance, route: Route): string | undefined {
   const host = instance.kind === "caddy" ? route.rule : /Host\(`([^`]+)`\)/.exec(route.rule)?.[1];
   return host && !host.startsWith("*.") ? host : undefined;
 }
-export function CertificateCheck({ instance, route, hash }: { instance: Instance; route: Route; hash: string }) {
+export function CertificateCheck({ instance, route, hash, frame }: { instance: Instance; route: Route; hash: string; frame?: (content: ReactNode) => ReactNode }) {
   const t = useTranslations("proxyContract.ui"), adapter = useAdapter(), principal = usePrincipal();
   const version = useIdentityVersion(), enabled = useModuleEnabled("proxy"), cache = useQueryClient();
   const host = certificateHost(instance, route);
@@ -59,11 +59,12 @@ export function CertificateCheck({ instance, route, hash }: { instance: Instance
   if (!allowed || !host || !hash) return null;
   const value = query.data?.observation;
   const outdated = !!value && (value.epoch.containerId !== instance.identity.containerId || value.epoch.startedAt !== instance.identity.startedAt || query.data?.hash !== hash);
-  return (
-    <div className="grid gap-2">
-      <Button variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}>{t("checkCertificate")}</Button>
+  const content = (
+    <div className="grid min-w-0 gap-2">
+      <Button className="justify-self-end" variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}>{t("checkCertificate")}</Button>
       {query.error && (query.error instanceof ProxyError && query.error.code === "certificate-unavailable" ? <p>{t("certificateUnavailable")}</p> : <ErrorView error={query.error} />)}
       {value && <CertificateObservation value={value} outdated={outdated} />}
     </div>
   );
+  return frame ? frame(content) : content;
 }

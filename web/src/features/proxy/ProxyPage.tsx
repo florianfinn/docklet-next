@@ -11,6 +11,9 @@ import { usePrincipal } from "@/data/use-principal";
 import { useHosts } from "@/data/queries";
 import { identityLifetime } from "@/data/identity-lifetime";
 import { createProxyApi } from "@/data/http/proxy-api";
+import { Server } from "lucide-react";
+import { PageHeader } from "@/shared/components/page";
+import { IconTile, ToneBadge } from "@/shared/components/tone";
 import { Button } from "@/shared/ui/button";
 import { Choice, ErrorView } from "./controls";
 import { InstanceWorkspace } from "./InstanceWorkspace";
@@ -93,18 +96,16 @@ function Manager() {
     }
   };
   return (
-    <div className="[&_button]:max-w-full [&_button]:whitespace-normal mx-auto grid w-full min-w-0 max-w-6xl gap-6 p-4 sm:p-6">
-      <header>
-        <h1 className="text-2xl font-semibold">{t("title")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("intro")}</p>
-      </header>
+    <div className="[&_button]:max-w-full [&_button]:whitespace-normal grid min-w-0 gap-5">
+      <PageHeader title={t("title")} description={t("intro")} />
       {error !== undefined && <ErrorView error={error} />}
       {hosts.isError && <ErrorView error={hosts.error} />}
       {instances && (
         <>
           {instances.length > 0 && (
-            <div className="grid min-w-0 gap-3 rounded-xl border bg-card p-4 sm:grid-cols-[1fr_auto]">
-              <Choice
+            <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
+              <IconTile tone="accent"><Server /></IconTile>
+              <div className="min-w-0 flex-1"><Choice
                 id="proxy-instance"
                 label={t("instances")}
                 value={instance ? instance.id : SETUP}
@@ -118,6 +119,8 @@ function Manager() {
                   { value: SETUP, label: t("newInstanceOption") },
                 ]}
               />
+              </div>
+              {instance && <div className="flex min-w-0 flex-wrap items-center gap-3"><span className="break-all font-mono text-xs">{instance.identity.containerName}</span><ToneBadge tone="cyan">{hosts.data?.find(h => h.id === instance.environmentId)?.name ?? instance.environmentId}</ToneBadge></div>}
               <Button variant="outline" className="self-end" disabled={!instance} onClick={() => setPage(to({ kind: "setup" }))}>
                 {t("newInstance")}
               </Button>
@@ -125,17 +128,6 @@ function Manager() {
           )}
           {instance ? (
             <>
-              <div className="flex min-w-0 flex-wrap gap-x-5 gap-y-2 text-sm">
-                <span className="break-all">
-                  {t("instance")} · {instance.name}
-                </span>
-                <span className="break-all">
-                  {t("host")} · {hosts.data?.find(h => h.id === instance.environmentId)?.name ?? instance.environmentId}
-                </span>
-                <span className="break-all">
-                  {t("container")} · {instance.identity.containerName}
-                </span>
-              </div>
               <InstanceWorkspace
                 key={JSON.stringify(instance)}
                 instance={instance}

@@ -14,6 +14,7 @@ import { Operations } from "./Operations";
 import { RouteEditor } from "./RouteEditor";
 import { ChangeDialog, type ChangeAction } from "./ChangeDialog";
 import { RouteList } from "./RouteList";
+import { ManualImportHint } from "./ManualImportHint";
 import { Settings } from "./Settings";
 import { canInsertImport, drifted, operationRequest, relativeTarget, routeWritesAllowed } from "./model";
 import type { Acknowledgements, Change, Instance, Inventory, Operation, ReadResult, Route } from "./types";
@@ -207,6 +208,7 @@ export function InstanceWorkspace({
               <pre className="whitespace-pre-wrap break-all font-mono text-xs">{snapshot.inventory.importLine}</pre>
               {canInsertImport(snapshot.inventory) ? (
                 <Button
+                  className="justify-self-start"
                   disabled={blocked}
                   onClick={() =>
                     setAction({
@@ -221,27 +223,25 @@ export function InstanceWorkspace({
                   {t("insertImport")}
                 </Button>
               ) : (
-                <p className="text-sm">{t("manualImport")}</p>
+                <ManualImportHint instance={instance} />
               )}
             </div>
           )}
           <Tabs defaultValue="routes" className="min-w-0">
-            <TabsList>
+            <TabsList variant="line" className="max-w-full justify-start border-b">
               <TabsTrigger value="routes">{t("routes")}</TabsTrigger>
               <TabsTrigger value="settings">{t("settings")}</TabsTrigger>
             </TabsList>
             <TabsContent value="routes" className="grid min-w-0 gap-4 pt-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">{t("routes")}</h2>
-                <Button disabled={!writable} onClick={() => setEditor({ snapshot })}>
-                  {t("newRoute")}
-                </Button>
               </div>
               <RouteList
                 instance={{ ...instance, identity: snapshot.inventory.identity }}
                 routes={snapshot.read.routes ?? []}
                 hashes={Object.fromEntries((snapshot.read.files ?? []).map(file => [file.path, file.hash]))}
                 writable={writable}
+                create={() => setEditor({ snapshot })}
                 edit={route => setEditor({ route, snapshot })}
                 action={value => setAction({ value, snapshot })}
               />

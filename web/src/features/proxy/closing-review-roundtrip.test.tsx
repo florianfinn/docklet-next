@@ -85,10 +85,9 @@ it("reviewer hides newline middleware definitions from the line editor", async (
   const user = userEvent.setup();
   await user.click(await screen.findByRole("button", { name: "Actions for app" }));
   await user.click(await screen.findByRole("menuitem", { name: "Edit route" }));
-  screen.getByRole("combobox", { name: "Existing middleware" }).focus();
-  await user.keyboard("{ArrowDown}");
-  await screen.findByRole("option", { name: "headers" });
-  expect(screen.getAllByRole("option").some(el => el.textContent?.includes("\n"))).toBe(false);
+  const chips = screen.getByRole("group", { name: "Existing middleware" });
+  expect(chips.querySelectorAll("button").length).toBe(1);
+  expect(chips.textContent?.includes("headers\nstrict")).toBe(false);
 });
 
 it("reviewer freezes the middleware picker with a frozen multiline chain", async () => {
@@ -103,6 +102,6 @@ it("reviewer freezes the middleware picker with a frozen multiline chain", async
   const user = userEvent.setup();
   await user.click(await screen.findByRole("button", { name: "Actions for app" }));
   await user.click(await screen.findByRole("menuitem", { name: "Edit route" }));
-  const picker = screen.getByRole("combobox", { name: "Existing middleware" });
+  const picker = screen.getByRole("button", { name: "extra" });
   expect(picker.hasAttribute("disabled")).toBe(true);
 });

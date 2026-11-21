@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original production proxy Manager implementation.
 
+import { Detail } from "./presentation";
+import { ToneBadge } from "@/shared/components/tone";
 import { ResolverDialog } from "./ResolverDialog";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -56,28 +58,20 @@ export function Settings({
         ];
   return (
     <section className="grid min-w-0 gap-6">
-      <div className="grid gap-3 rounded-xl border p-4">
+      <div className="grid gap-3 rounded-xl border bg-card p-5">
         <h2 className="font-semibold">{t("status")}</h2>
         {inventory && <EligibilityView value={inventory.eligibility} />}
-        <p className="break-all text-sm">
-          {t("authority")} · {t(`authorities.${instance.authority}`)}
-        </p>
-        <p className="break-all text-sm">
-          {contract(`sources.${instance.source.kind}`)} · {instance.source.mountTarget}
-        </p>
+        <dl><Detail label={t("authority")}><ToneBadge tone="cyan">{t(`authorities.${instance.authority}`)}</ToneBadge></Detail><Detail label={t("source")}>{contract(`sources.${instance.source.kind}`)} · {instance.source.mountTarget}</Detail></dl>
         {facts.length > 0 && (
-          <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+          <dl className="min-w-0">
             {facts.map(([label, value]) => (
-              <div key={label} className="min-w-0">
-                <dt className="text-xs text-muted-foreground">{label}</dt>
-                <dd className="whitespace-pre-wrap break-all text-sm">{value || "—"}</dd>
-              </div>
+              <Detail key={label} label={label!}>{value || "—"}</Detail>
             ))}
           </dl>
         )}
       </div>
       {instance.kind === "traefik" && inventory && (
-        <section className="grid gap-3 rounded-xl border p-4">
+        <section className="grid gap-3 rounded-xl border bg-card p-5">
           <h2 className="font-semibold">{t("resolvers")}</h2>
           <ul className="grid gap-2">
             {(inventory.resolverSummaries ?? []).map(resolver => <li key={resolver.name} className="break-all text-sm">
@@ -85,12 +79,12 @@ export function Settings({
               {resolver.variables?.map(variable => <span key={variable.name}> · {variable.name}: {t(variable.configured ? "yes" : "no")}</span>)}
             </li>)}
           </ul>
-          <Button variant="outline" disabled={busy || !inventory.eligibility.writable} onClick={() => setResolverOpen(true)}>{t("resolverCreate.create")}</Button>
+          <Button className="justify-self-start" variant="outline" disabled={busy || !inventory.eligibility.writable} onClick={() => setResolverOpen(true)}>{t("resolverCreate.create")}</Button>
         </section>
       )}
       {resolverOpen && inventory && <ResolverDialog instance={instance} inventory={inventory} close={() => setResolverOpen(false)} />}
       <form
-        className="grid min-w-0 gap-4 rounded-xl border p-4"
+        className="grid min-w-0 gap-4 rounded-xl border bg-card p-5"
         onSubmit={e => {
           e.preventDefault();
           if (!busy && name.trim() && directory.trim())
@@ -104,9 +98,9 @@ export function Settings({
             <TextField id="instance-root" label={t("rootFile")} value={root} onChange={setRoot} />
           )}
         </fieldset>
-        <Button disabled={busy || !name.trim() || !directory.trim()}>{t("save")}</Button>
+        <Button className="justify-self-start" disabled={busy || !name.trim() || !directory.trim()}>{t("save")}</Button>
       </form>
-      <Button variant="destructive" disabled={busy} onClick={() => setRemoving(true)}>
+      <Button className="justify-self-start" variant="destructive" disabled={busy} onClick={() => setRemoving(true)}>
         {t("remove")}
       </Button>
       {removing && (
