@@ -46,7 +46,7 @@ func TestDriftBaselineCrossesRealDirectAndEdge(t *testing.T) {
 					require.Equal(t, 200, w.Code, w.Body.String())
 					return w
 				}
-				// Browser path: the hub forwards the agent's bytes unchanged to the web decoder.
+				// Browser path: the hub forwards the agent's JSON unchanged to the web decoder.
 				require.JSONEq(t, string(body), browser("/api/environments/example/updater/projects/project-uuid/baseline").Body.String())
 				// Hub path: the environment proxy hands the policy consumer (updater TestDriftFixturePolicyConsumer)
 				// exactly the fixture's envelope.
