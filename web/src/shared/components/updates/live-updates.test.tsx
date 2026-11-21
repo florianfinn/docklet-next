@@ -2,7 +2,7 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Producer-shaped HTTP fixtures and behavioural guards for issue #231.
+// Deviations: Producer-shaped HTTP fixtures and behavioural guards for issue #231. M34 #546: one blocking reason and a deploy action.
 
 import { formatDateTime } from "@/domain/format";
 import { useQuery } from "@tanstack/react-query";
@@ -181,9 +181,14 @@ it("initial missing baseline shows deploy-once guidance before any submit", asyn
   f.adapter.getUpdateBaseline = async (id) => { const value = await original(id); completed.resolve(); return value; };
   renderWithApp(<StackUpdateDialog stackId="direct~project" onClose={() => {}} />, f.adapter);
   await act(async () => { await completed.promise; });
-  await waitFor(() => expect(screen.getByRole("button", { name: t.update }).hasAttribute("disabled")).toBe(false));
-  const status = screen.queryByText(catalogs.de.images.errors["update_baseline-unavailable"]);
-  expect(status?.getAttribute("role")).toBe("status");
+  // The reason shows once; controls that cannot succeed give way to the deploy that resolves it.
+  const reason = catalogs.de.images.errors["update_baseline-unavailable"];
+  const status = await screen.findByText(reason);
+  expect(status.getAttribute("role")).toBe("status");
+  expect(document.body.textContent?.split(reason).length).toBe(2);
+  expect(screen.queryByRole("button", { name: t.update }) === null).toBe(true);
+  expect(screen.queryByRole("combobox") === null).toBe(true);
+  expect(screen.getByRole("button", { name: t.deployNow }).hasAttribute("disabled")).toBe(false);
   expect(screen.queryByRole("dialog") !== null).toBe(true); expect(f.writes()).toHaveLength(0);
 });
 it("readable baseline cannot enable send without the write descriptor", async () => {

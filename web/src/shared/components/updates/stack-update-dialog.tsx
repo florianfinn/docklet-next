@@ -2,7 +2,7 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original live update UI for issue #231. M24 S6: observed recovery and update UI follow-ups.
+// Deviations: Original live update UI for issue #231. M24 S6: observed recovery and update UI follow-ups. M34 #546: one blocking reason and a deploy action.
 
 import { useIsUser } from "@/data/use-principal";
 import { openActionDialog } from "@/features/activity/action-dialog-store";
@@ -13,6 +13,7 @@ import { useStack } from "@/data/queries";
 import { AdapterOutcomeError } from "@/data/capability";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { useUpdateAction } from "./use-update-action";
+import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -36,13 +37,16 @@ export function StackUpdateDialog({ stackId, point, services: initialServices, a
   const read = useCapability("getUpdateBaseline", { kind: "stack", id: stackId });
   const write = useCapability(point ? "restoreRestorePoint" : "installStackUpdates", { kind: "stack", id: stackId });
   const points = useCapability("listRestorePoints", { kind: "stack", id: stackId });
+  const redeploy = useCapability("redeployStack", { kind: "stack", id: stackId }), commands = useStackCommands();
   const baseline = useQuery({ queryKey: ["stack", stackId, "update-baseline"], queryFn: () => adapter.getUpdateBaseline!(stackId), enabled: read.available && !!adapter.getUpdateBaseline, staleTime: 0 });
   const action = useUpdateAction(`${stackId}:${baseline.data?.targetIdentity}:${baseline.data?.savedRevision}:${service}`);
   const [ack, setAck] = useState<string>(), [receipt, setReceipt] = useState<{ id: string; identity: string }>();
   const data = baseline.data;
   const runId = receipt?.identity === data?.targetIdentity ? receipt?.id : undefined;
   const validPoint = !point || (point.available && !point.orphaned && point.holdState === "none" && point.targetIdentity === data?.targetIdentity);
-  const canSend = read.available && write.available && (!point || points.available) && !!data && validPoint && (!point || ack === data?.savedRevision) && !action.busy && !runId;
+  // An update needs a verified baseline; a restore point carries its own configuration.
+  const blocked = !point && !!data && !data.available;
+  const canSend = read.available && write.available && (!point || points.available) && !!data && !blocked && validPoint && (!point || ack === data?.savedRevision) && !action.busy && !runId;
   const close = () => { action.reset(); onClose(); };
   useEffect(() => identityLifetime(adapter).listen(onClose), [adapter, onClose]);
   return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{t(point ? "restore" : "update")}</DialogTitle><DialogDescription>{t(autoRestore ? "updateWithCheckHelp" : "noData")}</DialogDescription></DialogHeader>
@@ -50,11 +54,11 @@ export function StackUpdateDialog({ stackId, point, services: initialServices, a
       {!data.available && <p role="status">{errorText(data.code ?? "update.baseline-unavailable")}</p>}
       {point && <><p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p><label className="flex min-w-0 items-start gap-2"><Checkbox checked={ack === data.savedRevision} onCheckedChange={(v) => setAck(v === true ? data.savedRevision : undefined)} /><span className="min-w-0 flex-1 break-all">{t("replace", { revision: data.savedRevision })}</span></label></>}
     </>}
-    {!point && <Select value={service} onValueChange={(v) => { setService(v); setWholeStackHint(false); action.reset(); }}><SelectTrigger aria-label={t("update")}><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="*">{t("update")}</SelectItem>{(stack.data?.services ?? []).map((s) => <SelectItem key={s.name} value={s.name}>{t("service", { name: s.name })}</SelectItem>)}</SelectGroup></SelectContent></Select>}
+    {!point && !blocked && <Select value={service} onValueChange={(v) => { setService(v); setWholeStackHint(false); action.reset(); }}><SelectTrigger aria-label={t("update")}><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="*">{t("update")}</SelectItem>{(stack.data?.services ?? []).map((s) => <SelectItem key={s.name} value={s.name}>{t("service", { name: s.name })}</SelectItem>)}</SelectGroup></SelectContent></Select>}
     {wholeStackHint && <p role="status">{t("wholeStack")}</p>}
     {action.error && <p role="alert">{action.error}</p>}
     {runId && <p role="status">{t("accepted")} <Link to={`/stacks/${encodeURIComponent(stackId)}?tab=${user ? "overview" : "deployments"}`} onClick={() => { if (user) openActionDialog(runId); }}>{t("openRun", { id: runId })}</Link></p>}
-    <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button><Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision, ...(autoRestore ? { autoRestore: true } : {}), ...(service === "*" ? {} : { services: [service] }) }), (id) => setReceipt({ id, identity: data!.targetIdentity }), (error) => setWholeStackHint(error instanceof AdapterOutcomeError && error.outcome.kind === "error" && ["update.service-coupled", "update.image-binding-unsupported"].includes(error.outcome.code)))}>{t(point ? "restore" : "update")}</Button></div>
+    <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button>{blocked ? redeploy.available && <Button onClick={() => { void commands.run(stackId, "redeploy"); close(); }}>{t("deployNow")}</Button> : <Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision, ...(autoRestore ? { autoRestore: true } : {}), ...(service === "*" ? {} : { services: [service] }) }), (id) => setReceipt({ id, identity: data!.targetIdentity }), (error) => setWholeStackHint(error instanceof AdapterOutcomeError && error.outcome.kind === "error" && ["update.service-coupled", "update.image-binding-unsupported"].includes(error.outcome.code)))}>{t(point ? "restore" : "update")}</Button>}</div>
   </DialogContent></Dialog>;
 }
 export function StackUpdateDialogController() {

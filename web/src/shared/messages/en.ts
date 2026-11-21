@@ -77,6 +77,7 @@ export const enCommon = {
     checkOnly: "Check only",
     window: "Install window",
     service: "Update service {name}",
+    deployNow: "Deploy now",
     wholeStack: "Update the whole stack instead.",
     previousImage: "Restore previous image",
     previousImageHelp: "Recreate with the previous image. Volume and bind data are unchanged.",

@@ -78,6 +78,7 @@ export const deCommon: typeof enCommon = {
     checkOnly: "Nur prüfen",
     window: "Installationsfenster",
     service: "Dienst {name} aktualisieren",
+    deployNow: "Jetzt bereitstellen",
     wholeStack: "Stattdessen den gesamten Stack aktualisieren.",
     previousImage: "Vorheriges Image wiederherstellen",
     previousImageHelp: "Mit dem vorherigen Image neu erstellen. Volume- und Bind-Daten bleiben unverändert.",
