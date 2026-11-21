@@ -51,23 +51,44 @@ lab's Certificates and Route map tabs are left out (no API; AUTO-5).
   using the shared `Tooltip`.
 - **Destination.** Choice cards for "Container / stack service" and "External
   service". The container choice offers the running containers on the proxy's
-  host from the existing container inventory, with their container ports. A
-  container that shares no network with the proxy container stays selectable
-  and shows a warning (AUTO-7). Picking one fills scheme, host (service or
-  container name) and port. The external choice keeps scheme, host and port
-  fields.
+  host (`hostId` equals the instance's environment) from the existing container
+  inventory.
+  - A container that shares no network with the proxy container stays
+    selectable and shows a warning (AUTO-7). The proxy container is matched
+    through the composite inventory ID of the instance's raw container ID.
+    Unknown network data shows no warning and no claim either way.
+  - Picking a container fills the host with the unique container name, never a
+    generic service alias. Only TCP container ports are offered. One port is
+    filled directly. Several ports open a choice, and no port leaves the port
+    empty. The scheme stays editable and defaults to `http`.
+  - Fills happen only on a deliberate pick. An inventory refresh never changes
+    the draft. If the picked container disappears, the draft keeps its values
+    and shows a hint.
+  - Host and port changes go through the existing `backendParts`/`backendURL`
+    split, so `rest` and `colon` are kept. Secondary upstreams stay untouched.
+  - Shared and opaque services show no suggestions, as today.
+  - The external choice keeps scheme, host and port fields.
 - **Middlewares.** Toggle chips over the middlewares the proxy observation
   lists, each with help text by reference kind (local, plugin, internal,
   external). Help text per middleware type needs the type from the agent and is
   a follow-up (AUTO-8). Free entry stays possible for names not observed yet.
-- **TLS.** Three choices that map to the existing change fields:
-  - "No TLS": the entry points without TLS, and no resolver.
-  - "Certificate from resolver": entry points with TLS, plus a resolver chosen
-    from the inventory resolvers with their challenge summary.
-  - "Keep current": the existing `PRESERVE` sentinel.
-
-  The wildcard scope cards of the lab are left out, because they were
-  simulated there (AUTO-9).
+- **TLS (AUTO-9, revised after design review).** The current `Change` cannot
+  remove a router's TLS block, because an empty resolver is a no-op in
+  `traefik/prepare.go`. The section therefore offers only what the contract
+  expresses, and the wire stays unchanged:
+  - **New route:** "No TLS" (no resolver, nothing TLS-related sent) or
+    "Certificate from resolver". The resolver is a select over the inventory
+    resolvers with their challenge summary.
+  - **Existing route:** "Keep current", which sends no resolver and no entry
+    point change, or "Certificate from resolver" (change the resolver).
+    Removing TLS from an existing route stays in Advanced and is tracked as a
+    follow-up. That follow-up would need a clear-TLS field and contract 21.
+  - Entry points stay an explicit checkbox list inside the TLS section. A TLS
+    choice never adds or removes entry points automatically. The existing text
+    for implicit default entry points and router TLS versus entry-point TLS
+    stays.
+  - The lab's wildcard scope cards are left out, because they were simulated
+    there.
 - **Domain.** Suggestions come from domains already used by routes of the
   instance, which are parsed from simple `Host()` rules. A domain that is
   already in use shows a warning before save.
@@ -82,10 +103,13 @@ There is no raw-label view, because the DTO carries no label text.
 the plain bordered boxes. Buttons are not full width. The production logic
 stays unchanged.
 
-**#503.** The manual-import hint links to the stack editor of the stack whose
-path equals the instance's source project path. Without a unique match it stays
-plain text (AUTO-11; adding `projectId` to the DTO is the fallback if matching
-proves unreliable).
+**#503 (AUTO-11, revised).** `Instance.source.projectPath` is a mount path
+relative to the projects root, and single-file sources have none, so path
+equality cannot identify the owner. The owner is instead the stack membership
+of the proxy container itself. The instance's host and raw container ID map to
+the inventory row (`inventoryId(environmentId, containerId)`). The link goes to
+that row's `stackId`, at `/stacks/<id>?tab=editor`, scoped to the same host.
+Without stack membership the hint stays plain text. No DTO change is needed.
 
 **Texts.** New keys live in `proxyContract.ui` (en, de). German texts follow
 the lab's German strings where they fit the production vocabulary.
@@ -119,21 +143,24 @@ is unchanged.
 | # | Row kind | Case | Decision | Entry boundary | Test | Red mutation |
 |---|---|---|---|---|---|---|
 | 1 | write path | picking a container suggestion on an existing route | only `upstreams` sent if host/port changed; other leaves untouched | editor `save()` | exact `Change` assertion | send all leaves |
-| 2 | write path | TLS choice "No TLS" / "Resolver" / "Keep current" | exact `entryPoints` + `resolver` per choice; Keep sends no resolver | editor TLS mapping | one test per choice | map Keep to empty resolver |
+| 2 | write path | TLS: new route "No TLS" / "Resolver"; existing route "Keep current" / "Resolver" | exact `Change` per choice, then the real Traefik patcher output: new No TLS has no `tls` key; Keep leaves `entryPoints` and the `tls` subtree byte-identical | editor TLS mapping; `traefik/prepare.go` test fixture | Change test plus Go patcher test | send `resolver:""` for Keep / auto-add TLS entry points |
 | 3 | write path | middleware chip toggled on a name with a comma | names list keeps the exact name | chips → `middlewares` | test | split on comma |
-| 4 | external data | container without ports, stopped, other host | not offered (other host, stopped) / offered without port prefill | suggestion filter | test | drop the host filter |
+| 4 | external data | container stopped, on another host, with UDP-only ports, several ports, no port; refresh during an open draft; picked container removed | host/state filter; TCP only; choice for several; no fill on refresh; hint on removal | suggestion filter and pick handler | tests per case | drop the host filter / fill on refresh |
 | 5 | external data | container not on a proxy network | offered with warning | suggestion filter | test | hide it |
 | 6 | external data | rule not parseable for domain suggestions | ignored for suggestions, shown as-is in the list | domain parser | test with `HostRegexp`, compound rules | throw on parse |
 | 7 | bundle | adopted code in production graph | no design-lab import, no lab strings | production boundary guard | existing guard + `check-production` | import from design-lab |
 | 8 | layout | expanded certificate details at 1440 px | full-width row below the grid | `RouteList` | DOM structure test + screenshot cell | render inside the auto column |
-| 9 | link | #503 hint with 0, 1, 2 matching stacks | link only for exactly one | hint component | test | link to the first match |
-| 10 | step editor | narrow-screen steps hide invalid fields | Save validates all sections; errors jump to the step | editor | test | validate only the current step |
+| 9 | link | #503: proxy container with stack membership, without membership, same raw ID on two hosts; single-file Caddy source | link only with membership, host-qualified, `?tab=editor` | hint component | producer-shaped fixtures | compare raw paths / omit the host |
+| 10 | step editor | narrow-screen steps hide invalid fields | Save stays reachable on the last step and validates all sections; the first invalid field's step opens and the field gets focus and an announcement; Enter on a non-final step goes to Next; the draft survives step and mode changes; acknowledgements stay visible before Save; a definite refusal reopens the editor with the draft | editor | tests | validate only the current step |
+| 11 | write path | middleware chips on an unchanged route; empty or newline name list; unresolved reference | order unchanged, nothing sent on no-op; frozen list as today; acknowledgement gating unchanged | chips → `middlewares` | tests | sort chips |
+| 12 | write path | domain already used by another route | warning only, never blocks Save or changes the rule; current route excluded | domain warning | test of warning and emitted Change | block Save |
 
 ## Acceptance cells
 
-All cells run against the real Traefik in the sandbox on the hub-local host (H).
-There is one Caddy pass for the editor sections and one Edge pass for the
-suggestions source.
+The proxy cells run on the Direct host (D), where the kit prepares real
+Traefik and Caddy fixtures. They cross the agent path that every proxy
+operation uses. X8 runs on Edge (E). The milestone matrix holds the binding
+list.
 
 - **X1.** Route list at 1440 and 390 px: tiles, badges, filter and search work,
   card rows at 390 px. Screenshots go next to the lab screenshots.
