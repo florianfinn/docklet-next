@@ -1,7 +1,7 @@
 import { ModulesSection } from "./sections/ModulesSection";
 import { IDS } from "./settings-sections";
 import { Archive, BellRing, HardDrive, HeartPulse, History, Info, KeyRound, LayoutGrid, Palette, RefreshCw, Settings2, ShieldAlert } from "lucide-react";
-import { NavLink, Navigate, useParams } from "react-router";
+import { NavLink, Navigate, useNavigate, useParams } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useConnectedSettings, useSettings, useHubVersionHint } from "@/data/queries";
@@ -9,6 +9,7 @@ import { useAdapter } from "@/data/use-adapter";
 import { PageHeader, QueryError } from "@/shared/components/page";
 import { FavoritesSection } from "@/shared/preferences/FavoritesSection";
 import { HubUpdateHint } from "@/shared/components/hub-update/HubUpdateHint";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { AuthSection } from "./sections/AuthSection";
@@ -37,7 +38,9 @@ type SectionId = (typeof GROUPS)[number]["items"][number]["id"];
 /** Hub settings with grouped sub-navigation; each section saves on its own. */
 export default function SettingsPage() {
   const { section } = useParams();
+  const navigate = useNavigate();
   const t = useTranslations("settings");
+  const tHub = useTranslations("common.hubUpdate");
   const adapter = useAdapter();
   const hubVersion = useHubVersionHint();
   const validSection = !!section && (IDS as readonly string[]).includes(section);
@@ -59,11 +62,30 @@ export default function SettingsPage() {
       <PageHeader title={t("title")} description={t("description")} />
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <nav aria-label={t("navLabel")} className="min-w-0 lg:sticky lg:top-20">
-          {/* Narrow screens: the section links wrap into rows instead of a horizontal scroller. */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 lg:flex-col lg:gap-4">
+          {/* Narrow screens: one grouped section picker; the sidebar list starts at lg. */}
+          <div className="lg:hidden">
+            <Select value={id} onValueChange={(next) => void navigate(`/settings/${next}${next === "updates" && hubVersion ? "#hub-update" : ""}`)}>
+              <SelectTrigger aria-label={t("navLabel")} className="w-full" data-testid="settings-section-picker"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {GROUPS.map((g) => (
+                  <SelectGroup key={g.key}>
+                    <SelectLabel>{t(`groups.${g.key}`)}</SelectLabel>
+                    {g.items.map(({ id: item, icon: Icon }) => (
+                      <SelectItem key={item} value={item}>
+                        <Icon className="size-4" aria-hidden />
+                        {t(`sections.${item}`)}
+                        {item === "updates" && hubVersion && <><span aria-hidden className="size-2 rounded-full bg-primary" /><span className="sr-only">{tHub("available", { version: hubVersion })}</span></>}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="hidden lg:flex lg:flex-col lg:gap-4" data-testid="settings-section-list">
             {GROUPS.map((g) => (
-              <div key={g.key} className="flex flex-wrap items-center gap-1 lg:flex-col lg:flex-nowrap lg:items-stretch">
-                <div className="hidden px-2.5 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase lg:block">{t(`groups.${g.key}`)}</div>
+              <div key={g.key} className="flex flex-col items-stretch gap-1">
+                <div className="px-2.5 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{t(`groups.${g.key}`)}</div>
                 {g.items.map(({ id: item, icon: Icon }) => (
                   <NavLink
                     key={item}
