@@ -100,13 +100,14 @@ func runtimeIdentityProblem(blocker *imageDTO.RuntimeIdentityBlocker) error {
 	return problem
 }
 
-// Both metadata discovery and executable selection use the same strict identity
-// loader. Neither path uses a cache, prepares binds, or writes project files.
+// Loader seams that tests count; production uses the real loaders. Tests that swap them must not run in parallel.
 var (
 	runtimeProjectInputs = (*ProjectService).resolvedProjectInputContext
 	runtimeLoadIdentity  = projects.LoadComposeIdentity
 )
 
+// Both metadata discovery and executable selection use the same strict identity
+// loader. Neither path uses a cache, prepares binds, or writes project files.
 func (s *ProjectService) runtimeComposeEvidence(ctx context.Context, row *Project) (string, string, error) {
 	ctx = s.composeInputContext(ctx)
 	var inputErr error
