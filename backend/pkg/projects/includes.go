@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None M34 #548: classified include load problems.
 
 package projects
 
@@ -128,7 +128,8 @@ func (l *MissingIncludeStubLoader) Cleanup() {
 //
 // Include handling stays on os.*: include files are allowed to live outside
 // the project directory (#3556), which the root-confined acfs API cannot reach.
-func ParseIncludes(composeFilePath string, envMap EnvMap, includeContent bool) ([]IncludeFile, error) {
+func ParseIncludes(composeFilePath string, envMap EnvMap, includeContent bool) (result []IncludeFile, err error) {
+	defer func() { err = SafeError(err) }()
 	content, err := os.ReadFile(composeFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read compose file: %w", err)
@@ -138,7 +139,8 @@ func ParseIncludes(composeFilePath string, envMap EnvMap, includeContent bool) (
 }
 
 // ParseIncludesFromContent extracts include directives from compose content using composeFilePath as the base path.
-func ParseIncludesFromContent(composeFilePath string, content []byte, envMap EnvMap, includeContent bool) ([]IncludeFile, error) {
+func ParseIncludesFromContent(composeFilePath string, content []byte, envMap EnvMap, includeContent bool) (result []IncludeFile, err error) {
+	defer func() { err = SafeError(err) }()
 	var composeData map[string]any
 	if err := yaml.Unmarshal(content, &composeData); err != nil {
 		return nil, fmt.Errorf("failed to parse compose file: %w", err)

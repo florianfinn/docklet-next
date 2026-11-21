@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. M18 deploy-point effect marking. M24 observed lifecycle clock seam. M34 #547: classified load problems instead of raw load errors.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. M18 deploy-point effect marking. M24 observed lifecycle clock seam. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -94,6 +94,7 @@ type ProjectService struct {
 }
 
 func (s *ProjectService) newProjectMetadataEnv(ctx context.Context, projectsList []Project) *projectMetadataEnv {
+	ctx = s.composeInputContext(ctx)
 	projectsDirectory, err := s.GetProjectsDirectory(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "failed to resolve projects directory for compose selection", "error", err)
@@ -423,6 +424,7 @@ func (s *ProjectService) ResolveProjectComposeFile(ctx context.Context, proj *Pr
 // resolveProjectComposeFile is ResolveProjectComposeFile with the
 // request-scoped inputs supplied by env; a nil env resolves them per call.
 func (s *ProjectService) resolveProjectComposeFile(ctx context.Context, proj *Project, env *projectMetadataEnv) (string, error) {
+	ctx = s.composeInputContext(ctx)
 	if proj == nil {
 		return "", errors.New("project is nil")
 	}
@@ -461,6 +463,11 @@ func (s *ProjectService) resolveProjectComposeFile(ctx context.Context, proj *Pr
 // proj. prepare is optional and runs before host path translation; deployment
 // paths use it to create missing bind directories, read paths pass nil.
 func (s *ProjectService) loadComposeProjectForProject(ctx context.Context, proj *Project, prepare projects.PrepareProjectFunc, services ...string) (*types.Project, string, error) {
+	var inputErr error
+	ctx, _, inputErr = s.resolvedProjectInputContext(ctx, proj.Path)
+	if inputErr != nil {
+		return nil, "", inputErr
+	}
 	composeFileFullPath, err := s.ResolveProjectComposeFile(ctx, proj)
 	if err != nil {
 		return nil, "", err
@@ -489,6 +496,11 @@ func (s *ProjectService) getCachedComposeProject(ctx context.Context, proj *Proj
 	if proj == nil {
 		return nil, errors.New("project is nil")
 	}
+	var inputErr error
+	ctx, _, inputErr = s.resolvedProjectInputContext(ctx, proj.Path)
+	if inputErr != nil {
+		return nil, inputErr
+	}
 	var cfg *settings.Settings
 	if env != nil {
 		cfg = env.settings
@@ -510,6 +522,7 @@ func (s *ProjectService) getCachedComposeProject(ctx context.Context, proj *Proj
 }
 
 func (s *ProjectService) refreshComposeProjectName(ctx context.Context, proj *Project) {
+	ctx = s.composeInputContext(ctx)
 	if proj == nil {
 		return
 	}
@@ -555,6 +568,7 @@ func (s *ProjectService) refreshComposeProjectName(ctx context.Context, proj *Pr
 }
 
 func (s *ProjectService) UpdateProjectServices(ctx context.Context, projectID string, servicesToUpdate []string, user usertypes.Actor, discoverTags bool) error {
+	ctx = s.composeInputContext(ctx)
 	if discoverTags {
 		return lifecycleFailure("update.path-retired")
 	}
@@ -729,6 +743,7 @@ func (s *ProjectService) UnarchiveProject(ctx context.Context, projectID string,
 }
 
 func (s *ProjectService) DeployProject(ctx context.Context, projectID string, user usertypes.Actor, options *projecttypes.DeployOptions) error {
+	ctx = s.composeInputContext(ctx)
 	var deployedEvidence *lifecycle.Snapshot
 	if s.db.Migrator().HasTable(&lifecycle.Baseline{}) {
 		_ = s.lifecycleStore().Invalidate(ctx, projectID)

@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Executor-local encrypted deployment evidence and durable pin ownership.
+// Deviations: Executor-local encrypted deployment evidence and durable pin ownership. M34 #548: recorded Compose environment inputs.
 
 package lifecycle
 
@@ -76,9 +76,12 @@ type ServiceImage struct {
 	Reference, ImageID, Digest, Platform, ContainerID, ContainerName, Service, ConfigHash string
 	Present, Running, OneOff                                                              bool
 }
+type ExternalInput struct{ Path, SHA256 string }
+
 type Snapshot struct {
 	AutoExcluded                                                   bool `json:"-"`
 	TargetID, TargetIdentity, RegistrationID, RunID, SavedRevision string
+	External                                                       []ExternalInput `json:",omitempty"`
 	Files                                                          []File
 	Model                                                          *compose.Project
 	Services                                                       map[string]ServiceImage

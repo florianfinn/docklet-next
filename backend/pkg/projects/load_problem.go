@@ -2,7 +2,7 @@
 // Revision: 1d8ef389b0a40f3ba27fb09f8f59d8ac993180ff
 // Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Original typed Compose load problem for issue 547.
+// Deviations: Original typed Compose load problem for issue 547. M34 #548: recorded Compose environment inputs.
 
 package projects
 
@@ -18,7 +18,7 @@ import (
 // interpolation and dotenv errors can carry operator text or env values, so
 // logs and responses use Reason and Variable instead of err.Error().
 type LoadProblem struct {
-	Reason   string // compose.variable-missing, compose.env-file-missing, compose.selection-unsupported or compose.identity-unreadable
+	Reason   string // Classified variable/file/selection, recorded-label or identity problem.
 	Variable string // a safe variable name for compose.variable-missing, else empty
 }
 
@@ -28,6 +28,10 @@ var safeVariable = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 func ClassifyLoadError(err error) LoadProblem {
 	if err == nil {
 		return LoadProblem{}
+	}
+	var safe *SafeLoadError
+	if errors.As(err, &safe) {
+		return safe.Problem
 	}
 	var missing *template.MissingRequiredError
 	if errors.As(err, &missing) {

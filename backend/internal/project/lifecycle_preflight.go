@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission; M18 validated service selection; a partial rebuild of a shared reference is refused; M21 resolves the literal tag of a tag-policy version. M21 #438: candidate scans and verified manifest binding.
+// Deviations: Read-only frozen lifecycle preflight for trusted runtime admission; M18 validated service selection; a partial rebuild of a shared reference is refused; M21 resolves the literal tag of a tag-policy version. M21 #438: candidate scans and verified manifest binding. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -77,6 +77,7 @@ func uniqueLifecycleReferences(snapshot *life.Snapshot) error {
 	return nil
 }
 func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registration string, request dto.LifecycleRequest) (*dto.LifecycleIntent, error) {
+	ctx = s.composeInputContext(ctx)
 	request = request.Clone()
 	if !request.VerifiedService() {
 		return nil, lifecycleFailure("update.invalid-target")
@@ -85,6 +86,19 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 	// A restore always covers the whole stack; a service selection has no meaning there.
 	if request.PointID != "" && len(request.Services) > 0 {
 		return nil, lifecycleFailure("update.invalid-target")
+	}
+	if request.PointID != "" {
+		_, saved, e := s.lifecycleStore().Point(ctx, request.PointID)
+		if e == nil {
+			if e = s.checkLifecycleExternal(ctx, saved); e != nil {
+				return nil, e
+			}
+		}
+	} else if p, e := s.getMutableProject(ctx, id); e == nil {
+		baseline, _, e := s.lifecycleStore().Baseline(ctx, &life.Snapshot{TargetID: id, TargetIdentity: targetLifecycleIdentity(p), RegistrationID: registration})
+		if e == nil && s.checkLifecycleExternal(ctx, baseline) != nil {
+			return nil, lifecycleFailure("update.config-drift")
+		}
 	}
 	_, current, err := s.lifecycleCurrent(ctx, id, registration)
 	if err != nil {
@@ -110,6 +124,9 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 		}
 		if point.TargetID != id || point.TargetIdentity != current.TargetIdentity || point.RegistrationID != registration {
 			return nil, lifecycleFailure("restore.unavailable")
+		}
+		if err := s.checkLifecycleExternal(ctx, saved, current); err != nil {
+			return nil, err
 		}
 		if !lifecycleFilesEqual(saved, current) && !request.ReplaceConfiguration {
 			return nil, lifecycleFailure("update.config-drift")

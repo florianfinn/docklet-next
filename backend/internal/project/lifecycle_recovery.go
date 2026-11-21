@@ -2,7 +2,7 @@
 // Revision: 92ca1a3ea43cfdc211ca561a968e09c8e8f747b1
 // Retrieved: 2026-11-12
 // License: Apache-2.0
-// Deviations: Original conservative recovery from the observed stack run's own retained point.
+// Deviations: Original conservative recovery from the observed stack run's own retained point. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -37,7 +37,7 @@ func (s *ProjectService) recoverOwnPoint(ctx context.Context, run, registration 
 			result.Recovery = &dto.RecoveryResult{Outcome: "restore-failed", Code: imageDTO.Neutral(err, "restore.deploy-failed", 500).Problem.Code}
 		default:
 			code := imageDTO.Neutral(err, "restore.unavailable", 409).Problem.Code
-			if code != "restore.files-changed" && code != "restore.shared-reference" && code != "image.busy" {
+			if code != "restore.files-changed" && code != "restore.shared-reference" && code != "image.busy" && code != "update.target-changed" {
 				code = "restore.unavailable"
 			}
 			result.Recovery = &dto.RecoveryResult{Outcome: "unavailable", Code: code}
@@ -56,6 +56,9 @@ func (s *ProjectService) recoverOwnPoint(ctx context.Context, run, registration 
 	if err != nil || targetLifecycleIdentity(p) != point.TargetIdentity || intended == nil {
 		return finish(lifecycleFailure("restore.unavailable"))
 	}
+	if err := s.checkLifecycleExternal(ctx, saved, intended); err != nil {
+		return finish(err)
+	}
 	files, err := recoveryFiles(ctx, p, saved, intended)
 	if err != nil {
 		return finish(err)
@@ -66,6 +69,9 @@ func (s *ProjectService) recoverOwnPoint(ctx context.Context, run, registration 
 	_, source, err := s.lifecycleCurrent(ctx, point.TargetID, registration)
 	if err != nil {
 		return finish(lifecycleFailure("restore.unavailable"))
+	}
+	if !lifecycleExternalEqual(saved, source) {
+		return finish(lifecycleFailure("update.target-changed"))
 	}
 	if life.Hash(files) != life.Hash(source.Files) {
 		return finish(lifecycleFailure("restore.files-changed"))
@@ -125,6 +131,9 @@ func (s *ProjectService) recoverOwnPoint(ctx context.Context, run, registration 
 	fresh, err := s.lifecycleInputs(ctx, p)
 	if err != nil || !lifecycleFilesEqual(fresh, saved) {
 		return finish(lifecycleFailure("restore.files-changed"))
+	}
+	if !lifecycleExternalEqual(saved, fresh) {
+		return finish(lifecycleFailure("update.target-changed"))
 	}
 	saved.Model, saved.SavedRevision = fresh.Model, fresh.SavedRevision
 	if execution.enteredDeploy {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global. M34 #548: recorded Compose environment inputs.
 
 package projects
 
@@ -80,8 +80,13 @@ func ParseArcaneComposeMetadata(ctx context.Context, composeFilePath, projectsDi
 	}
 
 	workdir := filepath.Dir(composeFilePath)
+	input, inputErr := ResolveComposeInputs(ctx, projectsDirectory, workdir, autoInjectEnv)
+	if inputErr != nil {
+		return emptyArcaneComposeMetadataInternal(), inputErr
+	}
+	ctx = WithResolvedInputs(ctx, input)
 	var envMap map[string]string
-	if strings.TrimSpace(projectsDirectory) == "" {
+	if strings.TrimSpace(projectsDirectory) == "" && !input.Recorded() {
 		envMap = loadComposeEnvironment(workdir)
 	} else {
 		envLoader := NewEnvLoader(projectsDirectory, workdir, autoInjectEnv)
@@ -134,7 +139,19 @@ func parseArcaneComposeMetadataFromFileInternal(ctx context.Context, composeFile
 	visited[absPath] = struct{}{}
 
 	workdir := filepath.Dir(absPath)
-	mergedEnv, siblingEnv := mergeEnvFromDotEnv(envMap, workdir)
+	var mergedEnv, siblingEnv EnvMap
+	if input, ok := ctx.Value(inputKey{}).(*ResolvedInputs); ok && input.Recorded() {
+		mergedEnv = maps.Clone(envMap)
+		if workdir != input.Directory {
+			inherited := *input
+			inherited.Directory = workdir
+			inherited.Environment = mergedEnv
+			inherited.configFiles, _ = canonicalConfigFiles(workdir, absPath)
+			ctx = WithResolvedInputs(ctx, &inherited)
+		}
+	} else {
+		mergedEnv, siblingEnv = mergeEnvFromDotEnv(envMap, workdir)
+	}
 
 	project, err := loadComposeProjectForMetadataFromFileInternal(ctx, absPath, mergedEnv)
 	if err != nil {
@@ -147,7 +164,9 @@ func parseArcaneComposeMetadataFromFileInternal(ctx context.Context, composeFile
 	}
 	// The nested load's EnvLoader reads the sibling .env and the COMPOSE_ENV_FILES
 	// it declares, even where the inherited environment overrides those values.
-	meta.EnvFiles = append([]string{filepath.Join(workdir, EffectiveEnvFileName)}, resolveComposeEnvFilesInternal(workdir, siblingEnv)...)
+	if input, ok := ctx.Value(inputKey{}).(*ResolvedInputs); !ok || !input.Recorded() {
+		meta.EnvFiles = append([]string{filepath.Join(workdir, EffectiveEnvFileName)}, resolveComposeEnvFilesInternal(workdir, siblingEnv)...)
+	}
 
 	// Resolve include paths with the environment the loader interpolated, including COMPOSE_ENV_FILES.
 	includes, err := ParseIncludes(absPath, project.Environment, false)

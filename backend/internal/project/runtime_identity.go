@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Fresh, read-only project identity for runtime control.
+// Deviations: Fresh, read-only project identity for runtime control. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -30,6 +30,7 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 // project-ID action proceeds and the duplicate is a warning on both stacks.
 // The acknowledgement stays accepted for agent contract 20 but is never needed.
 func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.Context, projectID, composeName, _ string) (projecttypes.Reference, bool, *imageDTO.RuntimePeerOverrides, error) {
+	ctx = s.composeInputContext(ctx)
 	empty := projecttypes.Reference{}
 	if projectID == "" && composeName == "" {
 		return empty, false, nil, nil
@@ -100,6 +101,12 @@ func runtimeIdentityProblem(blocker *imageDTO.RuntimeIdentityBlocker) error {
 // Both metadata discovery and executable selection use the same strict identity
 // loader. Neither path uses a cache, prepares binds, or writes project files.
 func (s *ProjectService) runtimeComposeEvidence(ctx context.Context, row *Project) (string, string, error) {
+	ctx = s.composeInputContext(ctx)
+	var inputErr error
+	ctx, _, inputErr = s.resolvedProjectInputContext(ctx, row.Path)
+	if inputErr != nil {
+		return "", "", inputErr
+	}
 	selected, err := s.ResolveProjectComposeFile(ctx, row)
 	if err != nil {
 		return "", "", err

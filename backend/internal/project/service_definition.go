@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original bounded dependency-aware definition services for tracked stacks without containers. M34 #547: load problems for every stack and Compose name peers.
+// Deviations: Original bounded dependency-aware definition services for tracked stacks without containers. M34 #547: load problems for every stack and Compose name peers. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -37,6 +37,8 @@ func (s *ProjectService) fillDefinitionServices(ctx context.Context, records []P
 					rows[i].DefinitionFile = runtimeIdentityDisplayFile(file)
 				case UnsupportedUpdateLayout(identityErr) != nil:
 					rows[i].DefinitionReason = "compose.selection-unsupported"
+				case problem.Reason == "compose.env-label-invalid" || problem.Reason == "compose.env-label-conflict":
+					rows[i].DefinitionReason = problem.Reason
 				case problem.Reason == "compose.variable-missing":
 					rows[i].DefinitionReason = problem.Reason
 					rows[i].DefinitionVariable = problem.Variable

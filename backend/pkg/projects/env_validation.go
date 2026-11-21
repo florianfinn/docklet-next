@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global. M34 #548: recorded Compose environment inputs.
 
 package projects
 
@@ -24,6 +24,13 @@ import (
 // against. It matches the project-visible env sources without inheriting the
 // Arcane process environment, which may contain unrelated secrets.
 func BuildValidationEnvironment(ctx context.Context, projectsDirectory, projectPath string, effectiveEnvContent *string) (EnvMap, error) {
+	input, err := ResolveComposeInputs(ctx, projectsDirectory, projectPath, false)
+	if err != nil && (effectiveEnvContent == nil || input != nil && input.State != "none") {
+		return nil, err
+	}
+	if input.Recorded() {
+		return maps.Clone(input.Environment), nil
+	}
 	fullEnvMap := make(EnvMap)
 	if absWorkdir, absErr := filepath.Abs(projectPath); absErr == nil {
 		fullEnvMap["PWD"] = absWorkdir

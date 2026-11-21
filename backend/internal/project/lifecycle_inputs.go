@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Complete bounded Compose input capture and admitted revision-checked writes; M24 controlled writer seam and uncertain-effect propagation; M18 shared-image selection guard; #406 nested COMPOSE_FILE base refused as unsupported.
+// Deviations: Complete bounded Compose input capture and admitted revision-checked writes; M24 controlled writer seam and uncertain-effect propagation; M18 shared-image selection guard; #406 nested COMPOSE_FILE base refused as unsupported. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -52,7 +52,12 @@ func lifecycleFailure(code string) error {
 func targetLifecycleIdentity(p *Project) string { return life.Hash([]any{p.ID, p.CreatedAt, p.Path}) }
 
 func (s *ProjectService) lifecycleInputs(ctx context.Context, p *Project) (*life.Snapshot, error) {
+	ctx = s.composeInputContext(ctx)
 	if err := s.EnsureProjectPathUnderRoot(ctx, p, false); err != nil {
+		return nil, lifecycleFailure("update.snapshot-unavailable")
+	}
+	ctx, input, err := s.resolvedProjectInputContext(ctx, p.Path)
+	if err != nil {
 		return nil, lifecycleFailure("update.snapshot-unavailable")
 	}
 	path, err := s.ResolveProjectComposeFile(ctx, p)
@@ -81,7 +86,10 @@ func (s *ProjectService) lifecycleInputs(ctx context.Context, p *Project) (*life
 	if len(model.ComposeFiles) != 1 {
 		return nil, lifecycleFailure("update.image-binding-unsupported")
 	}
-	paths := slices.Concat(model.ComposeFiles, deps.EnvFiles, []string{filepath.Join(p.Path, ".env")})
+	paths := slices.Concat(model.ComposeFiles, deps.EnvFiles)
+	if !input.Recorded() {
+		paths = append(paths, filepath.Join(p.Path, ".env"))
+	}
 	for _, v := range model.Configs {
 		if v.File != "" {
 			paths = append(paths, v.File)
@@ -91,6 +99,9 @@ func (s *ProjectService) lifecycleInputs(ctx context.Context, p *Project) (*life
 		if v.File != "" {
 			paths = append(paths, v.File)
 		}
+	}
+	if input.Recorded() {
+		paths = slices.DeleteFunc(paths, func(path string) bool { return slices.Contains(input.Paths, path) })
 	}
 	slices.Sort(paths)
 	paths = slices.Compact(paths)
@@ -143,7 +154,15 @@ func (s *ProjectService) lifecycleInputs(ctx context.Context, p *Project) (*life
 			}
 		}
 	}
-	return &life.Snapshot{TargetID: p.ID, TargetIdentity: targetLifecycleIdentity(p), Files: files, Model: model, SavedRevision: life.Hash([]any{files, model})}, nil
+	snapshot := &life.Snapshot{TargetID: p.ID, TargetIdentity: targetLifecycleIdentity(p), Files: files, Model: model}
+	for _, external := range input.External {
+		snapshot.External = append(snapshot.External, life.ExternalInput{Path: external.Path, SHA256: external.SHA256})
+	}
+	snapshot.SavedRevision = lifecycleSavedRevision(snapshot)
+	if err := s.checkLifecycleExternal(ctx, snapshot); err != nil {
+		return nil, err
+	}
+	return snapshot, nil
 }
 func lifecycleYAMLHas(n *yaml.Node, key string) bool {
 	if n.Kind == yaml.MappingNode {
@@ -167,6 +186,9 @@ var lifecycleWriteFile = acfs.Write
 func (s *ProjectService) lifecycleWrite(ctx context.Context, p *Project, current, desired *life.Snapshot, actor user.Actor) error {
 	s.contentMu.Lock()
 	defer s.contentMu.Unlock()
+	if err := s.checkLifecycleExternal(ctx, current, desired); err != nil {
+		return err
+	}
 	fresh, err := s.lifecycleInputs(ctx, p)
 	if err != nil || fresh.SavedRevision != current.SavedRevision {
 		return lifecycleFailure("update.target-changed")
@@ -185,6 +207,9 @@ func (s *ProjectService) lifecycleWrite(ctx context.Context, p *Project, current
 		if _, err := acfs.LogicalPath(root, p.Path); err != nil {
 			return lifecycleFailure("update.target-changed")
 		}
+		if err := s.checkLifecycleExternal(ctx, current, desired); err != nil {
+			return err
+		}
 		if err := lifecycleBeforeRecoveryEffect(ctx); err != nil {
 			return err
 		}
@@ -198,6 +223,9 @@ func (s *ProjectService) lifecycleWrite(ctx context.Context, p *Project, current
 	}
 	for _, f := range desired.Files {
 		if !f.Present {
+			if err := s.checkLifecycleExternal(ctx, current, desired); err != nil {
+				return err
+			}
 			if err := lifecycleBeforeRecoveryEffect(ctx); err != nil {
 				return err
 			}

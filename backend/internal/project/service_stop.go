@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original explicit-service Compose stop with success-only status projection; M17 runtime history and personal preferences.
+// Deviations: Original explicit-service Compose stop with success-only status projection; M17 runtime history and personal preferences. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -17,6 +17,7 @@ import (
 )
 
 func (s *ProjectService) StopProject(ctx context.Context, projectID string, actor usertypes.Actor) error {
+	ctx = s.composeInputContext(ctx)
 	stored, err := s.getMutableProject(ctx, projectID)
 	if err != nil {
 		return err

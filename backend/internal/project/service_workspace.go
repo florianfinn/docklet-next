@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; Shared complete tools image reference for migration. Status counts skip Docklet's own projects. M34 #547: classified load problems instead of raw load errors.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; Shared complete tools image reference for migration. Status counts skip Docklet's own projects. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -42,6 +42,7 @@ import (
 )
 
 func (s *ProjectService) UpdateProject(ctx context.Context, projectID string, name, composeContent, envContent, overrideContent *string, user usertypes.Actor) (*Project, error) {
+	ctx = s.composeInputContext(ctx)
 	s.contentMu.Lock()
 	defer s.contentMu.Unlock()
 	proj, projectsDirectory, err := s.getProjectForUpdate(ctx, projectID)
@@ -260,6 +261,10 @@ func (s *ProjectService) prepareProjectRenameVolumeMigration(
 	newName, projectsDirectory string,
 	composeContent, envContent, overrideContent *string,
 ) (volume.Migration, error) {
+	ctx, input, inputErr := s.resolvedProjectInputContext(ctx, proj.Path)
+	if inputErr != nil {
+		return nil, inputErr
+	}
 	target := *proj
 	target.Name = newName
 	if composeContent != nil || envContent != nil || overrideContent != nil {
@@ -282,6 +287,7 @@ func (s *ProjectService) prepareProjectRenameVolumeMigration(
 		}
 		previewProject := target
 		previewProject.Path = previewPath
+		ctx = projects.RebaseComposeInputs(ctx, input, previewPath)
 		if persistErr := s.persistUpdatedProjectFiles(ctx, &previewProject, projectsDirectory, composeContent, envContent, overrideContent); persistErr != nil {
 			return nil, fmt.Errorf("failed to prepare project update preview: %w", persistErr)
 		}
@@ -292,7 +298,8 @@ func (s *ProjectService) prepareProjectRenameVolumeMigration(
 		return nil, nil
 	}
 
-	current, _, err := s.loadComposeProjectForProject(ctx, proj, nil)
+	currentCtx := projects.WithResolvedInputs(ctx, input)
+	current, _, err := s.loadComposeProjectForProject(currentCtx, proj, nil)
 	if err != nil {
 		if errors.Is(err, common.ErrProjectComposeFileNotFound) {
 			return nil, nil
@@ -329,6 +336,13 @@ func (s *ProjectService) prepareProjectRenameVolumeMigration(
 // the requested override, so a base only valid with its override still passes
 // and a delete that would break the base fails before touching disk.
 func (s *ProjectService) persistUpdatedProjectFiles(ctx context.Context, proj *Project, projectsDirectory string, composeContent, envContent, overrideContent *string) error {
+	input, inputErr := projects.ResolveComposeInputs(ctx, projectsDirectory, proj.Path, false)
+	if inputErr != nil && input != nil && input.State != "none" {
+		return inputErr
+	}
+	if input.Recorded() {
+		ctx = projects.WithResolvedInputs(ctx, input)
+	}
 	if composeContent == nil && overrideContent == nil {
 		if envContent != nil {
 			return projectsync.PersistEffectiveEnvContent(ctx, proj.Path, projectsDirectory, *envContent)
@@ -341,13 +355,27 @@ func (s *ProjectService) persistUpdatedProjectFiles(ctx context.Context, proj *P
 		baseContent = *composeContent
 	} else {
 		var err error
-		if baseContent, _, err = projects.ReadProjectFiles(ctx, proj.Path, ""); err != nil {
+		if input.Recorded() {
+			path, e := s.ResolveProjectComposeFile(ctx, proj)
+			if e != nil {
+				return e
+			}
+			body, e := os.ReadFile(path)
+			if e != nil {
+				return projects.SafeError(e)
+			}
+			baseContent = string(body)
+		} else if baseContent, _, err = projects.ReadProjectFiles(ctx, proj.Path, ""); err != nil {
 			return fmt.Errorf("failed to read project files: %w", err)
 		}
 	}
-	effectiveEnvContent, err := projectsync.EffectiveEnvContentForUpdate(proj.Path, envContent)
-	if err != nil {
-		return fmt.Errorf("invalid compose file: %w", err)
+	effectiveEnvContent := envContent
+	if !input.Recorded() {
+		var err error
+		effectiveEnvContent, err = projectsync.EffectiveEnvContentForUpdate(proj.Path, envContent)
+		if err != nil {
+			return fmt.Errorf("invalid compose file: %w", err)
+		}
 	}
 	valOverride, valOverrideName := projects.ResolveEffectiveOverrideForValidation(proj.Path, overrideContent)
 	if validateErr := projects.ValidateComposeContentForUpdate(ctx, projectsDirectory, proj.Path, proj.Name, baseContent, effectiveEnvContent, valOverride, valOverrideName, false); validateErr != nil {
@@ -361,7 +389,7 @@ func (s *ProjectService) persistUpdatedProjectFiles(ctx context.Context, proj *P
 		if persistErr := projectsync.PersistEffectiveEnvContent(ctx, proj.Path, projectsDirectory, *envContent); persistErr != nil {
 			return fmt.Errorf("failed to save project files: %w", persistErr)
 		}
-	} else if composeContent != nil {
+	} else if composeContent != nil && !input.Recorded() {
 		if ensureErr := projectsync.EnsureEffectiveEnvFile(ctx, proj.Path, projectsDirectory); ensureErr != nil {
 			return fmt.Errorf("failed to save project files: %w", ensureErr)
 		}
@@ -443,6 +471,7 @@ func (s *ProjectService) UpdateProjectServiceImages(ctx context.Context, project
 // SaveProjectServiceImages persists selected service image tags without
 // deploying them and returns the changed services.
 func (s *ProjectService) SaveProjectServiceImages(ctx context.Context, projectID string, changes map[string]updatertypes.ServiceImageChange) ([]string, error) {
+	ctx = s.composeInputContext(ctx)
 	if len(changes) == 0 {
 		return nil, errors.New("service image changes are required")
 	}
@@ -497,6 +526,7 @@ func (s *ProjectService) UpdateProjectWorkspace(
 	uploads map[int][]byte,
 	user usertypes.Actor,
 ) (*workspacetypes.Workspace, error) {
+	ctx = s.composeInputContext(ctx)
 	s.contentMu.Lock()
 	defer s.contentMu.Unlock()
 	if err := workspacepkg.ValidateUpdateManifest(manifest.FileTreeRevision, len(manifest.FileChanges), 500); err != nil {
@@ -540,6 +570,7 @@ func (s *ProjectService) workspaceComposeFileName(ctx context.Context, proj *Pro
 }
 
 func (s *ProjectService) projectServices(ctx context.Context, projectID string) ([]projecttypes.RuntimeService, error) {
+	ctx = s.composeInputContext(ctx)
 	projectFromDb, err := s.GetProjectFromDatabaseByID(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -585,6 +616,7 @@ func (s *ProjectService) StreamProjectLogs(ctx context.Context, projectID string
 }
 
 func (s *ProjectService) GetProjectStatusCounts(ctx context.Context) (projecttypes.StatusCounts, error) {
+	ctx = s.composeInputContext(ctx)
 	query := s.db.WithContext(ctx).Model(&Project{})
 	// Docklet's own hub and agent stacks are hidden from the stack list and its counts alike.
 	if snapshot := s.listing.Snapshot(ctx); snapshot.Err == nil {
@@ -606,6 +638,7 @@ func (s *ProjectService) GetProjectStatusCounts(ctx context.Context) (projecttyp
 // projectListRows builds list rows and persists live-inferred service counts
 // over stored zeros, since SQL sorts and paginates on service_count.
 func (s *ProjectService) projectListRows(ctx context.Context, projectsDir string, projectsList []Project, snapshot listing.Snapshot, ownership ...map[string]string) []projecttypes.Details {
+	ctx = s.composeInputContext(ctx)
 	rows, inferredCounts := listing.Rows(projectsDir, IconCatalogForContext(ctx), projectRecords(projectsList), snapshot, ownership...)
 	ids := slices.Collect(maps.Keys(inferredCounts))
 	for chunk := range slices.Chunk(ids, inferredServiceCountBatchSize) {

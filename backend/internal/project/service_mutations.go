@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation. M34 #547: classified load problems instead of raw load errors.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -53,6 +53,7 @@ import (
 )
 
 func (s *ProjectService) DownProject(ctx context.Context, projectID string, user usertypes.Actor) error {
+	ctx = s.composeInputContext(ctx)
 	projectFromDb, err := s.getMutableProject(ctx, projectID)
 	if err != nil {
 		return err
@@ -302,6 +303,7 @@ func (s *ProjectService) DestroyProject(ctx context.Context, projectID string, r
 }
 
 func (s *ProjectService) RedeployProject(ctx context.Context, projectID string, user usertypes.Actor, options *projecttypes.DeployOptions) error {
+	ctx = s.composeInputContext(ctx)
 	proj, err := s.getMutableProject(ctx, projectID)
 	if err != nil {
 		return err
@@ -345,6 +347,7 @@ func (s *ProjectService) RedeployProject(ctx context.Context, projectID string, 
 }
 
 func (s *ProjectService) PullProjectImages(ctx context.Context, projectID string, progressWriter io.Writer, user usertypes.Actor, credentials []containerregistry.Credential) error {
+	ctx = s.composeInputContext(ctx)
 	proj, err := s.getMutableProject(ctx, projectID)
 	if err != nil {
 		return err
@@ -366,6 +369,7 @@ func (s *ProjectService) PullProjectImages(ctx context.Context, projectID string
 }
 
 func (s *ProjectService) BuildProjectServices(ctx context.Context, projectID string, options projecttypes.BuildOptions, progressWriter io.Writer, user *usertypes.Actor) error {
+	ctx = s.composeInputContext(ctx)
 	projectFromDb, err := s.getMutableProject(ctx, projectID)
 	if err != nil {
 		return err
@@ -382,6 +386,7 @@ func (s *ProjectService) BuildProjectServices(ctx context.Context, projectID str
 }
 
 func (s *ProjectService) RestartProject(ctx context.Context, projectID string, services []string, user usertypes.Actor) error {
+	ctx = s.composeInputContext(ctx)
 	proj, err := s.getMutableProject(ctx, projectID)
 	if err != nil {
 		return err
@@ -484,6 +489,7 @@ func (s *ProjectService) projectContent(ctx context.Context, projectID string) (
 }
 
 func (s *ProjectService) GetProjectDetails(ctx context.Context, projectID string, opts projecttypes.DetailsOptions) (projecttypes.Details, error) {
+	ctx = s.composeInputContext(ctx)
 	proj, err := s.GetProjectFromDatabaseByID(ctx, projectID)
 	if err != nil {
 		return projecttypes.Details{}, err
@@ -571,6 +577,9 @@ func (s *ProjectService) GetProjectDetails(ctx context.Context, projectID string
 		}
 	}
 
+	definitionRows := []projecttypes.Details{resp}
+	s.fillDefinitionServices(ctx, []Project{*proj}, definitionRows, s.newProjectMetadataEnv(ctx, []Project{*proj}))
+	resp = definitionRows[0]
 	if opts.IncludeUpdateInfo {
 		s.enrichProjectUpdateInfo(ctx, &resp)
 	}
