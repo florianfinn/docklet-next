@@ -173,8 +173,12 @@ export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule
 
 export interface Stack {
   definitionHint?: "definition-invalid";
- definitionReason?: "compose.identity-unreadable" | "compose.selection-unsupported" | "compose.env-file-missing";
+ definitionReason?: "compose.identity-unreadable" | "compose.selection-unsupported" | "compose.env-file-missing" | "compose.variable-missing" | "compose.env-label-invalid" | "compose.env-label-conflict";
  definitionFile?: string;
+ /** Missing required variable name; never a value. */
+ definitionVariable?: string;
+ /** Other stacks with the same effective Compose name; a warning only. */
+ composeNamePeers?: string[];
   path?: string;
   reportedStatus?: string;
   serviceCount?: number;

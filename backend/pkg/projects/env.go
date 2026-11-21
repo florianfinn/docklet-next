@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; nested COMPOSE_FILE base classified (#406).
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; nested COMPOSE_FILE base classified (#406). M34 #547: classified load problems instead of raw load errors.
 
 package projects
 
@@ -195,7 +195,7 @@ func ParseProjectEnvContent(content string, contextEnv EnvMap) (EnvMap, error) {
 
 	envMap, err := dotenv.ParseWithLookup(strings.NewReader(content), lookupFn)
 	if err != nil {
-		return nil, fmt.Errorf("parse env: %w", err)
+		return nil, fmt.Errorf("parse env: %w", errMalformedEnv)
 	}
 
 	return envMap, nil
@@ -494,18 +494,18 @@ func mergeComposeEnvFilesInternal(ctx context.Context, workdir string, envMap En
 	for _, entry := range ComposeEnvFileEntriesFromEnv(envMap) {
 		resolved, err := ResolvePathWithinDir(workdir, entry)
 		if err != nil {
-			slog.WarnContext(ctx, "skipping COMPOSE_ENV_FILES entry outside project directory", "entry", entry, "error", err)
+			slog.WarnContext(ctx, "skipping COMPOSE_ENV_FILES entry outside project directory", "entry", entry)
 			continue
 		}
 		// os.Stat rather than acfs: env files may be symlinks resolving outside
 		// any confinement root (a supported setup).
 		if _, statErr := os.Stat(resolved); statErr != nil {
-			slog.WarnContext(ctx, "COMPOSE_ENV_FILES entry not found", "path", resolved, "error", statErr)
+			slog.WarnContext(ctx, "COMPOSE_ENV_FILES entry not found", "path", resolved)
 			continue
 		}
 		values, err := parse(resolved, envMap)
 		if err != nil {
-			slog.WarnContext(ctx, "failed to load COMPOSE_ENV_FILES entry", "path", resolved, "error", err)
+			slog.WarnContext(ctx, "failed to load COMPOSE_ENV_FILES entry", "path", resolved, "problem", ClassifyLoadError(err).String())
 			continue
 		}
 		if len(values) == 0 {

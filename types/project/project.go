@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 history and preference codes in the shared reason catalogue; M18 live scheduling, policy and contract foundation; M21 destroy flags keep files when omitted. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 history and preference codes in the shared reason catalogue; M18 live scheduling, policy and contract foundation; M21 destroy flags keep files when omitted. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts. M34 #547: definition variable and Compose name peers.
 
 package project
 
@@ -444,8 +444,12 @@ type ConfigurationError struct {
 // Details contains detailed information about a project.
 type Details struct {
 	DefinitionHint   string `json:"definitionHint,omitempty" enum:"definition-invalid"`
-	DefinitionReason string `json:"definitionReason,omitempty" enum:"compose.identity-unreadable,compose.selection-unsupported,compose.env-file-missing"`
+	DefinitionReason string `json:"definitionReason,omitempty" enum:"compose.identity-unreadable,compose.selection-unsupported,compose.env-file-missing,compose.variable-missing,compose.env-label-invalid,compose.env-label-conflict"`
 	DefinitionFile   string `json:"definitionFile,omitempty" maxLength:"255"`
+	// DefinitionVariable names a missing required variable; never its value or message.
+	DefinitionVariable string `json:"definitionVariable,omitempty" maxLength:"128" pattern:"^[A-Za-z_][A-Za-z0-9_]*$"`
+	// ComposeNamePeers lists other stacks with the same effective Compose name (a warning only).
+	ComposeNamePeers []string `json:"composeNamePeers,omitempty" maxItems:"16"`
 	// ComposeProjectName is the recorded effective Compose label, falling back
 	// to the normalized stored name for legacy rows. It is not execution authority.
 	//

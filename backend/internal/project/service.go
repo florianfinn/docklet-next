@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. M18 deploy-point effect marking. M24 observed lifecycle clock seam.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. M18 deploy-point effect marking. M24 observed lifecycle clock seam. M34 #547: classified load problems instead of raw load errors.
 
 package project
 
@@ -524,10 +524,10 @@ func (s *ProjectService) refreshComposeProjectName(ctx context.Context, proj *Pr
 	}
 	if err != nil {
 		if errors.Is(err, common.ErrProjectEnvUnreadable) {
-			slog.DebugContext(ctx, "skipped compose project name refresh; project env is unreadable", "projectId", proj.ID, "path", proj.Path, "error", err)
+			slog.DebugContext(ctx, "skipped compose project name refresh; project env is unreadable", "projectId", proj.ID, "path", proj.Path, "problem", projects.ClassifyLoadError(err).String())
 			return
 		}
-		slog.WarnContext(ctx, "failed to refresh compose project name", "projectId", proj.ID, "path", proj.Path, "error", err)
+		slog.WarnContext(ctx, "failed to refresh compose project name", "projectId", proj.ID, "path", proj.Path, "problem", projects.ClassifyLoadError(err).String())
 		return
 	}
 

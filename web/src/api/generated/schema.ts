@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: f310784a3f0e6cfe1a293228da69479e0df67bc646791efc8d681c7295ae5fea
+// Revision: fe1ee1bb16315152532423c88b5a7f05384edcba0792620b3649dddda579fa11
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11680,6 +11680,7 @@ export interface components {
             composeContent?: string;
             composeFileName?: string;
             composeFiles?: string[] | null;
+            composeNamePeers?: string[] | null;
             composeProjectName?: string;
             configurationError?: components["schemas"]["ProjectConfigurationError"];
             createdAt: string;
@@ -11687,7 +11688,8 @@ export interface components {
             /** @enum {string} */
             definitionHint?: "definition-invalid";
             /** @enum {string} */
-            definitionReason?: "compose.identity-unreadable" | "compose.selection-unsupported" | "compose.env-file-missing";
+            definitionReason?: "compose.identity-unreadable" | "compose.selection-unsupported" | "compose.env-file-missing" | "compose.variable-missing" | "compose.env-label-invalid" | "compose.env-label-conflict";
+            definitionVariable?: string;
             dirName?: string;
             envContent?: string;
             hasBuildDirective?: boolean;

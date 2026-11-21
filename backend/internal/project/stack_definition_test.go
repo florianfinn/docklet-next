@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-30
 // License: Apache-2.0
-// Deviations: Original actual-list dependency edits, invalid repair and live-model isolation proof.
+// Deviations: Original actual-list dependency edits, invalid repair and live-model isolation proof. M34 #547: classified load problems instead of raw load errors.
 
 package project
 
@@ -78,7 +78,7 @@ func TestStoppedStackListingTracksDependenciesAndRepair(t *testing.T) {
 	check(3, "registry.example.com/app:override")
 }
 
-func TestLiveStackListingDoesNotResolveDefinitionServices(t *testing.T) {
+func TestLiveStackListingShowsItsProblemAndKeepsRuntimeServices(t *testing.T) {
 	svc, root := runtimeIdentityFixture(t)
 	row := runtimeIdentityProject(t, svc, root, "example-project", "alpha", "services: [invalid\n")
 	server := newProjectRuntimeDockerServer(t, []container.Summary{{ID: "example-container", Names: []string{"/alpha-app-1"}, Image: "registry.example.com/app:1", State: container.StateRunning, Labels: map[string]string{"com.docker.compose.project": "alpha", "com.docker.compose.service": "app"}}})
@@ -88,7 +88,7 @@ func TestLiveStackListingDoesNotResolveDefinitionServices(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, row.ID, rows[0].ID)
-	require.Empty(t, rows[0].DefinitionHint)
+	require.Equal(t, "definition-invalid", rows[0].DefinitionHint, "a running stack shows its own load problem (#547)")
 	require.Len(t, rows[0].RuntimeServices, 1)
 	require.Equal(t, "example-container", rows[0].RuntimeServices[0].ContainerID)
 	require.Equal(t, "running", rows[0].RuntimeServices[0].Status)
@@ -129,7 +129,8 @@ func TestDefinitionServicesResolutionBoundedToFour(t *testing.T) {
 		records = append(records, *record)
 		rows = append(rows, dto.Details{ID: record.ID, Status: dto.StatusStopped})
 	}
-	cache := &heldDefinitionCache{entered: make(chan struct{}, 8), release: make(chan struct{}), model: &composetypes.Project{Services: composetypes.Services{"app": {Name: "app", Image: "registry.example.com/app:1"}}}}
+	// The Compose name peer pass reads the same cache again for every row.
+	cache := &heldDefinitionCache{entered: make(chan struct{}, 32), release: make(chan struct{}), model: &composetypes.Project{Services: composetypes.Services{"app": {Name: "app", Image: "registry.example.com/app:1"}}}}
 	unblock := sync.OnceFunc(func() { close(cache.release) })
 	defer unblock()
 	svc.parsedCompose = cache

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; Shared complete tools image reference for migration. Status counts skip Docklet's own projects.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; Shared complete tools image reference for migration. Status counts skip Docklet's own projects. M34 #547: classified load problems instead of raw load errors.
 
 package project
 
@@ -565,7 +565,7 @@ func (s *ProjectService) projectServices(ctx context.Context, projectID string) 
 		return services, nil
 	}
 	if derr != nil {
-		return []projecttypes.RuntimeService{}, fmt.Errorf("failed to load compose project in %s: %w", projectFromDb.Path, derr)
+		return []projecttypes.RuntimeService{}, projects.SafeError(derr)
 	}
 
 	projectsDirectory, projectsDirErr := s.GetProjectsDirectory(ctx)

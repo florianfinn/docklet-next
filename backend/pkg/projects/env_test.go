@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; nested COMPOSE_FILE base classified (#406).
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; nested COMPOSE_FILE base classified (#406). M34 #547: classified load problems instead of raw load errors.
 
 package projects
 
@@ -263,7 +263,7 @@ func TestEnvironmentPrimaryFailureSharedByDirectLoadAndSelection(t *testing.T) {
 			_, err = ComposeFileEnvSelection(t.Context(), dir, dir)
 			require.ErrorContains(t, err, "parse env")
 			_, err = LoadComposeProject(t.Context(), compose, "stored", dir, false, nil, nil, nil, false, nil, nil, nil)
-			require.ErrorContains(t, err, "parse env")
+			require.ErrorContains(t, err, "compose.identity-unreadable", "loader errors print only the classified problem")
 			require.NoError(t, os.Remove(path))
 			model, err := LoadComposeProject(t.Context(), compose, "stored", dir, false, nil, nil, nil, false, nil, nil, nil)
 			require.NoError(t, err)

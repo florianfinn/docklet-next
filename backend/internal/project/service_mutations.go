@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation. M34 #547: classified load problems instead of raw load errors.
 
 package project
 
@@ -256,7 +256,7 @@ func (s *ProjectService) DestroyProject(ctx context.Context, projectID string, r
 				slog.WarnContext(ctx, "failed to remove volumes", "error", derr)
 			}
 		} else {
-			slog.WarnContext(ctx, "failed to load compose project for volume removal", "error", lerr)
+			slog.WarnContext(ctx, "failed to load compose project for volume removal", "problem", projects.ClassifyLoadError(lerr).String())
 		}
 	}
 

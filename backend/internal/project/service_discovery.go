@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. Docklet's own projects excluded from update rows and counts.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. Docklet's own projects excluded from update rows and counts. M34 #547: classified load problems instead of raw load errors.
 
 package project
 
@@ -144,7 +144,7 @@ func (s *ProjectService) enrichComposeDetails(ctx context.Context, proj *Project
 
 	composeProj, loadErr := s.getCachedComposeProject(ctx, proj, nil)
 	if loadErr != nil {
-		slog.WarnContext(ctx, "failed to load compose service configs", "path", composeFile, "error", loadErr)
+		slog.WarnContext(ctx, "failed to load compose service configs", "path", composeFile, "problem", projects.ClassifyLoadError(loadErr).String())
 		return
 	}
 
@@ -463,7 +463,7 @@ func (s *ProjectService) refreshProjectImageRefs(ctx context.Context, proj *Proj
 		}
 		proj.ImageRefsJSON = ""
 		proj.BuildImageRefsJSON = nil
-		slog.WarnContext(ctx, "failed to refresh project image refs", "projectId", proj.ID, "projectName", proj.Name, "error", fmt.Errorf("load compose project: %w", err))
+		slog.WarnContext(ctx, "failed to refresh project image refs", "projectId", proj.ID, "projectName", proj.Name, "problem", projects.ClassifyLoadError(err).String())
 		return
 	}
 	imageRefsJSON := projects.MarshalImageRefsJSON(projects.ImageRefsFromComposeServices(composeProject.Services))
@@ -666,7 +666,7 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 			"path", dirPath,
 			"reason", reason)
 		if serviceCountErr != nil {
-			slog.Log(ctx, serviceCountLogLevel, "failed to read compose service count during project discovery", "project", dirName, "path", dirPath, "error", serviceCountErr)
+			slog.Log(ctx, serviceCountLogLevel, "failed to read compose service count during project discovery", "project", dirName, "path", dirPath, "problem", projects.ClassifyLoadError(serviceCountErr).String())
 		}
 		if cerr := s.db.WithContext(ctx).Create(proj).Error; cerr != nil {
 			return fmt.Errorf("create project for %q failed: %w", dirPath, cerr)
@@ -685,7 +685,7 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 	if serviceCountErr == nil && existing.ServiceCount != composeMetadata.ServiceCount {
 		updates["service_count"] = composeMetadata.ServiceCount
 	} else if serviceCountErr != nil {
-		slog.Log(ctx, serviceCountLogLevel, "failed to refresh compose service count during project sync", "projectId", existing.ID, "path", dirPath, "error", serviceCountErr)
+		slog.Log(ctx, serviceCountLogLevel, "failed to refresh compose service count during project sync", "projectId", existing.ID, "path", dirPath, "problem", projects.ClassifyLoadError(serviceCountErr).String())
 	}
 	if serviceCountErr == nil && mo.PointerToOption(existing.ComposeProjectName) != mo.PointerToOption(composeMetadata.ComposeProjectName) {
 		updates["compose_project_name"] = composeMetadata.ComposeProjectName

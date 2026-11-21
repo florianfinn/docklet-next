@@ -2,7 +2,7 @@
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original inventory DTO projections. M26 #462: raw bind sources independent of mount display syntax. Hub treated as a system workload like the agent.
+// Deviations: Original inventory DTO projections. M34 #547: definition variable and Compose name peers. M26 #462: raw bind sources independent of mount display syntax. Hub treated as a system workload like the agent.
 
 import { safeRuntimeFile } from "../runtime-blocker";
 import type { InventoryContainer } from "../nav-inventory";
@@ -110,6 +110,15 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
   });
   const url = stackAddress(row.urls);
   const role = members.map((item) => systemRole(item.dockerLabels)).find((value) => value !== undefined);
-  return { id: inventoryId(hostId, row.id), hostId, name: row.name, ...(url ? { url } : {}), path: row.path, definitionHint: row.definitionHint, definitionReason: row.definitionReason, definitionFile: safeRuntimeFile(row.definitionFile) ? row.definitionFile : undefined, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
+  return { id: inventoryId(hostId, row.id), hostId, name: row.name, ...(url ? { url } : {}), path: row.path, definitionHint: row.definitionHint, definitionReason: row.definitionReason, definitionFile: safeRuntimeFile(row.definitionFile) ? row.definitionFile : undefined, definitionVariable: safeVariable(row.definitionVariable), composeNamePeers: safePeers(row.composeNamePeers), reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
     ...(role ? { dockerLabels: { [SYSTEM_LABEL]: role } } : {}) };
+}
+
+const VARIABLE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+function safeVariable(value: string | undefined) {
+  return value !== undefined && VARIABLE.test(value) ? value : undefined;
+}
+function safePeers(value: string[] | null | undefined) {
+  const peers = (value ?? []).filter((name) => typeof name === "string" && name.length > 0 && name.length <= 128).slice(0, 16);
+  return peers.length > 0 ? peers : undefined;
 }

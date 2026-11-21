@@ -4,10 +4,10 @@
 // License: Apache-2.0
 // Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service.
 
-import { useStackDefinitionHint } from "@/shared/hooks/use-stack-definition-hint";
+import { useStackDefinitionHint, useStackNamePeers } from "@/shared/hooks/use-stack-definition-hint";
 import { useIsUser } from "@/data/use-principal";
 import { useAdapter } from "@/data/use-adapter";
-import { Globe, Layers, TriangleAlert } from "lucide-react";
+import { Copy, Globe, Layers, TriangleAlert } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -76,6 +76,7 @@ export const StackRow = memo(function StackRow({ stack, host, mode, view, column
   const rowNav = useRowNavigation();
   const cmd = useStackCommands();
  const definitionHint = useStackDefinitionHint(stack);
+ const namePeers = useStackNamePeers(stack);
   const href = `/stacks/${stack.id}`;
   const menu = useStackMenu(stack, false);
   const load = useStackLoad(stack);
@@ -118,6 +119,7 @@ export const StackRow = memo(function StackRow({ stack, host, mode, view, column
               {stack.name}
             </Link>
             {stack.definitionHint === "definition-invalid" && <span title={definitionHint}><TriangleAlert role="img" aria-label={definitionHint} className="size-4 text-warning" /></span>}
+            {namePeers && <span title={namePeers}><Copy role="img" aria-label={namePeers} className="size-4 text-warning" /></span>}
             {(!compact || inBlock) && <LabelChips labels={stack.labels} size="sm" />}
           </div>
           {((compact && !inBlock) || stack.url || (condensed && !inBlock)) && (

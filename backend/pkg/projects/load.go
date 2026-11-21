@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories. M34 #547: classified load problems instead of raw load errors.
 
 package projects
 
@@ -328,7 +328,7 @@ func ApplyLenientLoaderOptions(ctx context.Context, opts *loader.Options, compos
 					default:
 						// Variable is unset with no default (or a ${VAR:?msg}
 						// required variable, which lenient loading tolerates).
-						slog.DebugContext(ctx, "compose variable undefined during lenient load, using placeholder", "expression", substring, "composeFile", composeFile)
+						slog.DebugContext(ctx, "compose variable undefined during lenient load, using placeholder", "variable", lenientVariableName(substring), "composeFile", composeFile)
 						return lenientUndefinedPlaceholder, nil
 					}
 				}),
@@ -364,6 +364,9 @@ func LoadComposeProject(
 	services []string,
 	prepare PrepareProjectFunc,
 ) (project *composetypes.Project, err error) {
+	// Load errors can quote env values or ${VAR:?message} text; every caller
+	// sees only the classified problem while errors.Is/As still reach the cause.
+	defer func() { err = SafeError(err) }()
 	defer recoverComposeLoadPanicInternal(ctx, composeFile, &project, &err)
 
 	workdir := filepath.Dir(composeFile)
@@ -591,9 +594,8 @@ func recoverComposeLoadPanicInternal(ctx context.Context,
 		slog.WarnContext(ctx,
 			"panic while loading compose project; compose file may contain invalid syntax",
 			"path", source,
-			"error", panicErr,
 		)
-		*err = fmt.Errorf("load compose project panic for %s: %w", source, panicErr)
+		*err = fmt.Errorf("load compose project panic for %s", source)
 		*project = nil
 	}
 }
