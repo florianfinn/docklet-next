@@ -33,3 +33,4 @@ The [design index](../design/README.md) holds the current contracts.
 | [M30 hub update experience and peer stack confirmation acceptance](m30-hub-update-acceptance.md) | Merged package, review rounds, acceptance-found defects, maintainer decisions Q-A3, D-X1 and D-X2, method and limits on 2026-11-20 |
 | [M28 proxy certificate resolvers, probe helper and setup clarity acceptance](m28-proxy-resolvers-acceptance.md) | Merged package, review rounds, acceptance-found defects, maintainer decisions D-A1 and D-A2, method and limits on 2026-11-20 |
 | [M29 first-run setup acceptance](m29-first-run-setup-acceptance.md) | Merged package, review rounds, sandbox-found defects, method and limits on 2026-11-19 |
+| [M34 simpler stack actions, recorded env files and proxy UI acceptance](m34-stacks-proxy-ui-acceptance.md) | Merged package, review rounds, acceptance-found defect and fixture correction AUTO-22, method and limits on 2026-11-21 |
