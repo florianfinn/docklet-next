@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { useContainers, useHosts, useStacks } from "@/data/queries";
+import { inventoryHostsPending } from "@/data/inventory-recovery";
 import { filterByHosts, isHostVisible, sortHosts } from "@/domain/hosts";
 import type { Host } from "@/domain/model";
 import { useHostSelection } from "@/shared/preferences/preferences-store";
@@ -17,6 +18,17 @@ export function useHostScope() {
   return { ...hosts, all, visible, byId, selection, filtered: selection.length > 0 };
 }
 
+/** True while a host of the current scope (selected hosts, or all) has not answered the inventory read yet. */
+export function useHostsPending(data: unknown): boolean {
+  const hosts = useHosts();
+  const selection = useHostSelection();
+  return useMemo(() => {
+    const known = (hosts.data ?? []).map((h) => h.id);
+    const scope = selection.length ? known.filter((id) => selection.includes(id)) : known;
+    return inventoryHostsPending(data, scope);
+  }, [data, hosts.data, selection]);
+}
+
 export function useVisibleStacks() {
   const stacks = useStacks();
   const selection = useHostSelection();
@@ -28,5 +40,6 @@ export function useVisibleContainers() {
   const containers = useContainers();
   const selection = useHostSelection();
   const visible = useMemo(() => filterByHosts(containers.data ?? [], selection), [containers.data, selection]);
-  return { ...containers, visible };
+  const hostsPending = useHostsPending(containers.data);
+  return { ...containers, visible, hostsPending };
 }

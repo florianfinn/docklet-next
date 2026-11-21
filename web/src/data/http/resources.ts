@@ -2,7 +2,7 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original resource reader over the shared inventory transport. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. Hub images and networks hidden like the agent.
+// Deviations: Original resource reader over the shared inventory transport. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. Hub images and networks hidden like the agent. M35 #556: results name the hosts that answered.
 
 import { systemRole } from "@/domain/system";
 import { READ_TAG_HEADER, SKIPPED_HEADER, type ReadTag } from "./host-read-policy";
@@ -76,10 +76,11 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     const recovery = inventoryRecovery();
     const completed: T[] = [];
     const batches = await Promise.all(scope.map(async (host) => {
-      try { const { rows, inventory } = await budget((signal) => load(host, signal)); recovery.observed(host, inventory); onState(host.id, inventory); completed.push(...rows); onPartial?.([...completed]); return rows; }
+      try { const { rows, inventory } = await budget((signal) => load(host, signal)); recovery.observed(host, inventory); onState(host.id, inventory); completed.push(...rows); recovery.answered(host.id); onPartial?.(recovery.partial([...completed])); return rows; }
       catch (error) {
         parent?.throwIfAborted(); if (isMaintenanceError(error)) throw error; recovery.failed(host, error);
         onState(host.id, inventoryFailure(host.id, error));
+        recovery.answered(host.id); onPartial?.(recovery.partial([...completed]));
         return [];
       }
     }));

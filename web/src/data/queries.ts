@@ -11,7 +11,7 @@ import { useLocale } from "use-intl";
 import type { ContainerHistoryRef, HistoryRange } from "@/domain/history";
 import type { ServiceKind } from "@/domain/service-widgets";
 import type { AppLocale } from "@/domain/locale";
-import { inventoryRecoveryInterval, inventoryStructuralSharing, INVENTORY_READ_TAG } from "./inventory-recovery";
+import { copyInventoryAnswers, inventoryRecoveryInterval, inventoryStructuralSharing, INVENTORY_READ_TAG } from "./inventory-recovery";
 
 import { localizeContainers, localizeSchedule, localizeSecurity } from "@/runtime";
 import { renderEvent, renderStackDetail, type CodedEvent, type CodedStackDetail } from "./message-code";
@@ -31,7 +31,7 @@ function initialBatches<T>(client: QueryClient, key: QueryKey, signal: AbortSign
 /** Query select that shows demo texts in the interface language; German keeps the cached data as is. */
 function useLocalized<T>(localize: (data: T, locale: AppLocale) => T): ((data: T) => T) | undefined {
   const locale = useLocale();
-  return useMemo(() => (locale === "de" ? undefined : (data: T) => localize(data, locale)), [locale, localize]);
+  return useMemo(() => (locale === "de" ? undefined : (data: T) => { const out = localize(data, locale); if (data && out && typeof data === "object" && typeof out === "object") copyInventoryAnswers(data, out); return out; }), [locale, localize]);
 }
 
 export function useHosts() {

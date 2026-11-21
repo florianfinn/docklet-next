@@ -2,7 +2,7 @@
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: M23 #428 #389: the identity owner supplies retained volume rows across per-call readers. Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M26: bounded optional size wait in the volume detail.
+// Deviations: M23 #428 #389: the identity owner supplies retained volume rows across per-call readers. Original live volume mapping and regression coverage for issue #181. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M26: bounded optional size wait in the volume detail. M35 #556: results name the hosts that answered.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -112,7 +112,8 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
           const old = retained.get(host.id);
           if (old) batches.set(host.id, old.map((v) => ({ ...v, inventory: state })));
         }
-        onPartial?.([...batches.values()].flat());
+        recovery.answered(host.id);
+        onPartial?.(recovery.partial([...batches.values()].flat()));
       }));
       check();
       return recovery.result([...batches.values()].flat());

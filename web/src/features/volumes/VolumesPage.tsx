@@ -18,7 +18,7 @@ import { OverviewViewControls } from "@/shared/components/overview-mode-toggle";
 import { OverviewTable, type OverviewColumn, type TableView } from "@/shared/components/overview/overview-table";
 import { OverviewSkeleton } from "@/shared/components/overview-skeleton";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
-import { useHostScope } from "@/shared/hooks/use-host-scope";
+import { useHostScope, useHostsPending } from "@/shared/hooks/use-host-scope";
 import { nextSort, type SortDir } from "@/shared/lib/table-sort";
 import { setPreference, useHostSelection, usePreference } from "@/shared/preferences/preferences-store";
 import { Button } from "@/shared/ui/button";
@@ -84,7 +84,8 @@ export default function VolumesPage() {
     [visible],
   );
   const scope = hosts.filtered ? ts("scopeSome", { hosts: hosts.visible.map((h) => h.name).join(", ") }) : ts("scopeAll");
-  const pending = volumes.isPending;
+  // While a host in scope has not answered, totals wait and an empty list is not reported yet.
+  const hostsPending = useHostsPending(volumes.data), pending = volumes.isPending || hostsPending;
   const key = (k: VolumeSortKey) => ({ key: k, label: t(`columns.${k}`) });
   const columns =
     (inBlock: boolean) =>
@@ -155,7 +156,7 @@ export default function VolumesPage() {
           <span className="flex-1" />
           <OverviewViewControls layout={layout} onLayout={(l) => setPreference("volumesLayout", l)} labels={{ layout: ts("layout.label"), table: ts("layout.table"), hosts: ts("layout.hosts"), tableHint: ts("layout.tableHint"), hostsHint: ts("layout.hostsHint") }} />
         </div>
-        {pending ? (
+        {volumes.isPending || (hostsPending && rows.length === 0) ? (
           <OverviewSkeleton mode="compact" rows={8} />
         ) : volumes.isError ? (
           <QueryError error={volumes.error} onRetry={() => void volumes.refetch()} />
