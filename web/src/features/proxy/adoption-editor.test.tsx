@@ -229,3 +229,10 @@ it("AUTO-17: domains in use are a datalist on the domain field, never buttons", 
   await e.user.click(screen.getByRole("button", { name: "Save" }));
   expect(saved(e).rule).toBe("Host(`other.example.com`)");
 });
+it.each([".", "./", "/etc/proxy", "/etc/proxy/./routes", "routes"])("a new route in route directory %s gets a canonical target", async dir => {
+  const submit = vi.fn(), user = userEvent.setup();
+  render(<Providers><RouteEditor instance={{ ...instance, routeDirectory: dir }} inventory={inventory} read={read} busy={false} submit={submit} close={vi.fn()} /></Providers>);
+  change("Name", "fresh"); change("Host / domain", "fresh.example.com"); change("Backend host", "backend.example.com");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(submit.mock.calls[0]![0]).toBe(dir.includes("routes") ? "routes/fresh.yml" : "fresh.yml");
+});

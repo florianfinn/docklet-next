@@ -34,9 +34,11 @@ export function acknowledgementsReady(inventory: Inventory, unresolved: string[]
   );
 }
 /** Targets sent by engines are source-relative, even when setup locations are absolute container paths. */
+// The backend accepts only clean source-relative paths, so "." segments go.
 export function relativeTarget(i: Instance, location: string): string {
   const prefix = i.source.mountTarget.replace(/\/$/, "") + "/";
-  return location.startsWith(prefix) ? location.slice(prefix.length) : location;
+  const relative = location.startsWith(prefix) ? location.slice(prefix.length) : location;
+  return relative.split("/").filter((part, n) => part !== "." && (part !== "" || n === 0)).join("/");
 }
 export function operationRequest(
   read: ReadResult,
