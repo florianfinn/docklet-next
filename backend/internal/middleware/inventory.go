@@ -51,12 +51,21 @@ func forwardOnContext(c *echo.Context, ctx context.Context, cancel context.Cance
 // A cold inventory read waits at most one second for an Edge agent to reconnect.
 func (m *EnvironmentMiddleware) recoverInventoryTunnel(c *echo.Context, hostID, suffix string) bool {
 	edge.TouchTunnelDemand(hostID, edge.DefaultTunnelDemandTTL)
-	key := hoststate.Key{HostID: hostID, List: suffix + "?" + c.Request().URL.Query().Encode()}
-	if _, cached := m.snapshots.Get(key); cached {
+	if _, cached := m.snapshots.Get(inventoryKey(c, hostID, suffix)); cached {
 		return false
 	}
 	_, recovered := m.waitForActiveEdgeTunnelInternal(c.Request().Context(), hostID, time.Second).Get()
 	return recovered
+}
+
+// inventoryKey keeps project reads of callers restricted to assigned stacks apart:
+// administrator bytes carry other stacks' names and never answer such a caller.
+func inventoryKey(c *echo.Context, hostID, suffix string) hoststate.Key {
+	list := suffix + "?" + c.Request().URL.Query().Encode()
+	if c.Request().Header.Get(HeaderPeerNamesHidden) == "1" && strings.HasPrefix(strings.Trim(suffix, "/"), "projects") {
+		list = "peer-names-hidden:" + list
+	}
+	return hoststate.Key{HostID: hostID, List: list}
 }
 
 // Inventory reads retain only successful JSON responses, after caller authorization.
@@ -67,7 +76,7 @@ func (m *EnvironmentMiddleware) inventoryRead(c *echo.Context, hostID string, fo
 		return forward()
 	}
 	c.Request().Header.Set("Accept-Encoding", "identity")
-	key := hoststate.Key{HostID: hostID, List: suffix + "?" + c.Request().URL.Query().Encode()}
+	key := inventoryKey(c, hostID, suffix)
 	original := c.Response()
 	capture := &inventoryResponse{header: make(http.Header)}
 	c.SetResponse(capture)

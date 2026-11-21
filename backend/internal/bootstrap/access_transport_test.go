@@ -53,6 +53,8 @@ type m15Transport struct {
 	reads   atomic.Int32
 	// peerHidden records the peer-names header of the last detail read.
 	peerHidden atomic.Value
+	// detailFailure makes the detail read answer with this agent code.
+	detailFailure atomic.Value
 }
 
 // A named handler keeps the transport fixture independent of Echo context internals.
@@ -95,6 +97,18 @@ func newM15Transport(t *testing.T, mode string) *m15Transport {
 		}
 		if r.URL.Path == "/api/environments/0/projects/project-uuid" {
 			x.peerHidden.Store(r.Header.Get(middleware.HeaderPeerNamesHidden))
+			if code, _ := x.detailFailure.Load().(string); code != "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(503)
+				_, _ = w.Write([]byte(`{"success":false,"code":"` + code + `"}`))
+				return
+			}
+			detail := projectDTO.Details{ID: "project-uuid", Name: "Zebra"}
+			if r.Header.Get(middleware.HeaderPeerNamesHidden) != "1" {
+				detail.ComposeNamePeers = []string{"foreign-private-name"}
+			}
+			_ = json.NewEncoder(w).Encode(base.ApiResponse[projectDTO.Details]{Success: true, Data: detail})
+			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/vulnerabilities/scan") {
 			var body map[string]any
@@ -433,5 +447,55 @@ func TestRejectedUserKeyCannotBecomeMachineDirectAndEdge(t *testing.T) {
 			require.NoError(t, f.users.SetDisabled(t.Context(), owner.ID, true))
 			require.Equal(t, 401, request().Code)
 		})
+	}
+}
+
+// Snapshot fallbacks keep the visibilities apart in both orders: a restricted
+// caller never receives administrator bytes, and administrators keep warnings.
+func TestPeerNamesHiddenInDetailSnapshotsRealDirectAndEdge(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		for _, level := range []string{"restricted", "full"} {
+			for _, code := range []string{"agent.unavailable", "agent.update-required"} {
+				t.Run(mode+"/"+level+"/"+code, func(t *testing.T) {
+					x := newM15Transport(t, mode)
+					f := x.fixture
+					u, err := f.users.CreateUser(t.Context(), &user.User{Username: "viewer"})
+					require.NoError(t, err)
+					require.NoError(t, f.users.SetAppAssignments(t.Context(), u.ID, []userDTO.AppAssignment{{EnvironmentID: "example", ProjectID: "project-uuid", Level: level}}))
+					tokens, err := f.svc.CompleteLogin(t.Context(), u, authDTO.SessionMeta{}, "local")
+					require.NoError(t, err)
+					request := func(token string) *httptest.ResponseRecorder {
+						r := httptest.NewRequest("GET", "/api/environments/example/projects/project-uuid", nil)
+						r.AddCookie(&http.Cookie{Name: cookie.InsecureTokenCookieName, Value: token})
+						w := httptest.NewRecorder()
+						x.hub.ServeHTTP(w, r)
+						return w
+					}
+					offline := func(on bool) {
+						if on {
+							x.detailFailure.Store(code)
+						} else {
+							x.detailFailure.Store("")
+						}
+					}
+					require.Contains(t, request(f.tokens.BrowserToken).Body.String(), "foreign-private-name", "precondition: administrators see the warning")
+					offline(true)
+					cold := request(tokens.BrowserToken)
+					require.NotEqual(t, 200, cold.Code, "a cold user read never falls back to administrator bytes")
+					require.NotContains(t, cold.Body.String(), "foreign-private-name")
+					offline(false)
+					require.NotContains(t, request(tokens.BrowserToken).Body.String(), "foreign-private-name")
+					require.Contains(t, request(f.tokens.BrowserToken).Body.String(), "foreign-private-name")
+					offline(true)
+					user := request(tokens.BrowserToken)
+					require.Equal(t, 200, user.Code, user.Body.String())
+					require.Equal(t, code, user.Header().Get("X-Docklet-Host-Reason"))
+					require.NotContains(t, user.Body.String(), "foreign-private-name")
+					admin := request(f.tokens.BrowserToken)
+					require.Equal(t, 200, admin.Code, admin.Body.String())
+					require.Contains(t, admin.Body.String(), "foreign-private-name", "administrator fallback keeps the warning")
+				})
+			}
+		}
 	}
 }

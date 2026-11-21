@@ -33,7 +33,8 @@ Docklet keeps only the checks that protect the action's own target.
     user's lists. For detail reads it marks the request: locally through the
     request context, and for agents through `X-Docklet-Peer-Names-Hidden`. The
     hub always clears a client-supplied value first, and agents honour it only
-    on the agent-token path.
+    on the agent-token path. The hub's snapshot fallback keeps such project
+    reads under their own key, so administrator bytes never answer them.
   - Evidence used for the warning never selects or authorizes a target. The
     current guards in `runtime_identity.go` stay in place: a recovered name
     never authorizes a row as target, and the target must match exactly.
