@@ -45,6 +45,11 @@ export function runtimeStatus(state: ContainerState, health: Health, hostOnline 
   return "running";
 }
 
+/** A container needs attention when it failed, is unhealthy or restarts; an offline host is shown on its own. */
+export function isProblem(status: RuntimeStatus): boolean {
+  return status === "down" || status === "unhealthy" || status === "restarting";
+}
+
 export const RUNTIME_TONE: Record<RuntimeStatus, Tone> = {
   running: "ok",
   starting: "ok",

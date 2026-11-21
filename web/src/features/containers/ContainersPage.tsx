@@ -8,7 +8,7 @@ import { useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
 import type { ContainerInfo } from "@/domain/model";
-import { containerRuntime, RUNTIME_TONE } from "@/domain/status";
+import { containerRuntime, isProblem, RUNTIME_TONE } from "@/domain/status";
 import { HiddenSection, type HiddenEntry } from "@/shared/components/hidden-items";
 import { HostChip } from "@/shared/components/host-chip";
 import { ToneBadge } from "@/shared/components/tone";
@@ -86,7 +86,7 @@ export default function ContainersPage() {
     const st = containers.visible.map((c) => containerRuntime(c, hosts.byId.get(c.hostId)));
     return {
       running: st.filter((s) => s === "running").length,
-      problems: st.filter((s) => s === "unhealthy" || s === "restarting").length,
+      problems: st.filter(isProblem).length,
       standalone: containers.visible.filter((c) => c.origin !== "compose").length,
     };
   }, [containers.visible, hosts.byId]);

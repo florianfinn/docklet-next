@@ -2,7 +2,7 @@ import { MarkerType, type Edge, type Node } from "@xyflow/react";
 
 import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
 import { networkGroup, NETWORK_GROUPS, sortNetworks, type NetworkGroup } from "@/domain/networks";
-import { containerRuntime, type RuntimeStatus } from "@/domain/status";
+import { containerRuntime, isProblem, type RuntimeStatus } from "@/domain/status";
 
 import { hostAddress } from "./host-address";
 import { BLOCK_GAP, BUS, containerSize, GUTTER, networkSize, NODE_MIN_W, RAIL_X, type AddressRow, type Bounds } from "./topology-geometry";
@@ -56,8 +56,6 @@ const NET_GAP = 14;
 /** Text of an unknown host address on the block; its length only reserves width. */
 const UNKNOWN_ADDRESS = "Host-Adresse unbekannt";
 const NO_ADDRESSES: FocusAddress[] = [];
-
-const PROBLEM: ReadonlySet<RuntimeStatus> = new Set(["unhealthy", "restarting", "unknown"]);
 
 export interface HostLayoutInput {
   topology: Topology;
@@ -183,7 +181,7 @@ export function layoutHost({ topology, containers, host, expanded, budget = Infi
       row.items.forEach((col, i) => {
         const x = row.xs[i]!;
         const all = membersOf.get(col.net.id) ?? [];
-        const problems = all.filter((id) => PROBLEM.has(containerRuntime(byId.get(id)!, host))).length;
+        const problems = all.filter((id) => isProblem(containerRuntime(byId.get(id)!, host))).length;
         nodes.push({ id: col.net.id, type: "network", position: { x, y }, data: { network: col.net, members: all.length, problems, expanded: expanded.has(col.net.id), dim: false, width: col.width, band: y + head - NET_GAP / 2 } });
         let cy = y + head;
         for (const c of col.members) {
@@ -289,7 +287,7 @@ export function decorate(layout: HostLayout, { query, onlyProblems, focus, showD
     }
     const d = n.data;
     const hay = `${d.container.name} ${d.container.stackName ?? d.container.stackId ?? ""}`.toLowerCase();
-    const dim = (!!focus && !neighbours.has(n.id)) || (!!q && !hay.includes(q)) || (onlyProblems && !PROBLEM.has(d.status));
+    const dim = (!!focus && !neighbours.has(n.id)) || (!!q && !hay.includes(q)) || (onlyProblems && !isProblem(d.status));
     const found = addressesOf.get(n.id);
     // Unchanged nodes keep their identity, so memoised node components skip the repaint.
     const addresses = !found ? NO_ADDRESSES : sameAddresses(found, d.addresses) ? d.addresses : found;
