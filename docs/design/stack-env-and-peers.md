@@ -49,14 +49,22 @@ Docklet keeps only the checks that protect the action's own target.
   `com.docker.compose.project.environment_file`. Only the target row's own
   containers count, and they are proven by fresh container labels that are
   independent of display ownership:
-  - `com.docker.compose.project.working_dir` equals the row's directory
-    (cleaned, real path);
-  - `com.docker.compose.project.config_files` equals the row's selected Compose
-    file paths;
-  - `com.docker.compose.oneoff` is not `True`.
-
-  The Compose project name is not used for attribution, because it may itself
-  come from the recorded file.
+  - **Bootstrap.** Candidates are containers whose
+    `com.docker.compose.project.working_dir` equals the row's directory (both
+    canonical real paths) and whose `com.docker.compose.oneoff` is not `True`.
+    Every entry of their comma-separated `config_files` list must lie inside
+    that directory. The entries are decoded in order. The recorded env files
+    are read from the candidates' `environment_file` list, and only then is
+    the file selection made from those bytes, so a recorded `COMPOSE_FILE`
+    works. No conventional `.env` is read before this.
+  - **Confirmation.** After loading, the model's `WorkingDir` must equal the
+    row's directory. Its ordered `ComposeFiles` must equal the candidates'
+    `config_files` list, compared as absolute canonical paths. These are the
+    fields that Docklet (`applyCustomLabelsInternal`) and the Compose CLI both
+    write. A mismatch gives the named problem "conflicting recorded env
+    files", and the recorded selection is dropped for that target.
+  - The Compose project name is not used for attribution, because it may itself
+    come from the recorded file.
 
   Treatment of edge cases:
   - Containers that miss these labels, or match another directory, are ignored.
@@ -106,9 +114,21 @@ Docklet keeps only the checks that protect the action's own target.
   `applyCustomLabelsInternal`. Without the label, a single redeploy would make
   the stack unreadable again. Values never enter labels.
 - **Lifecycle.** Recorded files are immutable external dependencies. A snapshot
-  records each path with its SHA-256 in a new optional `External` list (no
-  content). They are never part of the writable file set, so update, restore,
-  recovery and rollback never write them.
+  records each path with its SHA-256 in a new `External` list (no content). They
+  are never part of the writable file set, so update, restore, recovery and
+  rollback never write them.
+  - **Hash compatibility.** `External` is omitted from the JSON when it is
+    empty, so `Hash(Open(old payload))` and stored point revisions stay
+    byte-identical for every existing snapshot.
+  - **Revision binding.** With a non-empty `External`, `SavedRevision` becomes
+    `Hash([]any{files, model, external})`, and without one the formula stays
+    unchanged. A change to any byte of a recorded file therefore changes the
+    revision and the baseline configuration, even for an unused key.
+  - **Fresh checks.** Update, restore, recovery and the restart barrier
+    recompute the external hashes before any image, tag, file or deploy effect
+    and compare them with the snapshot. A mismatch settles with zero effects as
+    `update.external-input-changed`. Recovery never adopts a fresh model whose
+    external hashes differ.
   - A baseline counts as available only while the current external hashes
     equal the recorded ones. Otherwise it reports `update.config-drift`, and
     deploying once captures a new baseline.
@@ -145,12 +165,16 @@ Docklet keeps only the checks that protect the action's own target.
   - `service_workspace.go:568`
   - `pkg/projects/load.go:331` and the panic recovery at `:590`
   - `env.go:196,497,503,508`
-- **Masked environment (AUTO-13).** For a project with a recorded selection,
-  the project-level service projections keep the environment keys but return
-  no values: `services[].environment` and
-  `runtimeServices[].serviceConfig.environment`. The executable model is not
-  changed. The Docker container inspect view is the daemon's own data and is
-  outside this rule.
+- **Uninterpolated projection (AUTO-13, revised).** For a project with a
+  recorded selection, the project-level service projections
+  (`services[]` and `runtimeServices[].serviceConfig`) come from a copy of the
+  definition loaded without interpolation. They show `${VAR}` placeholders in
+  every field: environment, command, entrypoint, labels, healthcheck, volumes
+  and the rest. `image` is the only field taken from the interpolated model,
+  because the daemon reports image references anyway. The executable and cached
+  models are not changed. No production web consumer reads these environment
+  maps (design review R2). Daemon data, meaning container inspect and the
+  runtime `ContainerLabels`, is outside this rule.
 
 Rejected alternatives:
 - Keeping the confirmation and remembering it: the maintainer rejected any
@@ -200,15 +224,15 @@ Rejected alternatives:
 | 4 | behaviour | container labelled with a duplicated name | `compose.duplicate`; containers of other names unaffected | resolver parent lookup | resolver test | resolve first owner |
 | 5 | identity change | peer turns duplicate between admission and effect; target or parent changes | duplicate proceeds; target/parent change zero-effect | `runtime_executor.go:157` | two tests, peer and target mutated separately | refuse on new duplicate / ignore target change |
 | 6 | external data | recorded path relative, `..`, prefix sibling of root, symlink out of root, parent symlink swapped after check, directory, FIFO, growth past 1 MiB, missing, permission denied, symlink loop | named problem; zero bytes read outside root | recorded-input reader | table test with a counting reader seam; swap test | one mutation per guard: drop root, drop regular check, drop size cap, reopen by path |
-| 7 | external data | attribution: same-name A/B in different directories with distinct sentinel files; stale observation; one-off container; container recreated during resolution | A never consumes B's label or bytes; unrelated C actionable | attribution function | test with fake container listing | attribute by Compose name |
+| 7 | external data | attribution: same-name A/B in different directories with distinct sentinel files; stale observation; one-off container; container recreated during resolution; own recorded file selects a custom file and an ordered override list; Docklet- and CLI-produced labels | A never consumes B's label or bytes; custom selection loads without a conventional `.env` read; unrelated C actionable | attribution bootstrap + confirmation | test with fake container listing and read counter | attribute by Compose name / compare against the pre-recorded selection |
 | 8 | external data | conflicting lists; missing vs empty label; label equal to own `.env` | conflict → named problem; missing/empty/own → current behaviour | attribution function | unit test | pick the first container |
 | 9 | external data | peer evidence: `${}`, `$VAR`, `$$`, aliases, override files, multi-document, invalid YAML | no evidence; no panic; create/rename unchanged | peer evidence reader | unit test | reuse `ComposeContentProjectName` |
 | 10 | replacement | malformed `.env` with recorded selection; stale keys in `.env`; conflicting `COMPOSE_FILE`/`COMPOSE_PROFILES`; ordered files; AutoInject on/off | recorded bytes replace `.env` before selection | resolved-input function | loader tests | merge `.env` first |
 | 11 | cache | label added/removed/conflicting; same-mtime byte change; symlink retarget inside root; repaired file | cache key changes; current label always resolved | `cache.go` lookup | cache tests | resolve label after cache lookup / omit content hash |
 | 12 | deploy | Docklet redeploy of recorded-selection project | every created/recreated service carries the same `environment_file`; fresh read stays readable | `applyCustomLabelsInternal` | model label test + sandbox P4 | omit the label |
-| 13 | lifecycle | external file inside root but outside the stack; baseline query, update preflight, effect; external change between preflight and effect; restore and interrupted recovery | hash-checked, never written; drift → `config-drift`; restore with drift → `update.external-input-changed` | `lifecycle_inputs.go:84`, `lifecycle_baseline.go:33`, `lifecycle_preflight.go:51`, `lifecycle_recovery.go:203` | lifecycle tests with write counter on external path | include external file in the writable set / omit its hash |
-| 14 | persisted state | snapshot payload without `External` | decodes; baseline unavailable until deploy | `lifecycle/store.go` Open | decode test with a stored old payload | make `External` required |
-| 15 | leak | sentinel in a recorded file used by a service; `${VAR:?hint}` with expanded sentinel; malformed dotenv; panic path | absent from hub and executor logs, all project APIs, activity output; env keys kept, values masked | every listed sink; service projections | log capture + body assertions per sink class | restore a raw-error sink / unmask projection |
+| 13 | lifecycle | external file inside root but outside the stack; baseline query, update preflight, effect; unused key changed between admission and effect; restore and interrupted recovery | hash-checked before effects, never written; drift → `config-drift` / zero-effect `update.external-input-changed`; recovery does not adopt a changed external | `lifecycle_inputs.go:84,146`, `lifecycle_baseline.go:33`, `lifecycle_preflight.go:43`, `lifecycle_recovery.go:52,70,129,203` | lifecycle tests with write counter on external path | include external file in the writable set / omit `External` from `SavedRevision` / skip the recovery comparison |
+| 14 | persisted state | sealed point and baseline payloads from 1.2.0, with stored revisions | `Hash(Open(payload))` unchanged; reopened recovery accepts them | `lifecycle/store.go` Hash/Open, `snapshot.go` alias | test with real old sealed payloads | encode empty `External` |
+| 15 | leak | sentinel in a recorded file used in environment, `command` and a label; `${VAR:?hint}` with expanded sentinel; malformed dotenv; panic path | absent from hub and executor logs, all project APIs, activity output; projections show placeholders | every listed sink; service projections | log capture + body assertions per sink class and per field | restore a raw-error sink / project the interpolated model |
 | 16 | new codes | definition reasons, `update.external-input-changed` | rendered in en/de; unknown reason → generic hint; older producers omit optional fields | types, OpenAPI, catalogue, web | wire catalogue, OpenAPI drift, mapper and rendering tests | omit a key / map unknown to blank |
 | 17 | transport parity | unreadable peer, recorded selection and label preservation on Direct and Edge | same results as hub-local | real sender and receiver adapters | parity test over both transports | agent path keeps old resolver |
 | 18 | mixed versions | new hub + 1.2.0 agent; 1.2.0 hub + new agent with stray or retained digest; v18/v19 notice | as in Contract | `runtime-commands.ts`, `runtime_sender.go:236` | dialog test, digest acceptance test, notice test | delete dialog branch / reject valid digest |
