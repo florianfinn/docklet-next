@@ -2,7 +2,7 @@
 // Revision: 1d8ef389b0a40f3ba27fb09f8f59d8ac993180ff
 // Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Production-only section and detail presentation, anywhere wrapping and accessible field help.
+// Deviations: Production-only section and detail presentation, anywhere wrapping and accessible field help; help button in the label row.
 
 import type { ReactNode } from "react";
 import { CircleHelp } from "lucide-react";
@@ -25,7 +25,7 @@ export function Detail({ label, children }: { label: string; children: ReactNode
 }
 export function FieldHelp({ label, help, children }: { label: string; help: string; children: ReactNode }) {
   const t = useTranslations("proxyContract.ui");
-  return <div className="relative min-w-0 pr-9">
+  return <div className="relative min-w-0">
     {children}
     <TooltipProvider><Tooltip><TooltipTrigger asChild>
       <button type="button" className="absolute right-0 top-0 rounded-md p-1 text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" aria-label={t("fieldHelp", { name: label })}><CircleHelp className="size-4" /></button>

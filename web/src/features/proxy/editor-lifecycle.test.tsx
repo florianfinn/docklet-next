@@ -65,7 +65,7 @@ describe("proxy editor snapshot and identity ownership", () => {
       </Providers>,
     );
     const user = await edit();
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
+    await user.click(screen.getByRole("radio", { name: /Advanced/ }));
     fireEvent.change(screen.getByLabelText("Rule (Traefik v3)"), {
       target: { value: "Host(`app.example.com`) && PathPrefix(`/api`)" },
     });
@@ -74,7 +74,7 @@ describe("proxy editor snapshot and identity ownership", () => {
     resolver.focus();
     await user.keyboard("{ArrowDown}");
     await user.click(await screen.findByRole("option", { name: "existing-resolver" }));
-    await user.click(screen.getByRole("tab", { name: "Easy" }));
+    await user.click(screen.getByRole("radio", { name: /Easy/ }));
     expect((screen.getByLabelText("Host / domain") as HTMLInputElement).disabled).toBe(true);
     expect(screen.getByText("Host(`app.example.com`) && PathPrefix(`/api`)").textContent).toBe(
       "Host(`app.example.com`) && PathPrefix(`/api`)",
@@ -101,12 +101,12 @@ describe("proxy editor snapshot and identity ownership", () => {
     );
     const user = await edit();
     fireEvent.change(screen.getByLabelText("Backend host"), { target: { value: "next.example.com" } });
-    await user.click(screen.getByRole("tab", { name: "Advanced" }));
+    await user.click(screen.getByRole("radio", { name: /Advanced/ }));
     const advanced = screen.getByLabelText("Caddy site block") as HTMLTextAreaElement;
     expect(advanced.value).toBe(text.replace("backend.example.com", "next.example.com"));
     const custom = advanced.value.replace("encode gzip", "example_invalid_directive");
     fireEvent.change(advanced, { target: { value: custom } });
-    await user.click(screen.getByRole("tab", { name: "Easy" }));
+    await user.click(screen.getByRole("radio", { name: /Easy/ }));
     expect((screen.getByLabelText("Backend host").closest("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(writes(f).length).toBe(1));

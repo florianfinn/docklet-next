@@ -2,7 +2,7 @@
 // Revision: 1d8ef389b0a40f3ba27fb09f8f59d8ac993180ff
 // Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Observed reference-kind chips, append order, lossless newline editor and frozen-chain rules.
+// Deviations: Observed reference-kind chips, append order, lossless newline editor and frozen-chain rules. Usable references only; first kind wins; visible group label.
 
 import { useTranslations } from "use-intl";
 import { Label } from "@/shared/ui/label";
@@ -18,11 +18,13 @@ export function HandlingFields({ read, route, names, middlewares, frozen, update
   update: (s: string) => void; priority: string; setPriority: (s: string) => void;
 }) {
   const t = useTranslations("proxyContract.ui");
-  const observed = [...(read.middlewares ?? []), ...(read.routes ?? []).flatMap(r => r.references ?? [])];
-  const chips = [...new Map(observed.filter(r => r.name !== "" && !r.name.includes("\n")).map(r => [r.name, r])).values()];
+  // Definitions first, then usable references of other routes; the first kind seen wins.
+  const observed = [...(read.middlewares ?? []), ...(read.routes ?? []).flatMap(r => (r.references ?? []).filter(ref => !["opaque", "unresolved"].includes(ref.kind)))];
+  const chips = [...observed.filter(r => r.name !== "" && !r.name.includes("\n")).reduce((m, r) => m.has(r.name) ? m : m.set(r.name, r), new Map<string, (typeof observed)[number]>()).values()];
   return <>
     <FieldHelp label={t("existingMiddleware")} help={t("middlewareHint")}>
-      <div role="group" aria-label={t("existingMiddleware")} className="flex flex-wrap gap-2">
+      <p id="route-middleware-chips" className="mb-2 text-sm font-medium">{t("existingMiddleware")}</p>
+      <div role="group" aria-labelledby="route-middleware-chips" className="flex flex-wrap gap-2">
         <TooltipProvider>{chips.map(ref => <Tooltip key={ref.name}><TooltipTrigger asChild>
           <Button type="button" size="sm" variant={names.includes(ref.name) ? "secondary" : "outline"} disabled={frozen} aria-pressed={names.includes(ref.name)}
             onClick={() => update((names.includes(ref.name) ? names.filter(n => n !== ref.name) : [...names, ref.name]).join("\n"))}>

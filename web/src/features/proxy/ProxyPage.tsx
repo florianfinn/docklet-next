@@ -2,7 +2,7 @@
 // Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
 // Retrieved: 2026-11-16
 // License: Apache-2.0
-// Deviations: Original production proxy Manager implementation.
+// Deviations: Original production proxy Manager implementation. M34 #549: lab instance bar card that stacks on phones.
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslations } from "use-intl";
@@ -28,7 +28,8 @@ const to = (next: View) => (old: { last: string }) => ({ view: next, last: next.
 const first = (rows: Instance[]): View => (rows[0] ? { kind: "instance", id: rows[0].id } : { kind: "setup" });
 
 function Manager() {
-  const t = useTranslations("proxyContract.ui"),
+  const contract = useTranslations("proxyContract"),
+    t = useTranslations("proxyContract.ui"),
     hosts = useHosts();
   const adapter = useAdapter(),
     lifetime = identityLifetime(adapter);
@@ -103,11 +104,20 @@ function Manager() {
       {instances && (
         <>
           {instances.length > 0 && (
-            <div className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
-              <IconTile tone="accent"><Server /></IconTile>
-              <div className="min-w-0 flex-1"><Choice
+            <div className="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-3 md:flex-row md:items-center">
+              {/* Phones stack the identity, picker and action instead of overlapping them. */}
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <IconTile tone="accent"><Server /></IconTile>
+                {instance ? <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">{t("activeProxy")}</p>
+                  <p className="font-semibold [overflow-wrap:anywhere]">{instance.name} · {contract(`kinds.${instance.kind}`)}</p>
+                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2"><span className="font-mono text-xs [overflow-wrap:anywhere]">{instance.identity.containerName}</span><ToneBadge tone="cyan">{hosts.data?.find(h => h.id === instance.environmentId)?.name ?? instance.environmentId}</ToneBadge></div>
+                </div> : <p className="text-sm text-muted-foreground">{t("instance")}</p>}
+              </div>
+              <div className="w-full min-w-0 md:w-72"><Choice
                 id="proxy-instance"
                 label={t("instances")}
+                hideLabel
                 value={instance ? instance.id : SETUP}
                 placeholder={t("instance")}
                 onChange={v => setPage(to(v === SETUP ? { kind: "setup" } : { kind: "instance", id: v }))}
@@ -120,8 +130,7 @@ function Manager() {
                 ]}
               />
               </div>
-              {instance && <div className="flex min-w-0 flex-wrap items-center gap-3"><span className="break-all font-mono text-xs">{instance.identity.containerName}</span><ToneBadge tone="cyan">{hosts.data?.find(h => h.id === instance.environmentId)?.name ?? instance.environmentId}</ToneBadge></div>}
-              <Button variant="outline" className="self-end" disabled={!instance} onClick={() => setPage(to({ kind: "setup" }))}>
+              <Button variant="outline" className="self-start md:self-center" disabled={!instance} onClick={() => setPage(to({ kind: "setup" }))}>
                 {t("newInstance")}
               </Button>
             </div>

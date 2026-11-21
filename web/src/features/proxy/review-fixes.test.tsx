@@ -160,7 +160,7 @@ describe("proxy refusals and blocking states", () => {
           <InstanceWorkspace instance={instance} api={f.api} updated={() => {}} removed={() => {}} />
         </Providers>,
       );
-      await screen.findByRole("heading", { name: "Routes" });
+      await screen.findByRole("tab", { name: "Routes" });
       await waitFor(() =>
         expect(screen.getByRole("button", { name: "Add route" }).hasAttribute("disabled")).toBe(true),
       );

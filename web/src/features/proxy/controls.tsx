@@ -2,8 +2,9 @@
 // Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
 // Retrieved: 2026-11-16
 // License: Apache-2.0
-// Deviations: Original production proxy Manager implementation.
+// Deviations: Original production proxy Manager implementation. M34 #549: hidden select labels, wide dialog and eligibility badge.
 
+import { ToneBadge } from "@/shared/components/tone";
 import type { ReactNode } from "react";
 import { useTranslations } from "use-intl";
 import { Checkbox } from "@/shared/ui/checkbox";
@@ -22,6 +23,7 @@ export function Choice({
   options,
   placeholder,
   disabled,
+  hideLabel,
 }: {
   id: string;
   label: string;
@@ -30,10 +32,11 @@ export function Choice({
   options: { value: string; label: string; disabled?: boolean }[];
   placeholder?: string;
   disabled?: boolean;
+  hideLabel?: boolean;
 }) {
   return (
     <div className="grid min-w-0 gap-2">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id} className={hideLabel ? "sr-only" : undefined}>{label}</Label>
       <Select value={value} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger id={id} className="w-full min-w-0 [&>span]:truncate">
           <SelectValue placeholder={placeholder} />
@@ -78,12 +81,14 @@ export function ProxyDialog({
   onClose,
   children,
   busy = false,
+  wide = false,
 }: {
   title: string;
   description: string;
   onClose: () => void;
   children: ReactNode;
   busy?: boolean;
+  wide?: boolean;
 }) {
   return (
     <Dialog
@@ -93,7 +98,7 @@ export function ProxyDialog({
       }}
     >
       <DialogContent
-        className="[&_button]:max-w-full [&_button]:whitespace-normal max-h-[calc(100dvh-2rem)] min-w-0 grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-2xl"
+        className={`[&_button]:max-w-full [&_button]:whitespace-normal max-h-[calc(100dvh-2rem)] min-w-0 grid-cols-[minmax(0,1fr)] overflow-y-auto ${wide ? "sm:max-w-4xl" : "sm:max-w-2xl"}`}
         onEscapeKeyDown={e => {
           if (busy) e.preventDefault();
         }}
@@ -135,8 +140,8 @@ export function EligibilityView({ value }: { value: Eligibility }) {
   const t = useTranslations("proxyContract.ui");
   return (
     <div className="space-y-1 text-sm">
-      <p>
-        {t(value.writable ? "writable" : "readOnly")} <Reason code={value.reason} />
+      <p className="flex flex-wrap items-center gap-2">
+        <ToneBadge tone={value.writable ? "ok" : "warn"}>{t(value.writable ? "writable" : "readOnly")}</ToneBadge> <Reason code={value.reason} />
       </p>
       <Diagnostic value={value} />
     </div>

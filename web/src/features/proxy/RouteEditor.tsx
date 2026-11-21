@@ -1,8 +1,8 @@
-// Source: docklet-next/issues/473
-// Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
-// Retrieved: 2026-11-16
+// Source: web/src/features/design-lab/proxy/RouteEditor.tsx
+// Revision: 1d8ef389b0a40f3ba27fb09f8f59d8ac993180ff
+// Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Original production proxy Manager implementation.
+// Deviations: Lab section, step and segmented-mode structure on the production editor (issue 473 write path): only changed leaves, held read, Caddy Advanced authority, acknowledgement gating.
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
@@ -10,7 +10,11 @@ import { TextField } from "@/shared/components/form-field";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
 import { Label } from "@/shared/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+import { Input } from "@/shared/ui/input";
+import { SegmentedToggle } from "@/shared/components/segmented-toggle";
+import { StepRail } from "@/shared/components/step-rail";
+import { Code, Wand2 } from "lucide-react";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import { AcknowledgementFields, RefusalView, ConfirmCheck, ProxyDialog } from "./controls";
 import {
   acknowledgementsReady,
@@ -144,7 +148,7 @@ export function RouteEditor({
       if (!route || rule !== route.rule) change.rule = rule;
       // A new route omits empty defaults; an edit sends only changed leaves.
       if (route ? Number(priority) !== route.priority : Number(priority) !== 0) change.priority = Number(priority);
-      if (route ? resolver !== PRESERVE && JSON.stringify(entryPoints) !== JSON.stringify(route.entryPoints ?? []) : entryPoints.length > 0)
+      if (route ? JSON.stringify(entryPoints) !== JSON.stringify(route.entryPoints ?? []) : entryPoints.length > 0)
         change.entryPoints = entryPoints;
       if (
         route
@@ -164,25 +168,34 @@ export function RouteEditor({
     </div>
   );
   return (
-    <ProxyDialog title={t(route ? "edit" : "newRoute")} description={t("serverValidation")} onClose={close} busy={busy}>
+    <ProxyDialog wide title={t(route ? "edit" : "newRoute")} description={t("serverValidation")} onClose={close} busy={busy}>
       <form ref={form} noValidate onSubmit={e => {
         e.preventDefault();
         if (narrow && mode === "easy" && step < 3) setStep(s => s + 1);
         else save();
       }} className="grid min-w-0 gap-4">
         <fieldset disabled={busy} className="grid min-w-0 gap-4">
-          <Tabs value={mode} onValueChange={enterMode}>
-            <TabsList className="w-full"><TabsTrigger value="easy">{t("easy")}</TabsTrigger><TabsTrigger value="advanced">{t("advanced")}</TabsTrigger></TabsList>
-          </Tabs>
-          {narrow && mode === "easy" && <p role="status" className="text-sm text-muted-foreground">{t("step", { current: step + 1, total: 4 })} · {sectionTitles[step]}</p>}
+          <TooltipProvider><SegmentedToggle label={t("editorMode")} value={mode as "easy" | "advanced"} onChange={enterMode} options={[
+            { value: "easy", label: t("easy"), icon: <Wand2 />, hint: t("easyHint") },
+            { value: "advanced", label: t("advanced"), icon: <Code />, hint: t("advancedHint") },
+          ]} /></TooltipProvider>
+          {narrow && mode === "easy" && <>
+            <StepRail label={t("editorSteps")} steps={sectionTitles.map((title, i) => ({ id: String(i), title }))} current={String(step)} reachable={3} onSelect={id => setStep(Number(id))} />
+            <p role="status" className="sr-only">{t("step", { current: step + 1, total: 4 })} · {sectionTitles[step]}</p>
+          </>}
           <div hidden={mode === "easy" && narrow && step !== 0}>
             <FieldHelp label={t("name")} help={t("help.name")}><TextField id="route-name" label={t("name")} disabled={caddy && textChanged} value={name} onChange={setName} /></FieldHelp>
           </div>
           <fieldset disabled={caddy && textChanged} className="grid min-w-0 gap-4">
             {section(0, <>
-              <FieldHelp label={t("domain")} help={t("help.domain")}><TextField id="route-domain" label={t("domain")} value={domain} disabled={!caddy && !exactHostRule} onChange={v => { setDomain(v); if (!caddy) setRule(`Host(\`${v}\`)`); }} />
+              <FieldHelp label={t("domain")} help={t(caddy ? "help.caddyDomain" : "help.domain")}>
+                <div className="grid min-w-0 gap-2">
+                  <Label htmlFor="route-domain">{t("domain")}</Label>
+                  {/* Known domains are offered as a datalist (AUTO-17); picking one only fills the field. */}
+                  <Input id="route-domain" value={domain} disabled={!caddy && !exactHostRule} list={!caddy && domains.length > 0 ? "route-domain-suggestions" : undefined} autoComplete="off" spellCheck={false} onChange={e => { const v = e.target.value; setDomain(v); if (!caddy) setRule(`Host(\`${v}\`)`); }} />
+                  {!caddy && domains.length > 0 && <datalist id="route-domain-suggestions" aria-label={t("domainSuggestions")}>{domains.map(d => <option key={d} value={d} />)}</datalist>}
+                </div>
               </FieldHelp>
-              {!caddy && domains.length > 0 && <div className="flex flex-wrap gap-2" aria-label={t("domainSuggestions")}>{domains.map(d => <Button key={d} type="button" variant="outline" size="sm" disabled={!exactHostRule} onClick={() => { setDomain(d); setRule(`Host(\`${d}\`)`); }}>{d}</Button>)}</div>}
               {!caddy && !exactHostRule && <p className="break-all font-mono text-xs">{rule}</p>}
             </>)}
             {section(1, opaqueService ? <p className="text-sm">{t("opaqueService", { name: route!.serviceFile! })}</p> : shared ? <p className="text-sm">{t("sharedServiceHint")}</p> : <DestinationFields instance={instance} backend={backend} update={setBackend} />)}
@@ -190,7 +203,7 @@ export function RouteEditor({
               <p className="text-sm text-muted-foreground">{t("caddyEasyHint")}</p>
               {!route && <FieldHelp label={t("tls")} help={t("help.caddyTls")}><ConfirmCheck checked={tls} onChange={setTls}>{t("tls")}</ConfirmCheck></FieldHelp>}
             </> : mode === "easy" ? <TlsFields inventory={inventory} route={route} resolver={resolver} setResolver={setResolver} entryPoints={entryPoints} setEntryPoints={setEntryPoints} /> : null)}
-            {section(3, caddy ? <p className="text-sm text-muted-foreground">{t("caddyEasyHint")}</p> : mode === "easy" ? <HandlingFields read={read} route={route} names={names} middlewares={middlewares} frozen={multiline} update={v => { setMiddlewares(v); setAck(a => ({ ...a, unresolvedReferences: [] })); }} priority={priority} setPriority={setPriority} /> : null)}
+            {section(3, caddy ? <p className="text-sm text-muted-foreground">{t("caddyHandlingHint")}</p> : mode === "easy" ? <HandlingFields read={read} route={route} names={names} middlewares={middlewares} frozen={multiline} update={v => { setMiddlewares(v); setAck(a => ({ ...a, unresolvedReferences: [] })); }} priority={priority} setPriority={setPriority} /> : null)}
           </fieldset>
           {mode === "advanced" && <FormSection title={t("advanced")} tone="domain">
             {caddy ? <FieldHelp label={t("siteBlock")} help={t("help.siteBlock")}><div className="grid min-w-0 gap-2"><Label htmlFor="site-block">{t("siteBlock")}</Label><Textarea id="site-block" className="min-h-64 font-mono text-xs" value={advanced} onChange={e => { setAdvanced(e.target.value); setTextChanged(true); }} /></div></FieldHelp> : <>
@@ -204,7 +217,7 @@ export function RouteEditor({
         </fieldset>
         {invalid && <p role="alert">{t("requiredField", { name: t(({ "route-name": "name", "route-domain": "domain", "route-rule": "rule", "backend-host": "backendHost", "site-block": "siteBlock", "route-resolver": "resolver" } as const)[invalid as "route-name"] ?? "name") })}</p>}
         <RefusalView refusal={refusal} />
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 flex flex-wrap justify-end gap-2 border-t bg-background px-6 py-3">
           <Button type="button" variant="outline" disabled={busy} onClick={close}>{t("cancel")}</Button>
           {narrow && mode === "easy" && <>
             <Button type="button" variant="outline" disabled={busy || step === 0} onClick={() => setStep(s => s - 1)}>{t("previous")}</Button>

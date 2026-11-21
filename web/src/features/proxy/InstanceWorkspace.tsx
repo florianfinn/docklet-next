@@ -2,7 +2,7 @@
 // Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
 // Retrieved: 2026-11-16
 // License: Apache-2.0
-// Deviations: Original production proxy Manager implementation.
+// Deviations: Original production proxy Manager implementation. M34 #549: eligibility badge with Refresh in one row; no duplicate Routes heading.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "use-intl";
@@ -169,9 +169,11 @@ export function InstanceWorkspace({
   const writable = !!snapshot && routeWritesAllowed(snapshot.read, snapshot.inventory) && !blocked;
   return (
     <div className="grid min-w-0 gap-5">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">{snapshot && <EligibilityView value={snapshot.inventory.eligibility} />}</div>
         <Button
           variant="outline"
+          size="sm"
           disabled={busy}
           onClick={() => {
             setEditor(undefined);
@@ -194,7 +196,6 @@ export function InstanceWorkspace({
       {!snapshot && error !== undefined && settings(undefined)}
       {snapshot && (
         <>
-          <EligibilityView value={snapshot.inventory.eligibility} />
           {JSON.stringify(snapshot.read.eligibility) !== JSON.stringify(snapshot.inventory.eligibility) && (
             <EligibilityView value={snapshot.read.eligibility} />
           )}
@@ -233,10 +234,8 @@ export function InstanceWorkspace({
               <TabsTrigger value="settings">{t("settings")}</TabsTrigger>
             </TabsList>
             <TabsContent value="routes" className="grid min-w-0 gap-4 pt-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">{t("routes")}</h2>
-              </div>
               <RouteList
+                entryPoints={snapshot.inventory.entryPoints}
                 instance={{ ...instance, identity: snapshot.inventory.identity }}
                 routes={snapshot.read.routes ?? []}
                 hashes={Object.fromEntries((snapshot.read.files ?? []).map(file => [file.path, file.hash]))}

@@ -2,7 +2,7 @@
 // Revision: 1d8ef389b0a40f3ba27fb09f8f59d8ac993180ff
 // Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Contract-preserving TLS choices and inherited listener TLS explanation.
+// Deviations: Contract-preserving TLS choices and inherited listener TLS explanation. Entry points stay editable under Keep current (AUTO-16).
 
 import { useTranslations } from "use-intl";
 import { ChoiceCards } from "@/shared/components/form-field";
@@ -40,8 +40,9 @@ export function TlsFields({ inventory, route, resolver, setResolver, entryPoints
     {route && <p className="text-xs text-muted-foreground">{route.resolver ? t("tlsResolver", { name: route.resolver }) : t(route.tls ? "tlsOn" : !currentEntryTLS ? "tlsOff" : currentImplicit ? "tlsDefaultEntryPoints" : "tlsEntryPoint")}</p>}
     {!route && <p className="text-xs text-muted-foreground">{t(implicit ? "defaultEntryPointsHint" : entryTLS ? "staticEntryPointsHint" : "plainEntryPointsHint")}</p>}
     <FieldHelp label={t("entryPoints")} help={t("help.entryPoints")}>
-      <fieldset className="grid gap-2" disabled={!!route && resolver === PRESERVE}><legend className="mb-2 text-sm font-medium">{t("entryPoints")}</legend>
-        {(inventory.entryPoints ?? []).map(ep => <ConfirmCheck disabled={!!route && resolver === PRESERVE} key={ep.name} checked={(route && resolver === PRESERVE ? route.entryPoints ?? [] : entryPoints).includes(ep.name)} onChange={v => setEntryPoints(old => v ? [...old, ep.name] : old.filter(n => n !== ep.name))}>{ep.name} · {ep.address}</ConfirmCheck>)}
+      {/* Entry points are their own leaf: "Keep current" governs only the resolver (AUTO-16). */}
+      <fieldset className="grid gap-2"><legend className="mb-2 text-sm font-medium">{t("entryPoints")}</legend>
+        {(inventory.entryPoints ?? []).map(ep => <ConfirmCheck key={ep.name} checked={entryPoints.includes(ep.name)} onChange={v => setEntryPoints(old => v ? [...old, ep.name] : old.filter(n => n !== ep.name))}>{ep.name} · {ep.address}</ConfirmCheck>)}
       </fieldset>
     </FieldHelp>
   </>;

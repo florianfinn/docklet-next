@@ -2,7 +2,7 @@
 // Revision: 1d8ef389b0a40f3ba27fb09f8f59d8ac993180ff
 // Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Original adoption break-map editor assertions using existing production DTOs.
+// Deviations: Original adoption break-map editor assertions using existing production DTOs. AUTO-16 entry points under Keep current.
 
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -61,14 +61,22 @@ it.each(["plain", "static", "mixed", "default", "unknown"])("row 2: new route wi
   await e.user.click(screen.getByRole("button", { name: "Save" }));
   expect(saved(e)).toEqual({ kind: "create-route", name: "fresh", rule: "Host(`fresh.example.com`)", upstreams: ["http://backend.example.com"], ...(["default", "unknown"].includes(kind) ? {} : { entryPoints: kind === "plain" ? ["web"] : kind === "mixed" ? ["secure", "web"] : ["secure"] }) });
 });
-it("row 2: Keep current sends neither resolver nor entry points, even after switching back", async () => {
+it("row 2: Keep current sends no resolver and leaves untouched entry points out", async () => {
   const e = editor({ route: { ...route, tls: true, resolver: "existing-resolver" } });
   await e.user.click(screen.getByRole("radio", { name: /Certificate from resolver/ }));
-  await e.user.click(screen.getByRole("checkbox", { name: /web ·/ }));
   await e.user.click(screen.getByRole("radio", { name: /Keep current/ }));
-  expect(screen.getByRole("checkbox", { name: /web ·/ }).hasAttribute("disabled")).toBe(true);
   await e.user.click(screen.getByRole("button", { name: "Save" }));
   expect(saved(e)).toEqual({ kind: "edit-route", routeId: route.id });
+});
+it("AUTO-16: entry points stay editable under Keep current and are sent alone", async () => {
+  const e = editor({ route: { ...route, tls: true, resolver: "existing-resolver" } });
+  const web = screen.getByRole("checkbox", { name: /web ·/ });
+  expect(web.hasAttribute("disabled")).toBe(false);
+  const before = route.entryPoints ?? [];
+  await e.user.click(web);
+  await e.user.click(screen.getByRole("button", { name: "Save" }));
+  const expected = before.includes("web") ? before.filter(n => n !== "web") : [...before, "web"];
+  expect(saved(e)).toEqual({ kind: "edit-route", routeId: route.id, entryPoints: expected });
 });
 it.each([false, true])("row 2: resolver choice sends an explicit resolver (existing=%s)", async existing => {
   const e = editor(existing ? { route } : {});
@@ -149,8 +157,8 @@ it("row 10: Enter advances a non-final step; draft and acknowledgements survive 
   change("Name", "draft-name"); screen.getByLabelText("Name").focus(); await e.user.keyboard("{Enter}");
   expect(screen.queryByText(/Step 2 of 4/) !== null).toBe(true); expect(e.submit.mock.calls.length).toBe(0);
   change("Backend host", "draft.example.com");
-  await e.user.click(screen.getByRole("tab", { name: "Advanced" }));
-  await e.user.click(screen.getByRole("tab", { name: "Easy" }));
+  await e.user.click(screen.getByRole("radio", { name: /Advanced/ }));
+  await e.user.click(screen.getByRole("radio", { name: /Easy/ }));
   expect((screen.getByLabelText("Backend host") as HTMLInputElement).value).toBe("draft.example.com");
   await e.user.click(screen.getByRole("button", { name: "Next" })); await e.user.click(screen.getByRole("button", { name: "Next" }));
   expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
@@ -208,4 +216,16 @@ it("field help opens on keyboard focus and hover", async () => {
   expect((await screen.findByRole("tooltip")).textContent).toContain("Other upstreams and URL suffixes are preserved");
   await act(async () => help.blur()); await e.user.hover(help);
   expect((await screen.findByRole("tooltip")).textContent).toContain("Container name or external hostname");
+});
+it("AUTO-17: domains in use are a datalist on the domain field, never buttons", async () => {
+  const other = { ...route, id: "other", name: "other", rule: "Host(`other.example.com`)" };
+  const e = editor({ route, read: { ...read, routes: [route, other] } });
+  const input = screen.getByLabelText("Host / domain", { selector: "input" });
+  const list = document.getElementById(input.getAttribute("list") ?? "");
+  expect([...(list?.querySelectorAll("option") ?? [])].map(o => o.getAttribute("value"))).toEqual(["other.example.com"]);
+  expect(screen.queryByRole("button", { name: "other.example.com" }) === null).toBe(true);
+  change("Host / domain", "other.example.com");
+  expect(screen.queryByText(/already used by another route/) !== null).toBe(true);
+  await e.user.click(screen.getByRole("button", { name: "Save" }));
+  expect(saved(e).rule).toBe("Host(`other.example.com`)");
 });

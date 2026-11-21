@@ -23,7 +23,7 @@ async function workspace(f = fixture()) {
       <InstanceWorkspace instance={instance} api={f.api} updated={() => {}} removed={() => {}} />
     </Providers>,
   );
-  await screen.findByRole("heading", { name: "Routes" });
+  await screen.findByRole("tab", { name: "Routes" });
   return f;
 }
 async function openEdit(name = "app") {

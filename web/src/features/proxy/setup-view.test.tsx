@@ -31,22 +31,22 @@ const own = new RegExp(`^${instance.name} · `);
 
 it("U-2 one instance: Add, then choosing that instance in the real Select returns to its workspace", async () => {
   await page();
-  await screen.findByRole("heading", { name: "Routes" });
+  await screen.findByRole("tab", { name: "Routes" });
   await userEvent.click(screen.getByRole("button", { name: "Add instance" }));
   await screen.findByRole("heading", { name: "Set up proxy" });
   expect(screen.getByRole("combobox", { name: "Configured instances" }).textContent).toBe("New instance…");
   await choose(own);
-  await screen.findByRole("heading", { name: "Routes" });
+  await screen.findByRole("tab", { name: "Routes" });
   expect(screen.queryByRole("heading", { name: "Set up proxy" }) === null).toBe(true);
 });
 
 it("U-2 the New instance item enters setup, and Back returns to the last instance", async () => {
   await page();
-  await screen.findByRole("heading", { name: "Routes" });
+  await screen.findByRole("tab", { name: "Routes" });
   await choose("New instance…");
   await screen.findByRole("heading", { name: "Set up proxy" });
   await userEvent.click(screen.getByRole("button", { name: "Back to instances" }));
-  await screen.findByRole("heading", { name: "Routes" });
+  await screen.findByRole("tab", { name: "Routes" });
 });
 
 it("U-2 without instances setup is the page: no instance Select and no Add", async () => {

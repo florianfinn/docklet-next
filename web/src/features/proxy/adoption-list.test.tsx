@@ -84,3 +84,23 @@ it.each(["duplicate", "no-path", "no-match", "other-host", "wrong-id"])("row 9: 
   expect(screen.queryByRole("link") === null).toBe(true);
   expect(screen.queryByText(/Add this exact line/) !== null).toBe(true);
 });
+
+it("S3 R1 N4: entry-point TLS shows a closed lock instead of reading as no TLS", () => {
+  const entryPoints = [{ name: "web", address: ":80", tls: false }, { name: "secure", address: ":443", tls: true }];
+  const plain = { ...route, id: "plain", tls: false, resolver: undefined, entryPoints: ["web"] };
+  const viaEntry = { ...route, id: "entry", tls: false, resolver: undefined, entryPoints: ["secure"] };
+  const viaDefaults = { ...route, id: "defaults", tls: false, resolver: undefined, entryPoints: [] };
+  render(<Providers><RouteList instance={instance} routes={[plain, viaEntry, viaDefaults]} entryPoints={entryPoints} writable edit={vi.fn()} action={vi.fn()} /></Providers>);
+  expect(screen.getAllByText("TLS from entry point").length).toBe(1);
+  expect(screen.getAllByText("Default entry points may serve TLS").length).toBe(1);
+  expect(screen.getAllByText("No route certificate").length).toBe(1);
+});
+it("S3 R1 N4 N7: label routes get a readable summary and infrastructure routes an Internal source", () => {
+  const label = { ...route, id: "label", class: "label-read-only" as const, service: "whoami", containerName: "example-whoami-1", projectId: "project", references: [] };
+  const infra = { ...route, id: "infra", class: "infrastructure" as const };
+  render(<Providers><RouteList instance={instance} routes={[label, infra]} writable edit={vi.fn()} action={vi.fn()} /></Providers>);
+  for (const term of ["Match", "Target", "TLS", "Middlewares"]) expect(screen.queryByText(term, { selector: "dt" }) !== null).toBe(true);
+  expect(screen.queryByText("whoami · example-whoami-1") !== null).toBe(true);
+  expect(screen.queryByRole("link", { name: "Open stack editor" })?.getAttribute("href")).toContain("?tab=editor");
+  expect(screen.queryByText("Internal") !== null).toBe(true);
+});
