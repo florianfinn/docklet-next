@@ -63,6 +63,12 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
       throw error;
     } finally { stopTimer(); controllers.delete(controller); parent?.removeEventListener("abort", abort); }
   }
+  // Hub-only: renews the release list every host's candidate comes from.
+  async function refreshReleases() {
+    const response = await client.fetch(`${baseUrl}/system/releases/refresh`, { method: "POST", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12_000) })
+      .catch(() => undefined);
+    if (!response?.ok) throw runtimeError("update.check-unavailable", response?.status);
+  }
   async function allowed(host: string) {
     const owner = generation(), version = epoch;
     if (!host || host.includes("~")) throw unavailable("selfUpdate", selfUpdateRef(host));
@@ -99,7 +105,8 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
   return {
     async getSelfUpdate(host: string, options?: { refresh?: boolean }): Promise<SelfUpdateCheck> {
       await allowed(host);
-      const value = await request(`/environments/${encodeURIComponent(host)}/system/upgrade/check${options?.refresh ? "?refresh=true" : ""}`) as SelfUpdateCheck;
+      if (options?.refresh) await refreshReleases();
+      const value = await request(`/environments/${encodeURIComponent(host)}/system/upgrade/check`) as SelfUpdateCheck;
       if (!validSelfUpdateCheck(value)) throw runtimeError("update.check-unavailable");
       // Recover following after navigation or a browser refresh from the durable operation.
       if (host === "0") hubSession?.observe(value.operation);

@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 067740484879c23d2cc5d4aac49f1c603579646396d6cc3ffd1ba93dd0efd167
+// Revision: 4e4c7630deba0f525495c4faa2c255540cd355347ecbbb49889a3fadff97aeb4
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -5318,6 +5318,26 @@ export interface paths {
         get: operations["streamClient"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/releases/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh the release list
+         * @description Fetch the release list again before the next update check (at most every 30 seconds)
+         */
+        post: operations["refresh-releases"];
         delete?: never;
         options?: never;
         head?: never;
@@ -29820,10 +29840,7 @@ export interface operations {
     };
     "check-upgrade": {
         parameters: {
-            query?: {
-                /** @description Fetch the release list again before checking (hub only, at most every 30 seconds) */
-                refresh?: boolean;
-            };
+            query?: never;
             header?: never;
             path: {
                 id: string;
@@ -39805,6 +39822,33 @@ export interface operations {
                         retry?: number;
                     }[];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "refresh-releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

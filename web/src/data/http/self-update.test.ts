@@ -40,8 +40,12 @@ it("checks plain DTOs and refuses malformed checks and false intake acknowledgem
   const f = fixture(); const check = { version: "1.0.0", eligibility: { state: "not-eligible", code: "update.self-not-compose", manual: ["docker compose pull"] } };
   f.fetcher.mockResolvedValue(json(check)); expect(await f.api.getSelfUpdate("example")).toEqual(check);
   expect(String(f.fetcher.mock.calls[0]![0])).toBe("/api/environments/example/system/upgrade/check");
-  f.fetcher.mockResolvedValue(json(check)); await f.api.getSelfUpdate("example", { refresh: true });
-  expect(String(f.fetcher.mock.calls.at(-1)![0])).toBe("/api/environments/example/system/upgrade/check?refresh=true");
+  f.fetcher.mockClear(); f.fetcher.mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(json(check));
+  expect(await f.api.getSelfUpdate("example", { refresh: true })).toEqual(check);
+  expect(f.fetcher.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method} ${String(url)}`)).toEqual(["POST /api/system/releases/refresh", "GET /api/environments/example/system/upgrade/check"]);
+  f.fetcher.mockClear(); f.fetcher.mockResolvedValueOnce(json({ status: 503, detail: "update.check-unavailable" }, 503));
+  await expect(f.api.getSelfUpdate("example", { refresh: true })).rejects.toMatchObject({ outcome: { code: "update.check-unavailable" } });
+  expect(f.fetcher).toHaveBeenCalledTimes(1);
   f.fetcher.mockResolvedValue(json({ success: true, data: check })); await expect(f.api.getSelfUpdate("example")).rejects.toMatchObject({ outcome: { code: "update.check-unavailable" } });
   f.fetcher.mockResolvedValue(json({ ...accepted, accepted: false, code: "host.busy" }, 202)); await expect(f.api.selfUpdate("example", { targetVersion: "1.0.1" })).rejects.toMatchObject({ outcome: { code: "host.busy" } });
 });

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; frozen Compose self-update recovery contract and hub-owned dispatch; explicit recheck refreshes the hub release list
+// Deviations: Local module namespace; frozen Compose self-update recovery contract and hub-owned dispatch; hub-only release list refresh for explicit rechecks
 
 package upgrade
 
@@ -29,7 +29,6 @@ func NewHandler(service *Service, environments *environment.EnvironmentService, 
 
 type CheckUpgradeInput struct {
 	EnvironmentID string `path:"id"`
-	Refresh       bool   `query:"refresh" doc:"Fetch the release list again before checking (hub only, at most every 30 seconds)"`
 }
 type CheckUpgradeOutput struct{ Body dto.SelfUpdateCheck }
 type TriggerUpgradeInput struct {
@@ -42,20 +41,20 @@ func (h *Handler) CheckUpgradeAvailable(ctx context.Context, input *CheckUpgrade
 	if h.service == nil {
 		return nil, huma.Error503ServiceUnavailable("update.check-unavailable")
 	}
-	// Agents select their candidate from the hub's list too, so every host refreshes it.
-	var refreshErr error
-	if input.Refresh && h.service.role() == "hub" && h.service.versions != nil {
-		refreshErr = h.service.versions.RefreshReleases(ctx)
-	}
 	out, err := h.service.Check(ctx, input.EnvironmentID)
 	if err != nil {
 		return nil, wireError(err)
 	}
-	// A failed refresh is the answer to this check, not the cached list.
-	if state := out.Eligibility.State; refreshErr != nil && (state == "current" || state == "available") {
-		out.Eligibility.State, out.Eligibility.Code, out.Eligibility.Candidate = "unavailable", "update.check-unavailable", nil
-	}
 	return &CheckUpgradeOutput{Body: out}, nil
+}
+
+// RefreshReleases fetches the hub's release list again for an explicit recheck.
+// Agents take their candidate from the same list, so one refresh serves every host.
+func (h *Handler) RefreshReleases(ctx context.Context, _ *struct{}) (*struct{}, error) {
+	if h.service == nil || h.service.versions == nil || h.service.versions.RefreshReleases(ctx) != nil {
+		return nil, huma.Error503ServiceUnavailable("update.check-unavailable")
+	}
+	return &struct{}{}, nil
 }
 func (h *Handler) TriggerUpgrade(ctx context.Context, input *TriggerUpgradeInput) (*TriggerUpgradeOutput, error) {
 	user, err := handlerutil.RequireUser(ctx)

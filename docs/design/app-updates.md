@@ -15,10 +15,11 @@ Custom repositories, floating tags and non-Compose installs use manual updates.
 The stamped binary version and the current container's Config.Image identify the
 installation; RepoDigest ordering and OCI display labels do not determine policy.
 
-The hub keeps the release list for three hours. "Check again" passes `refresh`,
-so the hub fetches the list once more (at most every 30 seconds) before it
-answers for any host. A failed refresh answers `unavailable` instead of the
-cached list, and the page shows the time of the last explicit check.
+The hub keeps the release list for three hours. "Check again" first calls the
+hub-only `POST /system/releases/refresh`, which fetches the list once more (at
+most every 30 seconds), and then checks the host. Agents take their candidate
+from the same list, and the frozen agent check route stays unchanged. A failed
+refresh shows "check unavailable"; a successful one shows its time.
 
 The updating process persists a correlated operation in the existing KV store
 before creating its detached helper. A hub run is reserved before either a helper

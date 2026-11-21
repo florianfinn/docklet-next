@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; remove fleet upgrade routes, retain authenticated recovery commands.
+// Deviations: Local module namespace; remove fleet upgrade routes, retain authenticated recovery commands; hub-only release list refresh.
 
 package upgrade
 
@@ -16,9 +16,20 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 )
 
-// RegisterRoutes registers the Compose self-update endpoints.
+// RegisterRoutes registers the Compose self-update endpoints and the hub-only
+// release list refresh, which stays outside the frozen agent contract.
 func RegisterRoutes(api huma.API, h *Handler) {
 	RegisterAgentRoutes(api, h)
+	middleware.RegisterWithPermission(api, huma.Operation{
+		OperationID:   "refresh-releases",
+		Method:        http.MethodPost,
+		Path:          "/system/releases/refresh",
+		Summary:       "Refresh the release list",
+		Description:   "Fetch the release list again before the next update check (at most every 30 seconds)",
+		DefaultStatus: http.StatusNoContent,
+		Tags:          []string{"System"},
+		Security:      handlerutil.DefaultOperationSecurity(),
+	}, authz.PermSystemRead, h.RefreshReleases)
 }
 
 // RegisterAgentRoutes exposes only checks and self-upgrade for one agent.
