@@ -81,6 +81,7 @@ func TestRecordedLifecycleRevisionAndBaselineDrift(t *testing.T) {
 	require.True(t, status.Valid())
 	require.Equal(t, current.SavedRevision, status.SavedRevision)
 	require.Equal(t, lifecycleObserved(current), status.ObservedRevision)
+	requireDriftFixtureShape(t, status)
 	require.NoError(t, os.Remove(path))
 	_, err = f.service.ImageBaselineStatus(ctx, f.project.ID, f.registration)
 	lifecycleCode(t, err, "update.snapshot-unavailable")
@@ -307,4 +308,29 @@ func TestRecordedFailedRebuildRollsBackAfterExternalChange(t *testing.T) {
 	f.mu.Unlock()
 	require.Equal(t, lifecycleOldID, tag, "the previous image is tagged back")
 	require.Zero(t, *writes)
+}
+
+// requireDriftFixtureShape binds the shared transport fixture (types/updater/testdata) to the producer's answer:
+// the same fields, 64-hex revisions where the fixture has them, and the same literal values elsewhere.
+func requireDriftFixtureShape(t *testing.T, status dto.BaselineStatus) {
+	t.Helper()
+	var fixture struct{ Fixed struct{ Data map[string]any } }
+	body, err := os.ReadFile("../../../types/updater/testdata/drift-baseline.json")
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(body, &fixture))
+	encoded, err := json.Marshal(status)
+	require.NoError(t, err)
+	var produced map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &produced))
+	shape := func(m map[string]any) map[string]any {
+		out := map[string]any{}
+		for k, v := range m {
+			if s, ok := v.(string); ok && len(s) == 64 && strings.Trim(s, "0123456789abcdef") == "" {
+				v = "hex64"
+			}
+			out[k] = v
+		}
+		return out
+	}
+	require.Equal(t, shape(fixture.Fixed.Data), shape(produced))
 }

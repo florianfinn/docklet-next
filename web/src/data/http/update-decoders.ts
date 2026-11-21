@@ -13,8 +13,10 @@ export function baseline(value: unknown): UpdateBaseline {
   const o = record(value);
   // An unavailable status with a known reason may omit revisions (agents before M35); it is shown, never submitted.
   const revisionless = o.available === false && (o.code === "update.config-drift" || o.code === "update.baseline-unavailable");
-  for (const key of ["targetIdentity", "savedRevision", "observedRevision"]) if (!(revisionless && key !== "targetIdentity" && text(o[key]) === "") && !/^[a-f0-9]{64}$/.test(text(o[key]))) throw invalidUpdate();
-  return { targetIdentity: id(o.targetIdentity), savedRevision: text(o.savedRevision), observedRevision: text(o.observedRevision), available: bool(o.available), autoExcluded: bool(o.autoExcluded), code: reason(o.code), ...(o.sourceRunId === undefined ? {} : { sourceRunId: id(o.sourceRunId) }) };
+  const rev = (v: unknown) => (revisionless && v === undefined ? "" : text(v));
+  if (!/^[a-f0-9]{64}$/.test(text(o.targetIdentity))) throw invalidUpdate();
+  for (const v of [rev(o.savedRevision), rev(o.observedRevision)]) if (!(revisionless && v === "") && !/^[a-f0-9]{64}$/.test(v)) throw invalidUpdate();
+  return { targetIdentity: id(o.targetIdentity), savedRevision: rev(o.savedRevision), observedRevision: rev(o.observedRevision), available: bool(o.available), autoExcluded: bool(o.autoExcluded), code: reason(o.code), ...(o.sourceRunId === undefined ? {} : { sourceRunId: id(o.sourceRunId) }) };
 }
 export function points(value: unknown, target?: string): UpdatePoint[] {
   try { return list(value).map((v) => {

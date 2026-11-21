@@ -1,0 +1,4 @@
+{
+  "legacy": {"success":true,"data":{"targetIdentity":"f155c7cd0819990dc51c6b1ee8c8ee0819d8ee4076560b91f873460fae7cff16","autoExcluded":false,"savedRevision":"","observedRevision":"","available":false,"code":"update.config-drift"}},
+  "fixed": {"success":true,"data":{"targetIdentity":"f155c7cd0819990dc51c6b1ee8c8ee0819d8ee4076560b91f873460fae7cff16","autoExcluded":false,"savedRevision":"fa9aace4ff29497b5542bab748162e5387839af99670377aad139ca515bd74db","observedRevision":"4790e6a3094f4bb78165d03a83677866b260a1a177d33536ff72c73be789e9ea","available":false,"code":"update.config-drift"}}
+}

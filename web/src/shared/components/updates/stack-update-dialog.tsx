@@ -37,25 +37,28 @@ export function StackUpdateDialog({ stackId, point, services: initialServices, a
   const redeploy = useCapability("redeployStack", { kind: "stack", id: stackId }), commands = useStackCommands();
   const baseline = useQuery({ queryKey: ["stack", stackId, "update-baseline"], queryFn: () => adapter.getUpdateBaseline!(stackId), enabled: read.available && !!adapter.getUpdateBaseline, staleTime: 0 });
   const action = useUpdateAction(`${stackId}:${baseline.data?.targetIdentity}:${baseline.data?.savedRevision}:${service}`);
-  const [ack, setAck] = useState<string>();
   const data = baseline.data;
-  // Mutations bind the current revision; a status without one is shown only.
-  const revisionReady = /^[a-f0-9]{64}$/.test(data?.savedRevision ?? "");
+  // Mutations bind the current, successfully read revision; a status without one is shown only.
+  const revisionReady = !baseline.isError && /^[a-f0-9]{64}$/.test(data?.savedRevision ?? "");
+  // Consent belongs to one target revision and is dropped whenever that changes or becomes unusable.
+  const ackKey = revisionReady ? `${data!.targetIdentity}:${data!.savedRevision}` : undefined;
+  const [ack, setAck] = useState(false), [ackFor, setAckFor] = useState(ackKey);
+  if (ackFor !== ackKey) { setAckFor(ackKey); setAck(false); }
   const validPoint = !point || (point.available && !point.orphaned && point.holdState === "none" && point.targetIdentity === data?.targetIdentity);
   // An update needs a verified baseline; a restore point carries its own configuration.
   const blocked = !point && !!data && !data.available;
-  const canSend = read.available && write.available && (!point || points.available) && !!data && !blocked && revisionReady && validPoint && (!point || ack === data?.savedRevision) && !action.busy;
+  const canSend = read.available && write.available && (!point || points.available) && !!data && !blocked && revisionReady && validPoint && (!point || ack) && !action.busy;
   const close = () => { action.reset(); onClose(); };
   useEffect(() => identityLifetime(adapter).listen(onClose), [adapter, onClose]);
   return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{t(point ? "restore" : "update")}</DialogTitle><DialogDescription>{t(autoRestore ? "updateWithCheckHelp" : "noData")}</DialogDescription></DialogHeader>
     {!read.available || !write.available || (point && !points.available) ? <UpdateUnavailable reason={read.reason ?? write.reason ?? points.reason} /> : baseline.isError ? <p role="alert">{errorText(baseline.error)}</p> : !data ? <p>{t("loading")}</p> : <>
       {!data.available && <p role="status">{errorText(data.code ?? "update.baseline-unavailable")}</p>}
-      {point && <><p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p>{revisionReady ? <label className="flex min-w-0 items-start gap-2"><Checkbox checked={ack === data.savedRevision} onCheckedChange={(v) => setAck(v === true ? data.savedRevision : undefined)} /><span className="min-w-0 flex-1">{t("replace")}</span></label> : <p role="status">{t("restoreNeedsRevision")}</p>}</>}
+      {point && <><p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p>{revisionReady ? <label className="flex min-w-0 items-start gap-2"><Checkbox checked={ack} onCheckedChange={(v) => setAck(v === true)} /><span className="min-w-0 flex-1">{t("replace")}</span></label> : <p role="status">{t("restoreNeedsRevision")}</p>}</>}
     </>}
     {!point && !blocked && <Select value={service} onValueChange={(v) => { setService(v); setWholeStackHint(false); action.reset(); }}><SelectTrigger aria-label={t("update")}><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="*">{t("update")}</SelectItem>{(stack.data?.services ?? []).map((s) => <SelectItem key={s.name} value={s.name}>{t("service", { name: s.name })}</SelectItem>)}</SelectGroup></SelectContent></Select>}
     {wholeStackHint && <p role="status">{t("wholeStack")}</p>}
     {action.error && <p role="alert">{action.error}</p>}
-    <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button>{blocked ? redeploy.available && <Button onClick={() => { void commands.run(stackId, "redeploy"); close(); }}>{t("deployNow")}</Button> : <Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision, ...(autoRestore ? { autoRestore: true } : {}), ...(service === "*" ? {} : { services: [service] }) }), () => close(), (error) => setWholeStackHint(error instanceof AdapterOutcomeError && error.outcome.kind === "error" && ["update.service-coupled", "update.image-binding-unsupported"].includes(error.outcome.code)))}>{t(point ? "restore" : "update")}</Button>}</div>
+    <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button>{blocked ? redeploy.available && <Button onClick={() => { void commands.run(stackId, "redeploy"); close(); }}>{t("deployNow")}</Button> : <Button disabled={!canSend} onClick={() => canSend && void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision, ...(autoRestore ? { autoRestore: true } : {}), ...(service === "*" ? {} : { services: [service] }) }), () => close(), (error) => setWholeStackHint(error instanceof AdapterOutcomeError && error.outcome.kind === "error" && ["update.service-coupled", "update.image-binding-unsupported"].includes(error.outcome.code)))}>{t(point ? "restore" : "update")}</Button>}</div>
   </DialogContent></Dialog>;
 }
 export function StackUpdateDialogController() {

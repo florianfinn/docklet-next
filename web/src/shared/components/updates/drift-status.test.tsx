@@ -11,9 +11,12 @@ import { catalogs } from "@/app/i18n/catalog";
 import { StackUpdateDialog } from "./stack-update-dialog";
 import { baseline } from "@/data/http/update-decoders";
 import { updateFixture, point } from "@/data/http/stack-updates.test-support";
+import { readFileSync } from "node:fs";
 
 const t = catalogs.de.common.stackUpdates;
 // The exact answer of agents before M35 after an external env file change.
+// The shared fixture holds that body and the current producer shape; the hub forwards both unchanged (bootstrap test).
+const shared = JSON.parse(readFileSync("../types/updater/testdata/drift-baseline.json", "utf8")) as Record<"legacy" | "fixed", { data: Record<string, unknown> }>;
 const legacy = { targetIdentity: "f155c7cd0819990dc51c6b1ee8c8ee0819d8ee4076560b91f873460fae7cff16", autoExcluded: false, savedRevision: "", observedRevision: "", available: false, code: "update.config-drift" };
 
 async function legacyFixture() {
@@ -26,6 +29,15 @@ it("decodes a revisionless unavailable status only with a known reason", () => {
   expect(baseline(legacy).code).toBe("update.config-drift");
   expect(baseline({ ...legacy, code: "update.baseline-unavailable" }).savedRevision).toBe("");
   for (const bad of [{ ...legacy, available: true }, { ...legacy, code: undefined }, { ...legacy, code: "update.check-unavailable" }, { ...legacy, savedRevision: "bad" }, { ...legacy, targetIdentity: "" }])
+    expect(() => baseline(bad)).toThrow();
+});
+
+it("decodes both shared drift bodies and tolerates omitted revisions only when unavailable with a known reason", () => {
+  expect(baseline(shared.legacy.data)).toMatchObject({ savedRevision: "", observedRevision: "", available: false, code: "update.config-drift" });
+  expect(baseline(shared.fixed.data)).toMatchObject({ savedRevision: shared.fixed.data.savedRevision, observedRevision: shared.fixed.data.observedRevision, available: false });
+  const { savedRevision: _s, observedRevision: _o, ...bare } = legacy;
+  for (const omitted of [{ ...bare, observedRevision: "" }, { ...bare, savedRevision: "" }, bare]) { expect(() => baseline(omitted)).not.toThrow(); expect(baseline(omitted)).toMatchObject({ savedRevision: "", observedRevision: "" }); }
+  for (const bad of [{ ...bare, available: true }, { ...bare, code: "update.check-unavailable" }, { ...bare, savedRevision: 42 }, { ...bare, savedRevision: null }, { ...bare, targetIdentity: undefined }])
     expect(() => baseline(bad)).toThrow();
 });
 

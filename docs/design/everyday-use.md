@@ -22,8 +22,8 @@ action cannot succeed or would lose data, one short sentence per hint.
   stays on the stack itself.
 - **Older agents.** Agents before M35 answered drift without revisions. The hub
   and the web accept an unavailable status with a known reason
-  (`update.config-drift`, `update.baseline-unavailable`) and empty revisions for
-  display only. Mutations still need a 64-hex current revision: install is
+  (`update.config-drift`, `update.baseline-unavailable`) and empty or missing
+  revisions for display only. Mutations still need a 64-hex current revision: install is
   barred by the unavailable status, restore offers no consent and sends nothing
   until the revision is readable.
 - **After submit.** The update dialog closes once the action is admitted; the
@@ -31,7 +31,8 @@ action cannot succeed or would lose data, one short sentence per hint.
   the result.
 - **Menu check.** "Check for updates" in the stack list runs the check in place.
 - **Restore consent** names the replacement, not the revision hash; it is still
-  bound to the full current revision.
+  bound to the full current revision and is cleared when that revision changes or
+  cannot be read.
 - **Run output.** Compose progress is stored as `{"log": …}` frames, unchanged.
   One presentation step shows a single-key string `log` frame as its line,
   decoded once, for display, folding, copy and download; every other frame is
