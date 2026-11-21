@@ -77,11 +77,13 @@ func TestRecordedLifecycleRevisionAndBaselineDrift(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, status.Available)
 	require.Equal(t, "update.config-drift", status.Code)
+	// The drift answer is a complete status that every consumer accepts.
+	require.True(t, status.Valid())
+	require.Equal(t, current.SavedRevision, status.SavedRevision)
+	require.Equal(t, lifecycleObserved(current), status.ObservedRevision)
 	require.NoError(t, os.Remove(path))
-	status, err = f.service.ImageBaselineStatus(ctx, f.project.ID, f.registration)
-	require.NoError(t, err)
-	require.False(t, status.Available)
-	require.Equal(t, "update.config-drift", status.Code)
+	_, err = f.service.ImageBaselineStatus(ctx, f.project.ID, f.registration)
+	lifecycleCode(t, err, "update.snapshot-unavailable")
 	_, err = f.service.PrepareImageLifecycle(ctx, f.project.ID, f.registration, dto.LifecycleRequest{ExpectedRevision: snapshot.SavedRevision})
 	lifecycleCode(t, err, "update.config-drift")
 }

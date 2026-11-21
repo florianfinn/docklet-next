@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Successful normal deploy baseline capture preserves truthful deploy outcome. M18 baseline fields merge with durable deploy-point evidence. M34 #548: recorded Compose environment inputs.
+// Deviations: Successful normal deploy baseline capture preserves truthful deploy outcome. M18 baseline fields merge with durable deploy-point evidence. M34 #548: recorded Compose environment inputs. M35 #555: external drift reports current revisions.
 
 package project
 
@@ -32,18 +32,22 @@ func (s *ProjectService) captureDeployedBaseline(ctx context.Context, id string,
 
 func (s *ProjectService) ImageBaselineStatus(ctx context.Context, id, registration string) (dto.BaselineStatus, error) {
 	ctx = s.composeInputContext(ctx)
-	p, pErr := s.getMutableProject(ctx, id)
-	if pErr == nil {
+	externalDrift := false
+	if p, pErr := s.getMutableProject(ctx, id); pErr == nil {
 		baseline, _, e := s.lifecycleStore().Baseline(ctx, &life.Snapshot{TargetID: id, TargetIdentity: targetLifecycleIdentity(p), RegistrationID: registration})
-		if e == nil && s.checkLifecycleExternal(ctx, baseline) != nil {
-			return dto.BaselineStatus{TargetIdentity: targetLifecycleIdentity(p), Code: "update.config-drift"}, nil
-		}
+		externalDrift = e == nil && s.checkLifecycleExternal(ctx, baseline) != nil
 	}
+	// Unreadable current inputs answer with lifecycleCurrent's declared failure.
 	_, current, err := s.lifecycleCurrent(ctx, id, registration)
 	if err != nil {
 		return dto.BaselineStatus{}, err
 	}
 	status := dto.BaselineStatus{TargetIdentity: current.TargetIdentity, AutoExcluded: current.AutoExcluded, SavedRevision: current.SavedRevision, ObservedRevision: lifecycleObserved(current)}
+	if externalDrift {
+		// External inputs changed since the deploy: a valid status with current revisions, never available.
+		status.Code = "update.config-drift"
+		return status, nil
+	}
 	baseline, _, err := s.lifecycleStore().Baseline(ctx, current)
 	if err != nil {
 		status.Code = "update.baseline-unavailable"

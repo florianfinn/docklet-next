@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original simple-user resource authorization.
+// Deviations: Original simple-user resource authorization. M35 #555: agent baseline body for transport tests.
 
 package bootstrap
 
@@ -55,6 +55,8 @@ type m15Transport struct {
 	peerHidden atomic.Value
 	// detailFailure makes the detail read answer with this agent code.
 	detailFailure atomic.Value
+	// baselineBody is the agent's exact baseline response.
+	baselineBody atomic.Value
 }
 
 // A named handler keeps the transport fixture independent of Echo context internals.
@@ -108,6 +110,11 @@ func newM15Transport(t *testing.T, mode string) *m15Transport {
 				detail.ComposeNamePeers = []string{"foreign-private-name"}
 			}
 			_ = json.NewEncoder(w).Encode(base.ApiResponse[projectDTO.Details]{Success: true, Data: detail})
+			return
+		}
+		if body, ok := x.baselineBody.Load().(string); ok && r.URL.Path == "/api/environments/0/updater/projects/project-uuid/baseline" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(body))
 			return
 		}
 		if strings.HasSuffix(r.URL.Path, "/vulnerabilities/scan") {
