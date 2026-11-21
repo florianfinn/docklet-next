@@ -82,10 +82,13 @@ The sandbox had the hub-local host H, one Direct agent D and one Edge agent E.
 | `6fb4ca0e` (delta 1) | **Accepted 19/19** | X2 and X6 rerun |
 | `8f4cc2f7` (exact main) | **Accepted 19/19** | P1 on H, D and E, P2 and REG rerun after the closing fixes |
 
-Exact main also recorded one observation outside the matrix. A simple user
-assigned to one of two same-named stacks received neither the other stack nor
-its name in list or detail responses, on H and D. Administrators kept the
-warning.
+Delta 1 reran two cells and carried 17; exact main reran five cell rows and
+carried 14. Unchanged passing cells carry their evidence forward.
+
+Exact main also recorded one observation outside the matrix. On H and D, a
+simple user assigned to one of two same-named stacks received no unassigned
+stack row and no peer-name fields in list or detail responses. The assigned
+stack's own name remained present. Administrators kept the warning.
 
 ## Limits
 
