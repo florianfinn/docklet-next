@@ -782,7 +782,7 @@ func tryAgentAuthCtxInternal(ctx huma.Context, cfg *config.Config) (huma.Context
 		return ctx, false
 	}
 	applyProxiedIconCatalogInternal(ctx, authenticatedUser)
-	authCtx := middleware.WithAgentCredential(setUserInContextInternal(ctx.Context(), authenticatedUser, authz.SudoPermissionSet()))
+	authCtx := middleware.WithAgentRequest(setUserInContextInternal(ctx.Context(), authenticatedUser, authz.SudoPermissionSet()), ctx.Header)
 	updatePath := strings.Contains(ctx.URL().Path, "/containers/") && strings.HasSuffix(ctx.URL().Path, "/update")
 	if ctx.Method() == http.MethodPost && updatePath {
 		if initiatorID := strings.TrimSpace(ctx.Header(middleware.HeaderUpdateInitiatorID)); initiatorID != "" {

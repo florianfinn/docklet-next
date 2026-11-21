@@ -16,6 +16,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	dto "github.com/florianfinn/docklet-next/types/project"
 	"github.com/moby/moby/api/types/container"
 	"github.com/stretchr/testify/require"
@@ -93,4 +94,34 @@ func TestLoadProblemsNeverLogOrReturnRawText(t *testing.T) {
 		require.NotContains(t, text, problemSentinel, name)
 	}
 	require.Contains(t, logs.String(), "compose.variable-missing (APP_TAG)", "precondition: the sink logged the classified problem")
+}
+
+func TestComposeNamePeersHiddenForRestrictedCallers(t *testing.T) {
+	svc, root := runtimeIdentityFixture(t)
+	own := runtimeIdentityProject(t, svc, root, "example-own", "own", "name: shared\n"+identityServices)
+	runtimeIdentityProject(t, svc, root, "example-foreign", "foreign-private-name", "name: shared\n"+identityServices)
+	require.Equal(t, []string{"foreign-private-name"}, listedRows(t, svc, nil)[own.ID].ComposeNamePeers, "precondition: administrators see the warning")
+	rows, _, err := svc.ListProjects(projects.WithPeerNamesHidden(t.Context()), pagination.QueryParams{Limit: -1})
+	require.NoError(t, err)
+	detail, err := svc.GetProjectDetails(projects.WithPeerNamesHidden(t.Context()), own.ID, dto.DetailsOptions{})
+	require.NoError(t, err)
+	for _, row := range rows {
+		require.Empty(t, row.ComposeNamePeers, row.ID)
+	}
+	body, err := json.Marshal(detail)
+	require.NoError(t, err)
+	require.NotContains(t, string(body), "foreign-private-name")
+}
+
+func TestComposeNamePeersNeedUnambiguousLiteralEvidence(t *testing.T) {
+	svc, root := runtimeIdentityFixture(t)
+	healthy := runtimeIdentityProject(t, svc, root, "example-healthy", "healthy", "name: shared\n"+identityServices)
+	aux := runtimeIdentityProject(t, svc, root, "example-aux", "aux", "name: shared\nservices:\n  app:\n    image: registry.example.com/app:${TAG:?required}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(aux.Path, ".env"), []byte("COMPOSE_ENV_FILES=runtime.env\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(aux.Path, "runtime.env"), []byte("COMPOSE_PROJECT_NAME=distinct\n"), 0600))
+	recorded := runtimeIdentityProject(t, svc, root, "example-recorded", "recorded", "name: shared\nservices:\n  app:\n    image: registry.example.com/app:${TAG:?required}\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "recorded.env"), []byte("COMPOSE_PROJECT_NAME=other\n"), 0600))
+	labels := map[string]string{"com.docker.compose.project": "other", "com.docker.compose.service": "app", "com.docker.compose.project.working_dir": recorded.Path, "com.docker.compose.project.config_files": filepath.Join(recorded.Path, "compose.yaml"), projects.EnvironmentFileLabel: filepath.Join(root, "recorded.env")}
+	rows := listedRows(t, svc, []container.Summary{{ID: "example-recorded-container", Names: []string{"/other-app-1"}, Image: "registry.example.com/app:1", State: "exited", Labels: labels}})
+	require.Empty(t, rows[healthy.ID].ComposeNamePeers, "auxiliary or recorded inputs may select another name: no evidence")
 }

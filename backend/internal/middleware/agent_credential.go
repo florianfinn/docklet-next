@@ -6,13 +6,27 @@
 
 package middleware
 
-import "context"
+import (
+	"context"
+
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
+)
 
 type agentCredentialContext struct{}
 
 // WithAgentCredential marks authentication with the configured manager token in agent mode.
 func WithAgentCredential(ctx context.Context) context.Context {
 	return context.WithValue(ctx, agentCredentialContext{}, true)
+}
+
+// WithAgentRequest marks the agent credential and applies the hub's request
+// markers, which only the agent-token path may honour.
+func WithAgentRequest(ctx context.Context, header func(string) string) context.Context {
+	ctx = WithAgentCredential(ctx)
+	if header(HeaderPeerNamesHidden) == "1" {
+		ctx = projects.WithPeerNamesHidden(ctx)
+	}
+	return ctx
 }
 
 func HasAgentCredential(ctx context.Context) bool {

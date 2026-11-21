@@ -42,6 +42,8 @@ func ProjectList(ctx context.Context, p Principal, env string, q url.Values) (ba
 	out := []projectDTO.Details{}
 	for _, r := range rows {
 		if slices.Contains(ids, r.ID) {
+			// Peer names would reveal unassigned stacks.
+			r.ComposeNamePeers = nil
 			out = append(out, r)
 		}
 	}

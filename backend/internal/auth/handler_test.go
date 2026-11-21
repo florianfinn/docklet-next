@@ -35,6 +35,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
 )
 
@@ -735,5 +736,28 @@ func TestAuthMiddleware_ManagerAuthEnvironmentAccessToken(t *testing.T) {
 				require.Contains(t, rec.Body.String(), "environment:env-self")
 			}
 		})
+	}
+}
+
+func TestNewHumaMiddleware_AgentAuthAppliesPeerNamesHidden(t *testing.T) {
+	const agentToken = "agent-token"
+	router := echo.New()
+	humaConfig := huma.DefaultConfig("test", "1.0.0")
+	humaConfig.Components.SecuritySchemes = map[string]*huma.SecurityScheme{"ApiKeyAuth": {Type: "apiKey", In: "header", Name: "X-API-Key"}}
+	api := humaecho.NewWithGroup(router, router.Group("/api"), humaConfig)
+	api.UseMiddleware(NewHumaMiddleware(api, &AuthService{}, nil, nil, nil, &config.Config{AgentMode: true, AgentToken: agentToken}))
+	var hidden bool
+	huma.Register(api, huma.Operation{OperationID: "secure-agent-peer-names", Method: http.MethodGet, Path: "/secure-agent-peer-names", Security: []map[string][]string{{"ApiKeyAuth": {}}}}, func(ctx context.Context, _ *secureInput) (*secureOutput, error) {
+		hidden = projects.PeerNamesHidden(ctx)
+		return &secureOutput{}, nil
+	})
+	for _, value := range []string{"1", ""} {
+		req := httptest.NewRequest(http.MethodGet, "/api/secure-agent-peer-names", http.NoBody)
+		req.Header.Set(middleware.HeaderAgentToken, agentToken)
+		req.Header.Set(middleware.HeaderPeerNamesHidden, value)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, value == "1", hidden, "the hub's marker for a restricted caller hides peer names")
 	}
 }

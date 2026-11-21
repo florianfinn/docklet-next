@@ -51,6 +51,8 @@ type m15Transport struct {
 	failure atomic.Bool
 	empty   atomic.Bool
 	reads   atomic.Int32
+	// peerHidden records the peer-names header of the last detail read.
+	peerHidden atomic.Value
 }
 
 // A named handler keeps the transport fixture independent of Echo context internals.
@@ -88,8 +90,11 @@ func newM15Transport(t *testing.T, mode string) *m15Transport {
 			return
 		}
 		if r.URL.Path == "/api/environments/0/projects" {
-			_ = json.NewEncoder(w).Encode(base.Paginated[projectDTO.Details]{Success: true, Data: []projectDTO.Details{{ID: "foreign", Name: "Alpha"}, {ID: "project-uuid", Name: "Zebra"}}})
+			_ = json.NewEncoder(w).Encode(base.Paginated[projectDTO.Details]{Success: true, Data: []projectDTO.Details{{ID: "foreign", Name: "Alpha"}, {ID: "project-uuid", Name: "Zebra", ComposeNamePeers: []string{"foreign-private-name"}}}})
 			return
+		}
+		if r.URL.Path == "/api/environments/0/projects/project-uuid" {
+			x.peerHidden.Store(r.Header.Get(middleware.HeaderPeerNamesHidden))
 		}
 		if strings.HasSuffix(r.URL.Path, "/vulnerabilities/scan") {
 			var body map[string]any
@@ -223,6 +228,41 @@ func TestResourceRightsRealDirectAndEdge(t *testing.T) {
 			require.Equal(t, 200, list.Code)
 			require.Contains(t, list.Body.String(), "project-uuid")
 			require.NotContains(t, list.Body.String(), "foreign")
+		})
+	}
+}
+
+// Peer names of other stacks never reach a user restricted to assigned stacks:
+// the hub strips them from lists and tells the agent for detail reads.
+func TestPeerNamesHiddenForAssignedUsersRealDirectAndEdge(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		t.Run(mode, func(t *testing.T) {
+			x := newM15Transport(t, mode)
+			f := x.fixture
+			u, err := f.users.CreateUser(t.Context(), &user.User{Username: "viewer"})
+			require.NoError(t, err)
+			require.NoError(t, f.users.SetAppAssignments(t.Context(), u.ID, []userDTO.AppAssignment{{EnvironmentID: "example", ProjectID: "project-uuid", Level: "restricted"}}))
+			tokens, err := f.svc.CompleteLogin(t.Context(), u, authDTO.SessionMeta{}, "local")
+			require.NoError(t, err)
+			request := func(path, browserToken string) *httptest.ResponseRecorder {
+				r := httptest.NewRequest("GET", "/api/environments/example/"+path, nil)
+				r.Header.Set(middleware.HeaderPeerNamesHidden, "spoofed")
+				r.AddCookie(&http.Cookie{Name: cookie.InsecureTokenCookieName, Value: browserToken})
+				w := httptest.NewRecorder()
+				x.hub.ServeHTTP(w, r)
+				return w
+			}
+			admin := request("projects?limit=5", f.tokens.BrowserToken)
+			require.Equal(t, 200, admin.Code)
+			require.Contains(t, admin.Body.String(), "foreign-private-name", "precondition: administrators see the warning")
+			list := request("projects?limit=5", tokens.BrowserToken)
+			require.Equal(t, 200, list.Code)
+			require.Contains(t, list.Body.String(), "project-uuid")
+			require.NotContains(t, list.Body.String(), "foreign-private-name")
+			require.Equal(t, 200, request("projects/project-uuid", tokens.BrowserToken).Code)
+			require.Equal(t, "1", x.peerHidden.Load())
+			require.Equal(t, 200, request("projects/project-uuid", f.tokens.BrowserToken).Code)
+			require.Equal(t, "", x.peerHidden.Load(), "a client-supplied value never rides through")
 		})
 	}
 }

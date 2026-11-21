@@ -28,6 +28,8 @@ const (
 	HeaderUpdateInitiatorID          = "X-Arcane-Update-Initiator-Id"
 	HeaderUpdateInitiatorName        = "X-Arcane-Update-Initiator-Name"
 	HeaderUpdateInitiatorDisplayName = "X-Arcane-Update-Initiator-Display-Name"
+	// HeaderPeerNamesHidden tells an agent that the hub caller sees assigned stacks only.
+	HeaderPeerNamesHidden = "X-Docklet-Peer-Names-Hidden"
 	// HeaderIconCatalog carries the requesting user's icon catalog preference to
 	// remote environments. Agents authenticate proxied calls as a synthetic user
 	// with no preferences, so without it every remote environment would resolve

@@ -21,11 +21,19 @@ Docklet keeps only the checks that protect the action's own target.
   single YAML document, and its top-level `name:` is a plain scalar without `$`.
   A dedicated reader provides it. `ComposeContentProjectName`, which create and
   rename use, is not changed. Stored or observed names are never evidence.
+  A `.env` that sets `COMPOSE_ENV_FILES`, or a recorded env selection, may pick
+  another name, so such a stack gives no evidence.
 - **Duplicates (maintainer decision D-1).**
   - When effective names are equal (readable model, or peer name evidence), both
     stacks show a warning.
   - An action addressed by project ID runs with neither a refusal nor a
     confirmation.
+  - Peer names are other stacks' display names, so a user restricted to
+    assigned stacks never receives them. The hub strips the field from that
+    user's lists. For detail reads it marks the request: locally through the
+    request context, and for agents through `X-Docklet-Peer-Names-Hidden`. The
+    hub always clears a client-supplied value first, and agents honour it only
+    on the agent-token path.
   - Evidence used for the warning never selects or authorizes a target. The
     current guards in `runtime_identity.go` stay in place: a recovered name
     never authorizes a row as target, and the target must match exactly.

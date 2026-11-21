@@ -12,6 +12,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/florianfinn/docklet-next/backend/internal/access"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/labstack/echo/v5"
 	"io"
 )
@@ -59,6 +60,7 @@ func AccessMiddleware(api huma.API) func(huma.Context, func(huma.Context)) {
 				_ = access.WriteProblem(ctx, d.Status(), string(d))
 				return
 			}
+			ctx = huma.WithContext(ctx, projects.WithPeerNamesHidden(ctx.Context()))
 		}
 		next(ctx)
 	}

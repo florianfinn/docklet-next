@@ -9,6 +9,7 @@ package projects
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -19,6 +20,15 @@ import (
 )
 
 const peerEvidenceLimit = 1 << 20
+
+type peerNamesHiddenKey struct{}
+
+// WithPeerNamesHidden marks a caller restricted to assigned stacks: other
+// stacks' names must not appear in that caller's responses.
+func WithPeerNamesHidden(ctx context.Context) context.Context {
+	return context.WithValue(ctx, peerNamesHiddenKey{}, true)
+}
+func PeerNamesHidden(ctx context.Context) bool { return ctx.Value(peerNamesHiddenKey{}) != nil }
 
 var overrideFileNames = []string{"compose.override.yaml", "compose.override.yml", "docker-compose.override.yaml", "docker-compose.override.yml"}
 
@@ -62,7 +72,7 @@ func envSelects(content []byte) bool {
 	scanner := bufio.NewScanner(bytes.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(scanner.Text()), "export "))
-		for _, key := range []string{"COMPOSE_FILE", "COMPOSE_PROJECT_NAME", "COMPOSE_PATH_SEPARATOR"} {
+		for _, key := range []string{"COMPOSE_FILE", "COMPOSE_PROJECT_NAME", "COMPOSE_PATH_SEPARATOR", "COMPOSE_ENV_FILES"} {
 			if strings.HasPrefix(line, key+"=") || strings.HasPrefix(line, key+" ") {
 				return true
 			}

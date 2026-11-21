@@ -67,9 +67,10 @@ func (s *ProjectService) fillDefinitionServices(ctx context.Context, records []P
 // models give their name; unreadable ones only literal evidence. The warning
 // never authorizes or refuses anything.
 func (s *ProjectService) fillComposeNamePeers(ctx context.Context, rows []projecttypes.Details, env *projectMetadataEnv) {
-	if len(rows) == 0 {
+	if len(rows) == 0 || projects.PeerNamesHidden(ctx) {
 		return
 	}
+	root, _ := s.GetProjectsDirectory(ctx)
 	var all []Project
 	if err := s.db.WithContext(ctx).Find(&all).Error; err != nil {
 		return
@@ -84,7 +85,8 @@ func (s *ProjectService) fillComposeNamePeers(ctx context.Context, rows []projec
 		group.Go(func() error {
 			if model, err := s.getCachedComposeProject(ctx, &all[i], env); err == nil {
 				names[i] = projects.NormalizeProjectName(model.Name)
-			} else {
+			} else if input, _ := projects.ResolveComposeInputs(s.composeInputContext(ctx), root, all[i].Path, false); input == nil || input.State == "none" {
+				// Recorded inputs may select another name or file set.
 				names[i] = projects.PeerLiteralName(all[i].Path)
 			}
 			return nil

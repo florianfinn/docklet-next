@@ -224,6 +224,11 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		}
 		c.Set("simpleUserAuthorized", true)
 	}
+	// Always cleared first; only the hub's own access decision sets it.
+	c.Request().Header.Del(HeaderPeerNamesHidden)
+	if access.FromPermissions(perms).IsUser() {
+		c.Request().Header.Set(HeaderPeerNamesHidden, "1")
+	}
 	if isModule {
 		// Cleanup is management, available only while off; the receiver checks idle state.
 		cleanup := c.Path() == "/api/environments/:id/modules/:module/data" && c.Request().Method == "DELETE" && m.buildResourceSuffix(c.Request().URL.Path, envID) == "/modules/"+string(module.ID)+"/data"

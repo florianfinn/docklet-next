@@ -84,8 +84,9 @@ lab's Certificates and Route map tabs are left out (no API; AUTO-5).
     serves TLS. When no entry point is selected, it says that the default entry
     points apply and may serve TLS. The existing editor text for these cases
     stays.
-  - **Existing route:** "Keep current", which sends no resolver and no entry
-    point change, or "Certificate from resolver" (change the resolver).
+  - **Existing route:** "Keep current", which preserves only the resolver
+    (entry points stay editable and are sent when changed, AUTO-16), or
+    "Certificate from resolver" (change the resolver).
     Removing TLS from an existing route stays in Advanced and is tracked as a
     follow-up. That follow-up would need a clear-TLS field and contract 21.
   - Entry points stay an explicit checkbox list inside the TLS section. A TLS
