@@ -63,11 +63,17 @@ export function createSelfUpdates({ baseUrl, client, capability, generation, rea
       throw error;
     } finally { stopTimer(); controllers.delete(controller); parent?.removeEventListener("abort", abort); }
   }
-  // Hub-only: renews the release list every host's candidate comes from.
+  // Hub-only: renews the release list every host's candidate comes from. Owned
+  // like every other request, so an identity change aborts it and drops the check.
   async function refreshReleases() {
-    const response = await client.fetch(`${baseUrl}/system/releases/refresh`, { method: "POST", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12_000) })
-      .catch(() => undefined);
-    if (!response?.ok) throw runtimeError("update.check-unavailable", response?.status);
+    const owner = generation(), version = epoch, controller = new AbortController(); controllers.add(controller);
+    const stopTimer = pausableTimeout(12_000, () => controller.abort());
+    try {
+      const response = await client.fetch(`${baseUrl}/system/releases/refresh`, { method: "POST", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, signal: controller.signal })
+        .catch(() => undefined);
+      if (owner !== generation() || version !== epoch) throw new CancelledError();
+      if (!response?.ok) throw runtimeError("update.check-unavailable", response?.status);
+    } finally { stopTimer(); controllers.delete(controller); }
   }
   async function allowed(host: string) {
     const owner = generation(), version = epoch;

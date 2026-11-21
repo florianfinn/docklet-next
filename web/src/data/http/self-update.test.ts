@@ -5,6 +5,7 @@
 // Deviations: Original intake, problem-shape, capability and reload regression coverage.
 
 import { afterEach, expect, it, vi } from "vitest";
+import { CancelledError } from "@tanstack/react-query";
 import type { CodedActionRun } from "../message-code";
 import type { ResourceRef } from "../capability";
 import { createSelfUpdates } from "./self-update";
@@ -98,6 +99,17 @@ it("uses the actual HTTP activity decoder for accepted updates and publishes the
   const off = adapter.subscribeActions(rows => { observed = rows; }); off();
   expect(observed.some(row => row.id === "update-run" && row.status === "succeeded" && row.sourceOperation === "agent.update")).toBe(true);
   expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/upgrade"))).toHaveLength(1);
+});
+it("an identity change during the release refresh aborts it and starts no check", async () => {
+  const f = fixture(); let answer!: (value: Response) => void; let signal: AbortSignal | undefined;
+  f.fetcher.mockImplementationOnce((_url, init) => { signal = init?.signal ?? undefined; return new Promise<Response>(resolve => { answer = resolve; }); });
+  const check = f.api.getSelfUpdate("example", { refresh: true });
+  await vi.advanceTimersByTimeAsync(0);
+  f.identity();
+  expect(signal?.aborted).toBe(true);
+  answer(new Response(null, { status: 204 }));
+  await expect(check).rejects.toBeInstanceOf(CancelledError);
+  expect(f.fetcher).toHaveBeenCalledTimes(1);
 });
 it("late polls from a previous identity cannot remove the next identity's follow ownership", async () => {
   const f = fixture(); let release!: (value: CodedActionRun) => void;

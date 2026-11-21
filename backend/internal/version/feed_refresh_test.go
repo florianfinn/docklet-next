@@ -7,12 +7,14 @@
 package version
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -75,7 +77,7 @@ func TestReleaseFeedRefreshIsThrottled(t *testing.T) {
 	require.NoError(t, svc.RefreshReleases(t.Context()))
 	require.Equal(t, 1, feed.count(), "refreshes inside the window make no request")
 
-	svc.feed.refreshed = svc.feed.refreshed.Add(-releaseFeedMinRefresh)
+	svc.feed.forcedAt = svc.feed.forcedAt.Add(-releaseFeedMinRefresh)
 	require.NoError(t, svc.RefreshReleases(t.Context()))
 	require.Equal(t, 2, feed.count())
 }
@@ -101,4 +103,92 @@ func TestReleaseFeedRefreshDisabledMakesNoRequest(t *testing.T) {
 	svc := NewVersionService(feed.client(), true, "", "1.2.0", "", nil, nil)
 	require.NoError(t, svc.RefreshReleases(t.Context()))
 	require.Zero(t, feed.count())
+}
+
+// gatedFeedInternal holds the first request until release is closed. Each
+// request answers with the upstream state at its start.
+type gatedFeedInternal struct {
+	mu       sync.Mutex
+	body     string
+	fail     bool
+	requests int
+	started  chan struct{}
+	release  chan struct{}
+}
+
+func (g *gatedFeedInternal) set(body string, fail bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.body, g.fail = body, fail
+}
+
+func (g *gatedFeedInternal) client() *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		g.mu.Lock()
+		n, body, fail := g.requests, g.body, g.fail
+		g.requests++
+		g.mu.Unlock()
+		if n == 0 {
+			close(g.started)
+			<-g.release
+		}
+		if fail {
+			return nil, errors.New("dial failed")
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}, Request: r}, nil
+	})}
+}
+
+func TestReleaseFeedOlderLoadCannotReplaceARefresh(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		stale     bool
+		olderFail bool
+	}{{"cold load", false, false}, {"stale reload", true, false}, {"older load fails", true, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			gate := &gatedFeedInternal{body: `[` + feedEntryJSON("v1.2.0") + `]`, started: make(chan struct{}), release: make(chan struct{})}
+			svc := NewVersionService(gate.client(), false, "", "1.2.0", "", nil, nil)
+			if tc.stale {
+				svc.feed.list, svc.feed.listAt = nil, time.Now().Add(-releaseFeedTTL)
+			}
+			gate.set(`[`+feedEntryJSON("v1.2.0")+`]`, tc.olderFail)
+			older := make(chan struct{})
+			go func() { defer close(older); _, _, _ = svc.NewestRelease(context.Background()) }()
+			<-gate.started
+
+			gate.set(`[`+feedEntryJSON("v1.3.0")+`,`+feedEntryJSON("v1.2.0")+`]`, false)
+			refreshed := make(chan error, 1)
+			go func() { refreshed <- svc.RefreshReleases(context.Background()) }()
+			// The refresh either waits for the older fetch or (if unguarded) finishes first.
+			select {
+			case err := <-refreshed:
+				refreshed <- err
+			case <-time.After(200 * time.Millisecond):
+			}
+			close(gate.release)
+			<-older
+			require.NoError(t, <-refreshed)
+
+			newest, _, err := svc.NewestRelease(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, "1.3.0", newest.Version)
+		})
+	}
+}
+
+func TestReleaseFeedWaitsBeforeRetryingAFailedFetch(t *testing.T) {
+	feed := &switchableFeedInternal{fail: true}
+	svc := NewVersionService(feed.client(), false, "", "1.2.0", "", nil, nil)
+	_, _, err := svc.NewestRelease(t.Context())
+	require.Equal(t, "update.check-unavailable", codeOf(err))
+	_, _, err = svc.NewestRelease(t.Context())
+	require.Equal(t, "update.check-unavailable", codeOf(err))
+	require.Equal(t, 1, feed.count(), "a failed fetch is not repeated by every read")
+
+	feed.set(`[`+feedEntryJSON("v1.2.0")+`]`, false)
+	svc.feed.failedAt = svc.feed.failedAt.Add(-releaseFeedRetry)
+	newest, _, err := svc.NewestRelease(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "1.2.0", newest.Version)
+	require.Equal(t, 2, feed.count())
 }
