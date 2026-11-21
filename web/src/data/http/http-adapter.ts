@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M25 latest agent restart read. M26 #462: bounded shell counts and raw inventory ownership; optional-module foundation (#472); M29 first-run claim and sign-in policy operations.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M25 latest agent restart read. M26 #462: bounded shell counts and raw inventory ownership; optional-module foundation (#472); M29 first-run claim and sign-in policy operations. M35 #556: capability descriptors end with stack terminals, stream reopens and gaps.
 
 import { createNavInventory, createNavInventoryState } from "./nav-inventory";
 import { createHubUpdateSession } from "./hub-update-session";
@@ -264,6 +264,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let source: Source | undefined;
   const healthListeners = new Set<(health: ActionReadHealth) => void>();
   let lastEventId: number | undefined;
+  let streamOpened = false;
   let sourceOpen = false;
   let authenticated = true;
   let principal: CurrentUser | undefined;
@@ -316,6 +317,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     return rows;
   } });
   function invalidateCapabilities() { capabilityReads.clear(); }
+  // A finished stack command may change that stack's and its host's container descriptors; other refs stay cached.
+  // Entries are stored when a read starts, so a read in flight before the eviction never refills the cache.
+  function evictStackCapabilities(stackId: string, hostId: string) {
+    for (const key of [...capabilityReads.keys()]) {
+      const [kind, id] = JSON.parse(key) as [string, string];
+      if ((kind === "stack" && id === stackId) || (kind === "container" && id.startsWith(`${hostId}~`))) capabilityReads.delete(key);
+    }
+  }
   function invalidateEnvironments() { sharedReads.clear(); catalogueVersion++; }
   function suspendIdentity(retain = false, nextActive = false) {
     if (!nextActive) hubSession.unauthorized();
@@ -451,7 +460,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); stackTerminals([run], true); if (detailed) targets.accept(run); } });
   const restarts = createHostRestarts({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, publish: (run) => actions.upsert(run), changed: () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach(listener => listener(["hosts"])); } });
-  const stackTerminals = createStackTerminals((target) => { sharedReads.clear(); stackListeners.forEach((listener) => listener(target)); });
+  const stackTerminals = createStackTerminals((target) => { sharedReads.clear(); evictStackCapabilities(target.stackId, target.hostId); stackListeners.forEach((listener) => listener(target)); });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
     retained: () => [...runtime.retained(), ...restarts.retained()],
@@ -557,6 +566,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function securityChanged() { sharedReads.clear(); changeListeners.forEach((listener) => listener(["security", "images", "settings"])); }
 
   function refreshSubscribed(reopen = false): void {
+    // A reopened stream or a gap may have missed any change, so every descriptor is read again (not on the first open).
+    if (!reopen || streamOpened) invalidateCapabilities();
     invalidateEnvironments();
     events.changed();
     // A new connection's initial event frame, not its open, refreshes the Dashboard's recent events.
@@ -647,6 +658,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       sourceOpen = true;
       lastEventId = undefined;
       refreshSubscribed(true);
+      streamOpened = true;
     };
     opened.onmessage = (event: MessageEvent) => { if (source === opened && version === identityGeneration) handleStream(event.data, event.lastEventId); };
     opened.onerror = () => {
