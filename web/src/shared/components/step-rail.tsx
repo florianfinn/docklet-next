@@ -33,6 +33,8 @@ export function StepRail({ steps, current, reachable, onSelect, label }: StepRai
                 type="button"
                 disabled={!enabled}
                 aria-current={active ? "step" : undefined}
+                // Phones hide the visible title, so the name must not depend on it.
+                aria-label={`${i + 1}. ${s.title}`}
                 onClick={() => onSelect(s.id)}
                 className={cn(
                   "group flex w-full items-center gap-3 rounded-xl border border-transparent px-2.5 py-2 text-left outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
