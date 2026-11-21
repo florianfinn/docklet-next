@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original deploy-point preparation from last recorded baseline evidence.
+// Deviations: Original deploy-point preparation from last recorded baseline evidence. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -47,6 +47,7 @@ func (s *ProjectService) acquireDeployPointLease(ctx context.Context) (func(), b
 // PrepareDeployPoint never refuses a deploy. The baseline payload, including
 // workload presence, is historical evidence; current files only check support.
 func (s *ProjectService) PrepareDeployPoint(ctx context.Context, id, run, registration string) {
+	ctx = s.composeInputContext(ctx)
 	result := dto.LifecycleResult{RunID: run}
 	defer func() { s.recordLifecycleResult(context.WithoutCancel(ctx), run, &result) }()
 	unavailable := func(code string) {

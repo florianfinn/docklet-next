@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global. M34 #548: recorded Compose environment inputs.
 
 package projects
 
@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -76,7 +77,10 @@ func (c *composeCacheInternal[T]) Set(projectID, fingerprint, projectPath, proje
 		}
 		mtimes[path] = info.ModTime()
 	}
-	dependencies := append([]string{filepath.Join(projectPath, EffectiveEnvFileName)}, envFiles...)
+	dependencies := slices.Clone(envFiles)
+	if !strings.HasPrefix(fingerprint, "recorded|") {
+		dependencies = append(dependencies, filepath.Join(projectPath, EffectiveEnvFileName))
+	}
 	// A later standard override must invalidate a model loaded before it existed.
 	for _, name := range composeOverrideFileCandidates {
 		dependencies = append(dependencies, filepath.Join(filepath.Dir(composePath), name))
@@ -139,7 +143,12 @@ func LoadCachedComposeProject(ctx context.Context,
 	pathMapper *PathMapper) (*composetypes.Project,
 	error,
 ) {
-	fingerprint := fmt.Sprintf("%q|%q|%q|%t|%#v", composePath, projectName, projectsDirectory, autoInject, pathMapper)
+	input, err := ResolveComposeInputs(ctx, projectsDirectory, projectPath, autoInject)
+	if err != nil {
+		return nil, err
+	}
+	ctx = WithResolvedInputs(ctx, input)
+	fingerprint := input.State + "|" + fmt.Sprintf("%q|%q|%q|%t|%#v|%s", composePath, projectName, projectsDirectory, autoInject, pathMapper, input.DependencyHash)
 	if cache != nil {
 		if cached, ok := cache.Get(projectID, fingerprint); ok {
 			return cached, nil
@@ -163,6 +172,9 @@ func LoadCachedComposeProject(ctx context.Context,
 	}
 	composeFiles := append(append([]string{}, model.ComposeFiles...), meta.ComposeFiles...)
 	dependencies.EnvFiles = append(dependencies.EnvFiles, meta.EnvFiles...)
+	if input.Recorded() {
+		dependencies.EnvFiles = slices.DeleteFunc(dependencies.EnvFiles, func(path string) bool { return slices.Contains(input.Paths, path) })
+	}
 	if setErr := cache.Set(projectID, fingerprint, projectPath, projectsDirectory, composePath, composeFiles, dependencies.EnvFiles, model); setErr != nil {
 		return nil, setErr
 	}

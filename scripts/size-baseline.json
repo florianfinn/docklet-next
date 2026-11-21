@@ -31,7 +31,7 @@
     "backend/pkg/libarcane/edge/client.go": 641,
     "backend/pkg/libarcane/edge/client_test.go": 772,
     "backend/pkg/libarcane/edge/tls.go": 1313,
-    "backend/pkg/projects/env.go": 636,
+    "backend/pkg/projects/env.go": 529,
     "backend/proto/tunnel/v1/tunnel.pb.go": 2285,
     "types/vulnerability/vulnerability.go": 811
   },

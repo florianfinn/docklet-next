@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; update joins match equivalent image reference spellings.
+// Deviations: Local module namespace; update joins match equivalent image reference spellings. M34 #548: recorded Compose environment inputs.
 
 // Package details derives project runtime state: service status from Compose
 // and containers, include files, logs and image update checks.
@@ -108,9 +108,13 @@ func (s *Service) ComposeServices(
 	have := map[string]bool{}
 	var services []project.RuntimeService
 
+	projection, projectionErr := projects.ProjectServiceProjection(ctx, composeProject, projectsDirectory, nil)
+	if projectionErr != nil {
+		return nil, projectionErr
+	}
 	// Create a map for quick lookup of service config
 	serviceConfigs := make(map[string]types.ServiceConfig)
-	for _, svc := range composeProject.Services {
+	for _, svc := range projection.Services {
 		serviceConfigs[svc.Name] = svc
 	}
 
@@ -148,7 +152,7 @@ func (s *Service) ComposeServices(
 		have[c.Service] = true
 	}
 
-	for _, svc := range composeProject.Services {
+	for _, svc := range projection.Services {
 		if !have[svc.Name] {
 			resolvedIcon := iconcatalog.Resolve(catalog, cmp.Or(
 				meta.ServiceIconSets[svc.Name],

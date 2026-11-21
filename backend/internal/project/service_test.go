@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture; M18 live scheduling, policy and contract foundation. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -128,9 +128,10 @@ func decodeRegistryAuth(t *testing.T, encoded string) dockerregistry.AuthConfig 
 
 func newImagePullServerWithObserver(t *testing.T, inspectByRef map[string]dockertypesimage.InspectResponse, onPull func(fullRef, authHeader string)) *httptest.Server {
 	t.Helper()
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case strings.HasSuffix(r.URL.Path, "/containers/json"):
+			_ = json.NewEncoder(w).Encode([]any{})
 		case strings.HasSuffix(r.URL.Path, "/images/create"):
 			fullRef := strings.TrimSpace(r.URL.Query().Get("fromImage"))
 			tag := strings.TrimSpace(r.URL.Query().Get("tag"))
@@ -171,7 +172,6 @@ func newImagePullServerWithObserver(t *testing.T, inspectByRef map[string]docker
 	t.Cleanup(server.Close)
 	return server
 }
-
 func TestProjectService_RefreshProjectImageRefs_PersistsBuildMetadata(t *testing.T) {
 	ctx := t.Context()
 	db := setupProjectTestDB(t)

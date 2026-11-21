@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Runtime-owned stack update/restore; mandatory points and exact local images; M18 service-scoped effects and verification. M21 #438: candidate scans and verified manifest binding. M24 observed own-point recovery and committed-effect point visibility.
+// Deviations: Runtime-owned stack update/restore; mandatory points and exact local images; M18 service-scoped effects and verification. M21 #438: candidate scans and verified manifest binding. M24 observed own-point recovery and committed-effect point visibility. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -27,6 +27,7 @@ import (
 )
 
 func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, registration string, intent *dto.LifecycleIntent, actor user.Actor) (result *dto.LifecycleResult, resultErr error) {
+	ctx = s.composeInputContext(ctx)
 	result = &dto.LifecycleResult{RunID: run, VolumeDataIncluded: false}
 	execution := &lifecycleExecution{observed: dto.ObservedExecutionFromContext(ctx).Mode != ""}
 	ctx = context.WithValue(ctx, lifecycleExecutionKey{}, execution)
@@ -72,6 +73,9 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	}()
 	if actor.ID == "" || actor.ID == user.SystemUser.ID {
 		return result, lifecycleFailure("update.invalid-target")
+	}
+	if err := s.checkIntentExternal(ctx, id, registration, intent); err != nil {
+		return result, err
 	}
 	p, current, err := s.lifecycleCurrent(ctx, id, registration)
 	if err != nil {
@@ -127,6 +131,9 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 		}
 		if point.TargetID != id || point.TargetIdentity != current.TargetIdentity || point.RegistrationID != registration || point.Revision != intent.PointRevision {
 			return result, lifecycleFailure("restore.unavailable")
+		}
+		if err := s.checkLifecycleExternal(ctx, current, saved); err != nil {
+			return result, err
 		}
 		if !lifecycleFilesEqual(current, saved) && !intent.Request.ReplaceConfiguration {
 			return result, lifecycleFailure("update.config-drift")
@@ -197,6 +204,9 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	}
 	// Refresh both identity and source revisions after lease acquisition, before
 	// any point/tag/file effect. No source/candidate is rediscovered here.
+	if err := s.checkLifecycleExternal(ctx, current, desired); err != nil {
+		return result, err
+	}
 	_, latest, err := s.lifecycleCurrent(ctx, id, registration)
 	if err != nil || latest.SavedRevision != current.SavedRevision || lifecycleObserved(latest) != lifecycleObserved(current) {
 		return result, lifecycleFailure("update.target-changed")
@@ -229,6 +239,9 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 		if err = s.lifecycleWrite(ctx, p, current, desired, actor); err != nil {
 			return result, err
 		}
+	}
+	if err := s.checkLifecycleExternal(ctx, current, desired); err != nil {
+		return result, err
 	}
 	fresh, err := s.lifecycleInputs(ctx, p)
 	if err != nil {
@@ -351,6 +364,9 @@ func (s *ProjectService) verifyLifecycleReferences(ctx context.Context, snap *li
 	return ctx.Err()
 }
 func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapshot, restore bool, source *life.Snapshot, services ...string) error {
+	if err := s.checkLifecycleExternal(ctx, snap, source); err != nil {
+		return err
+	}
 	// This model is ephemeral: actual files remain the sole source on later deploy.
 	model, orderErr := lifecycleDeployModel(snap, services)
 	if orderErr != nil {
@@ -400,6 +416,9 @@ func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapsho
 			p, err := s.getMutableProject(ctx, snap.TargetID)
 			if err != nil || targetLifecycleIdentity(p) != snap.TargetIdentity {
 				return lifecycleFailure("update.target-changed")
+			}
+			if err := s.checkLifecycleExternal(ctx, snap, source); err != nil {
+				return err
 			}
 			latest, err := s.lifecycleInputs(ctx, p)
 			if err != nil || latest.SavedRevision != snap.SavedRevision {
@@ -509,6 +528,9 @@ func (s *ProjectService) reconcileFailedRebuild(ctx context.Context, run string,
 		}
 		if current.InspectResponse.ID != sel.ImageID {
 			return lifecycleFailure("update.target-changed")
+		}
+		if err := s.checkLifecycleExternal(ctx, before, after); err != nil {
+			return err
 		}
 		if _, e = c.ImageTag(ctx, client.ImageTagOptions{Source: old.ImageID, Target: old.Reference}); e != nil {
 			return lifecycleFailure("image.tag-failed")

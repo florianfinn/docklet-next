@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Host image lease, verified retention pins and shared-reference restore guard. M18 deploy receipt associations retain durable point evidence after settlement. M24 tracks committed selection effects and recovery cancellation boundaries.
+// Deviations: Host image lease, verified retention pins and shared-reference restore guard. M18 deploy receipt associations retain durable point evidence after settlement. M24 tracks committed selection effects and recovery cancellation boundaries. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -102,6 +102,9 @@ func (s *ProjectService) lifecyclePinPoint(ctx context.Context, point life.Point
 		if !img.Present {
 			continue
 		}
+		if err := s.checkLifecycleExternal(ctx, snapshot); err != nil {
+			return err
+		}
 		tag := life.Pin("points", point.ID, key)
 		if _, err = reference.ParseNormalizedNamed(tag); err != nil {
 			return lifecycleFailure("update.snapshot-unavailable")
@@ -121,6 +124,9 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 	if err != nil {
 		return lifecycleFailure("update.target-changed")
 	}
+	if err := s.checkLifecycleExternal(ctx, desired); err != nil {
+		return err
+	}
 	for _, sel := range selections {
 		if sel.Kind != "restore" {
 			immutable, err := immutableLifecycleReference(sel)
@@ -136,6 +142,9 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 				return e
 			}
 			opts.Platforms = []ocispec.Platform{platform.OCI()}
+			if err := s.checkLifecycleExternal(ctx, desired); err != nil {
+				return err
+			}
 			reader, err := c.ImagePull(ctx, immutable, opts)
 			if err != nil {
 				return imageService.PullError(err, opts.RegistryAuth != "")
@@ -178,6 +187,9 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 	if err != nil {
 		return lifecycleFailure("update.target-changed")
 	}
+	if err := s.checkLifecycleExternal(ctx, desired); err != nil {
+		return err
+	}
 	current, err := s.lifecycleInputs(ctx, p)
 	if err != nil || current.SavedRevision != expectedRevision {
 		return lifecycleFailure("update.target-changed")
@@ -190,10 +202,16 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 		if !img.Present {
 			continue
 		}
+		if err := s.checkLifecycleExternal(ctx, desired); err != nil {
+			return err
+		}
 		if err = lifecycleBeforeRecoveryEffect(ctx); err != nil {
 			return err
 		}
 		if err = s.imageService.ImageGuard().Protect(ctx, guard.Protection{ImageID: img.ImageID, Reason: "active-update", OwnerID: run}); err != nil {
+			return err
+		}
+		if err := s.checkLifecycleExternal(ctx, desired); err != nil {
 			return err
 		}
 		if err = lifecycleBeforeRecoveryEffect(ctx); err != nil {
@@ -207,6 +225,9 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 			continue
 		}
 		if err = s.lifecycleEffect(ctx, run); err != nil {
+			return err
+		}
+		if err := s.checkLifecycleExternal(ctx, desired); err != nil {
 			return err
 		}
 		if err = lifecycleBeforeRecoveryEffect(ctx); err != nil {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. Docklet's own projects excluded from update rows and counts. M34 #547: classified load problems instead of raw load errors.
+// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts. Docklet's own projects excluded from update rows and counts. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -113,6 +113,7 @@ func buildUpdateInfoSummary(
 }
 
 func (s *ProjectService) enrichComposeDetails(ctx context.Context, proj *Project, opts projecttypes.DetailsOptions, resp *projecttypes.Details) {
+	ctx = s.composeInputContext(ctx)
 	composeFile, err := s.ResolveProjectComposeFile(ctx, proj)
 	if err != nil {
 		if !errors.Is(err, common.ErrProjectEnvUnreadable) {
@@ -152,6 +153,10 @@ func (s *ProjectService) enrichComposeDetails(ctx context.Context, proj *Project
 		return
 	}
 
+	composeProj, loadErr = projects.ProjectServiceProjection(ctx, composeProj, projectsDirectoryForProjection(s, ctx), s.projectPathMapper(ctx))
+	if loadErr != nil {
+		return
+	}
 	// Convert map to slice
 	svcList := make([]types.ServiceConfig, 0, len(composeProj.Services))
 	hasBuildDirective := false
@@ -174,6 +179,7 @@ func (s *ProjectService) ListAllProjects(ctx context.Context) ([]Project, error)
 }
 
 func (s *ProjectService) ListProjects(ctx context.Context, params pagination.QueryParams) ([]projecttypes.Details, pagination.Response, error) {
+	ctx = s.composeInputContext(ctx)
 	statusFilter := strings.TrimSpace(params.Filters["status"])
 	updatesFilter := strings.TrimSpace(params.Filters["updates"])
 	labelFilter := strings.TrimSpace(params.Filters["label"])
@@ -326,6 +332,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 // projects with a pending update, without the full list pipeline. A nil
 // allContainers is fetched here.
 func (s *ProjectService) CountProjectsWithPendingUpdates(ctx context.Context, allContainers []container.Summary) (int, error) {
+	ctx = s.composeInputContext(ctx)
 	if s.db == nil {
 		return 0, nil
 	}
@@ -400,17 +407,24 @@ func (s *ProjectService) CountProjectsWithPendingUpdates(ctx context.Context, al
 // ProjectMetadata resolves a project's icon sets and service URLs, cached until
 // a merged compose or env file changes. A nil env resolves the shared inputs here.
 func (s *ProjectService) ProjectMetadata(ctx context.Context, p Project, env *projectMetadataEnv) projects.ArcaneComposeMetadata {
+	ctx = s.composeInputContext(ctx)
 	empty := projects.ArcaneComposeMetadata{ServiceIconSets: map[string]projects.IconSet{}}
 
 	if env == nil {
 		env = s.newProjectMetadataEnv(ctx, []Project{p})
+	}
+	var inputErr error
+	var input *projects.ResolvedInputs
+	ctx, input, inputErr = s.resolvedProjectInputContext(ctx, p.Path)
+	if inputErr != nil {
+		return empty
 	}
 	composeFile, err := s.resolveProjectComposeFile(ctx, &p, env)
 	if err != nil {
 		return empty
 	}
 
-	fingerprint := fmt.Sprintf("%q|%q|%t", composeFile, env.projectsDirectory, env.autoInjectEnv)
+	fingerprint := input.State + "|" + fmt.Sprintf("%q|%q|%t|%s", composeFile, env.projectsDirectory, env.autoInjectEnv, input.DependencyHash)
 	if s.metaCache != nil && p.ID != "" {
 		if cached, ok := s.metaCache.Get(p.ID, fingerprint); ok {
 			return cached
@@ -528,6 +542,7 @@ func (s *ProjectService) BackfillProjectImageRefs(ctx context.Context) (int, err
 }
 
 func (s *ProjectService) SyncProjectsFromFileSystem(ctx context.Context) error {
+	ctx = s.composeInputContext(ctx)
 	// Serialized because the walk and the cleanup are two halves of one
 	// decision: overlapping syncs let an older walk's cleanup delete a project a
 	// newer walk had just upserted, because the older walk's `seen` set predates
@@ -627,6 +642,7 @@ func (s *ProjectService) SyncProjectsFromFileSystem(ctx context.Context) error {
 }
 
 func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPath string) error {
+	ctx = s.composeInputContext(ctx)
 	var existing Project
 	err := s.db.WithContext(ctx).
 		Where("path = ?", dirPath).
