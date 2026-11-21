@@ -93,7 +93,7 @@ describe("proxy editor keeps server values the operator did not change", () => {
     const f = fixture();
     show(f);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "New route" }));
+    await user.click(await screen.findByRole("button", { name: "Add route" }));
     fireEvent.change(screen.getByLabelText("Name", { selector: "input" }), { target: { value: "fresh" } });
     fireEvent.change(screen.getByLabelText("Host / domain"), { target: { value: "fresh.example.com" } });
     fireEvent.change(screen.getByLabelText("Backend host"), { target: { value: "whoami-a" } });
@@ -162,7 +162,7 @@ describe("proxy refusals and blocking states", () => {
       );
       await screen.findByRole("heading", { name: "Routes" });
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true),
+        expect(screen.getByRole("button", { name: "Add route" }).hasAttribute("disabled")).toBe(true),
       );
       unmount();
     }
@@ -212,10 +212,7 @@ describe("verify round trip sweep (v-s5-fix1)", () => {
     f.state.read.middlewares = [{ name: "a,b", kind: "local", file: "routes/mw.yml" }];
     show(f);
     const user = await edit();
-    screen.getByRole("combobox", { name: "Existing middleware" }).focus();
-    await user.keyboard("{ArrowDown}");
-    await screen.findByRole("option", { name: "headers" });
-    await user.click(screen.getByRole("option", { name: "a,b" }));
+    await user.click(screen.getByRole("button", { name: "a,b" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(writes(f).length).toBe(1));
     expect(change(f).middlewares).toEqual(["headers", "a,b"]);
@@ -242,7 +239,7 @@ describe("verify round trip sweep (v-s5-fix1)", () => {
     await waitFor(() => expect(calls).toBe(1));
     await act(async () => {});
     expect(screen.queryByRole("dialog") === null).toBe(true);
-    expect(screen.getByRole("button", { name: "New route" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Add route" }).hasAttribute("disabled")).toBe(true);
     expect(calls).toBe(1);
   });
 });

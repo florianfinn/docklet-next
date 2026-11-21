@@ -8,6 +8,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { useQueryClient } from "@tanstack/react-query";
 import { CertificateObservation } from "./CertificateObservation";
+import { RouteList } from "./RouteList";
 import { CertificateCheck } from "./CertificateCheck";
 import { Providers } from "./providers.test-support";
 import { instance, route, hash, changedHash } from "./proxy.test-support";
@@ -81,4 +82,15 @@ describe("certificate evidence", () => {
     expect(screen.queryByText("Certificate verification passed.") !== null).toBe(false);
     expect(screen.queryByRole("button",{name:"Check certificate"}) !== null).toBe(false);
   });
+});
+
+it("row 8: a real expanded certificate check spans the complete overview table", async () => {
+  vi.mocked(checkCertificate).mockResolvedValue(value);
+  render(<Providers><Enabled><RouteList instance={instance} routes={[route]} hashes={{ [route.file]: hash }} writable edit={() => {}} action={() => {}} /></Enabled></Providers>);
+  fireEvent.click(screen.getByRole("button", { name: "Check certificate" }));
+  await screen.findByText("Certificate verification passed.");
+  const region = screen.getByRole("region", { name: "Served certificate" });
+  expect(region.closest("td")?.colSpan).toBe(6);
+  expect(region.closest("tr")?.hasAttribute("data-certificate-row")).toBe(true);
+  expect(region.closest("tr")?.children.length).toBe(1);
 });

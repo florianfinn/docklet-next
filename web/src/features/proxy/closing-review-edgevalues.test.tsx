@@ -49,11 +49,9 @@ it("reviewer can open middleware selection when a readable definition has an emp
   const f = fixture();
   f.state.read.middlewares = [{ name: "", kind: "local", file: route.file }];
   show(f);
-  const user = await edit();
-  screen.getByRole("combobox", { name: "Existing middleware" }).focus();
-  await user.keyboard("{ArrowDown}");
-  await screen.findByRole("option", { name: "headers" });
-  // The empty definition name is never offered as an option.
-  expect(screen.getAllByRole("option").every(o => (o.textContent ?? "") !== "")).toBe(true);
+  await edit();
+  const chips = screen.getByRole("group", { name: "Existing middleware" });
+  expect(chips.querySelectorAll("button").length).toBe(1);
+  expect(chips.textContent).toBe("headers1");
 });
 

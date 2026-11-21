@@ -4,14 +4,14 @@
 // License: Apache-2.0
 // Deviations: Original production proxy Manager implementation.
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
 import { TextField } from "@/shared/components/form-field";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
 import { Label } from "@/shared/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
-import { AcknowledgementFields, RefusalView, Choice, ConfirmCheck, ProxyDialog } from "./controls";
+import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+import { AcknowledgementFields, RefusalView, ConfirmCheck, ProxyDialog } from "./controls";
 import {
   acknowledgementsReady,
   backendParts,
@@ -23,8 +23,12 @@ import {
 import { newCaddySite, patchCaddySite } from "./caddy-draft";
 import type { Acknowledgements, Change, Instance, Inventory, ReadResult, Route } from "./types";
 
-// The "keep current TLS" choice; a NUL cannot occur in a Traefik resolver name (YAML key).
-const PRESERVE = "\u0000preserve";
+import { useMediaQuery } from "@/shared/hooks/use-media-query";
+import { DestinationFields } from "./DestinationFields";
+import { HandlingFields } from "./HandlingFields";
+import { TlsFields, PRESERVE } from "./TlsFields";
+import { FieldHelp, FormSection } from "./presentation";
+import { simpleHost, usedDomains } from "./suggestions";
 
 export function RouteEditor({
   instance,
@@ -48,9 +52,15 @@ export function RouteEditor({
   const t = useTranslations("proxyContract.ui"),
     caddy = instance.kind === "caddy";
   const [mode, setMode] = useState("easy");
+  const narrow = useMediaQuery("(max-width: 767px)");
+  const [step, setStep] = useState(0), [invalid, setInvalid] = useState("");
+  const form = useRef<HTMLFormElement>(null);
+  useLayoutEffect(() => {
+    if (invalid) form.current?.querySelector<HTMLElement>(`#${invalid}`)?.focus();
+  }, [invalid, step, mode]);
   const [name, setName] = useState(route?.name ?? ""),
     [domain, setDomain] = useState(
-      caddy ? (route?.rule ?? "") : (route?.rule.match(/^Host\([`"]([^`"]+)[`"]\)$/)?.[1] ?? ""),
+      caddy ? (route?.rule ?? "") : simpleHost(route?.rule ?? "") ?? "",
     );
   const [rule, setRule] = useState(route?.rule ?? ""),
     [priority, setPriority] = useState(String(route?.priority ?? 0));
@@ -69,11 +79,6 @@ export function RouteEditor({
     route?.upstreams?.[0] !== undefined && JSON.stringify(backend) === JSON.stringify(backendParts(route.upstreams[0]))
       ? route.upstreams[0]
       : backendURL(backend);
-  // A router without entry points uses the default ones, which the inventory cannot name exactly.
-  const implicitEntryPoints = !!route && !(route.entryPoints ?? []).length;
-  const entryTLS = (inventory.entryPoints ?? []).some(
-    ep => ep.tls && (implicitEntryPoints || (route?.entryPoints ?? []).includes(ep.name)),
-  );
   const opaqueService = !!route && !route.upstreams?.length && !!route.serviceFile;
   const shared = !caddy && (route?.dependants?.length ?? 0) > 1;
   const known = [
@@ -89,7 +94,7 @@ export function RouteEditor({
   const multiline = (route?.references ?? []).some(r => r.name === "" || r.name.includes("\n"));
   const names = multiline ? (route?.references ?? []).map(r => r.name) : splitNames(middlewares);
   const unresolved = names.filter(n => !known.includes(n) && !route?.references?.some(r => r.name === n));
-  const exactHostRule = !rule || /^Host\([`"]([^`"]+)[`"]\)$/.test(rule);
+  const exactHostRule = !rule || simpleHost(rule) !== undefined;
   const caddyText = route
     ? patchCaddySite(originalText, route, name, domain, upstream)
     : newCaddySite(name, domain, upstream, tls);
@@ -100,15 +105,32 @@ export function RouteEditor({
   const target =
     route?.file ??
     relativeTarget(instance, `${instance.routeDirectory.replace(/\/$/, "")}/${name}.${caddy ? "caddy" : "yml"}`);
-  const valid =
-    acknowledgementsReady(inventory, caddy ? [] : unresolved, ack) &&
-    (caddy && mode === "advanced"
-      ? !!name.trim() && !!advanced.trim()
-      : !!name.trim() &&
-        (caddy ? !!domain.trim() : mode === "advanced" || !exactHostRule ? !!rule.trim() : !!domain.trim()) &&
-        (opaqueService || shared || !!backend.host.trim()));
+  const acknowledgementsValid = acknowledgementsReady(inventory, caddy ? [] : unresolved, ack);
+  const domains = usedDomains(read.routes ?? [], route);
+  const duplicate = !caddy && domains.includes(domain);
+  const sectionTitles = [t("domainGroup"), t("destination"), t("tlsGroup"), t("handlingGroup")];
+  const invalidField = () => {
+    if (!name.trim()) return { id: "route-name", step: 0 };
+    if (caddy && (mode === "advanced" || textChanged)) return !advanced.trim() ? { id: "site-block", step: 0 } : undefined;
+    if (!(caddy ? domain.trim() : mode === "advanced" || !exactHostRule ? rule.trim() : domain.trim()))
+      return { id: !caddy && (mode === "advanced" || !exactHostRule) ? "route-rule" : "route-domain", step: 0 };
+    if (!opaqueService && !shared && !backend.host.trim()) return { id: "backend-host", step: 1 };
+    if (!caddy && resolver !== PRESERVE && !resolver) return { id: "route-resolver", step: 2 };
+    return undefined;
+  };
   const save = () => {
-    if (!valid || busy) return;
+    if (!acknowledgementsValid || busy) return;
+    const missing = invalidField();
+    if (missing) {
+      if (["backend-host", "route-resolver"].includes(missing.id)) setMode("easy");
+      else if (missing.id === "route-rule" || missing.id === "site-block") enterMode("advanced");
+      setStep(missing.step);
+      setInvalid(missing.id);
+      // Repeated submission must focus again even when the error has not changed.
+      form.current?.querySelector<HTMLElement>(`#${missing.id}`)?.focus();
+      return;
+    }
+    setInvalid("");
     let change: Change;
     if (caddy)
       change = {
@@ -122,7 +144,7 @@ export function RouteEditor({
       if (!route || rule !== route.rule) change.rule = rule;
       // A new route omits empty defaults; an edit sends only changed leaves.
       if (route ? Number(priority) !== route.priority : Number(priority) !== 0) change.priority = Number(priority);
-      if (route ? JSON.stringify(entryPoints) !== JSON.stringify(route.entryPoints ?? []) : entryPoints.length > 0)
+      if (route ? resolver !== PRESERVE && JSON.stringify(entryPoints) !== JSON.stringify(route.entryPoints ?? []) : entryPoints.length > 0)
         change.entryPoints = entryPoints;
       if (
         route
@@ -136,218 +158,59 @@ export function RouteEditor({
     }
     submit(target, change, ack);
   };
+  const section = (index: number, content: ReactNode) => (
+    <div hidden={mode !== "easy" || (narrow && step !== index)}>
+      <FormSection disabled={caddy && textChanged} title={sectionTitles[index]!} tone={(["domain", "target", "tls", "behavior"] as const)[index]!}>{content}</FormSection>
+    </div>
+  );
   return (
     <ProxyDialog title={t(route ? "edit" : "newRoute")} description={t("serverValidation")} onClose={close} busy={busy}>
-      <form
-        onSubmit={e => {
-          e.preventDefault();
-          save();
-        }}
-        className="grid min-w-0 gap-4"
-      >
+      <form ref={form} noValidate onSubmit={e => {
+        e.preventDefault();
+        if (narrow && mode === "easy" && step < 3) setStep(s => s + 1);
+        else save();
+      }} className="grid min-w-0 gap-4">
         <fieldset disabled={busy} className="grid min-w-0 gap-4">
-          <TextField
-            id="route-name"
-            label={t("name")}
-            disabled={caddy && textChanged}
-            value={name}
-            onChange={setName}
-          />
           <Tabs value={mode} onValueChange={enterMode}>
-            <TabsList>
-              <TabsTrigger value="easy">{t("easy")}</TabsTrigger>
-              <TabsTrigger value="advanced">{t("advanced")}</TabsTrigger>
-            </TabsList>
-            <TabsContent value="easy" className="grid min-w-0 gap-4 pt-3">
-              <fieldset className="grid min-w-0 gap-4" disabled={caddy && textChanged}>
-                <TextField
-                  id="route-domain"
-                  label={t("domain")}
-                  value={domain}
-                  disabled={!caddy && !exactHostRule}
-                  onChange={v => {
-                    setDomain(v);
-                    if (!caddy) setRule(`Host(\`${v}\`)`);
-                  }}
-                />
-                {!caddy && !exactHostRule && <p className="break-all font-mono text-xs">{rule}</p>}
-                {opaqueService ? (
-                  <p className="text-sm">{t("opaqueService", { name: route.serviceFile! })}</p>
-                ) : shared ? (
-                  <p className="text-sm">{t("sharedServiceHint")}</p>
-                ) : (
-                  <div className="grid min-w-0 gap-3 sm:grid-cols-[1fr_2fr_1fr]">
-                    <Choice
-                      id="backend-scheme"
-                      label={t("scheme")}
-                      value={backend.scheme}
-                      onChange={v => setBackend(b => ({ ...b, scheme: v }))}
-                      options={[...new Set(["http", "https", ...(backend.scheme ? [backend.scheme] : [])])].map(v => ({
-                        value: v,
-                        label: v,
-                      }))}
-                    />
-                    <TextField
-                      id="backend-host"
-                      label={t("backendHost")}
-                      value={backend.host}
-                      onChange={v => setBackend(b => ({ ...b, host: v }))}
-                    />
-                    <TextField
-                      id="backend-port"
-                      label={t("port")}
-                      value={backend.port}
-                      onChange={v => setBackend(b => ({ ...b, port: v, colon: v !== "" }))}
-                    />
-                  </div>
-                )}
-                {!caddy && (
-                  <>
-                    <fieldset className="grid gap-2">
-                      <legend className="mb-2 text-sm font-medium">{t("entryPoints")}</legend>
-                      {(inventory.entryPoints ?? []).map(ep => (
-                        <ConfirmCheck
-                          key={ep.name}
-                          checked={entryPoints.includes(ep.name)}
-                          onChange={v =>
-                            setEntryPoints(old => (v ? [...old, ep.name] : old.filter(n => n !== ep.name)))
-                          }
-                        >
-                          {ep.name} · {ep.address}
-                        </ConfirmCheck>
-                      ))}
-                    </fieldset>
-                    <Choice
-                      id="route-resolver"
-                      label={t("resolver")}
-                      value={resolver}
-                      onChange={setResolver}
-                      options={[
-                        { value: PRESERVE, label: t("preserveTls") },
-                        ...(inventory.resolvers ?? []).map(r => ({ value: r, label: r })),
-                      ]}
-                    />
-                    {route && (
-                      <p className="text-xs text-muted-foreground">
-                        {route.resolver
-                          ? t("tlsResolver", { name: route.resolver })
-                          : t(
-                              route.tls
-                                ? "tlsOn"
-                                : !entryTLS
-                                  ? "tlsOff"
-                                  : implicitEntryPoints
-                                    ? "tlsDefaultEntryPoints"
-                                    : "tlsEntryPoint",
-                            )}
-                      </p>
-                    )}
-                    <div className="grid min-w-0 gap-2">
-                      <Label htmlFor="route-middlewares">{t("middlewares")}</Label>
-                      <Textarea
-                        id="route-middlewares"
-                        className="min-h-20 font-mono text-xs"
-                        value={middlewares}
-                        disabled={multiline}
-                        aria-describedby="route-middlewares-desc"
-                        spellCheck={false}
-                        onChange={e => {
-                          setMiddlewares(e.target.value);
-                          setAck(a => ({ ...a, unresolvedReferences: [] }));
-                        }}
-                      />
-                      <p id="route-middlewares-desc" className="text-xs text-muted-foreground">
-                        {t("middlewareHint")}
-                      </p>
-                    </div>
-                    {known.length > 0 && (
-                      <Choice
-                        id="known-middleware"
-                        label={t("existingMiddleware")}
-                        value=""
-                        placeholder={t("selectMiddleware")}
-                        disabled={multiline}
-                        onChange={v => {
-                          if (!names.includes(v)) setMiddlewares([...names, v].join("\n"));
-                        }}
-                        options={known.filter(n => n !== "" && !n.includes("\n")).map(n => ({ value: n, label: n }))}
-                      />
-                    )}
-                  </>
-                )}
-                {caddy && (
-                  <>
-                    <p className="text-sm text-muted-foreground">{t("caddyEasyHint")}</p>
-                    {!route && (
-                      <ConfirmCheck checked={tls} onChange={setTls}>
-                        {t("tls")}
-                      </ConfirmCheck>
-                    )}
-                  </>
-                )}
-              </fieldset>
-            </TabsContent>
-            <TabsContent value="advanced" className="grid min-w-0 gap-4 pt-3">
-              {caddy ? (
-                <div className="grid min-w-0 gap-2">
-                  <Label htmlFor="site-block">{t("siteBlock")}</Label>
-                  <Textarea
-                    id="site-block"
-                    className="min-h-64 font-mono text-xs"
-                    value={advanced}
-                    onChange={e => {
-                      setAdvanced(e.target.value);
-                      setTextChanged(true);
-                    }}
-                  />
-                </div>
-              ) : (
-                <>
-                  <TextField
-                    id="route-rule"
-                    label={t("rule")}
-                    value={rule}
-                    onChange={v => {
-                      setRule(v);
-                      setDomain(v.match(/^Host\([`"]([^`"]+)[`"]\)$/)?.[1] ?? "");
-                    }}
-                  />
-                  <TextField
-                    id="route-priority"
-                    label={t("priority")}
-                    type="number"
-                    value={priority}
-                    onChange={setPriority}
-                  />
-                  <Choice
-                    id="advanced-resolver"
-                    label={t("resolver")}
-                    value={resolver}
-                    onChange={setResolver}
-                    options={[
-                      { value: PRESERVE, label: t("preserveTls") },
-                      ...(inventory.resolvers ?? []).map(r => ({ value: r, label: r })),
-                    ]}
-                  />
-                </>
-              )}
-            </TabsContent>
+            <TabsList className="w-full"><TabsTrigger value="easy">{t("easy")}</TabsTrigger><TabsTrigger value="advanced">{t("advanced")}</TabsTrigger></TabsList>
           </Tabs>
-          <AcknowledgementFields
-            inventory={inventory}
-            unresolved={caddy ? [] : unresolved}
-            value={ack}
-            onChange={setAck}
-          />
+          {narrow && mode === "easy" && <p role="status" className="text-sm text-muted-foreground">{t("step", { current: step + 1, total: 4 })} · {sectionTitles[step]}</p>}
+          <div hidden={mode === "easy" && narrow && step !== 0}>
+            <FieldHelp label={t("name")} help={t("help.name")}><TextField id="route-name" label={t("name")} disabled={caddy && textChanged} value={name} onChange={setName} /></FieldHelp>
+          </div>
+          <fieldset disabled={caddy && textChanged} className="grid min-w-0 gap-4">
+            {section(0, <>
+              <FieldHelp label={t("domain")} help={t("help.domain")}><TextField id="route-domain" label={t("domain")} value={domain} disabled={!caddy && !exactHostRule} onChange={v => { setDomain(v); if (!caddy) setRule(`Host(\`${v}\`)`); }} />
+              </FieldHelp>
+              {!caddy && domains.length > 0 && <div className="flex flex-wrap gap-2" aria-label={t("domainSuggestions")}>{domains.map(d => <Button key={d} type="button" variant="outline" size="sm" disabled={!exactHostRule} onClick={() => { setDomain(d); setRule(`Host(\`${d}\`)`); }}>{d}</Button>)}</div>}
+              {!caddy && !exactHostRule && <p className="break-all font-mono text-xs">{rule}</p>}
+            </>)}
+            {section(1, opaqueService ? <p className="text-sm">{t("opaqueService", { name: route!.serviceFile! })}</p> : shared ? <p className="text-sm">{t("sharedServiceHint")}</p> : <DestinationFields instance={instance} backend={backend} update={setBackend} />)}
+            {section(2, caddy ? <>
+              <p className="text-sm text-muted-foreground">{t("caddyEasyHint")}</p>
+              {!route && <FieldHelp label={t("tls")} help={t("help.caddyTls")}><ConfirmCheck checked={tls} onChange={setTls}>{t("tls")}</ConfirmCheck></FieldHelp>}
+            </> : mode === "easy" ? <TlsFields inventory={inventory} route={route} resolver={resolver} setResolver={setResolver} entryPoints={entryPoints} setEntryPoints={setEntryPoints} /> : null)}
+            {section(3, caddy ? <p className="text-sm text-muted-foreground">{t("caddyEasyHint")}</p> : mode === "easy" ? <HandlingFields read={read} route={route} names={names} middlewares={middlewares} frozen={multiline} update={v => { setMiddlewares(v); setAck(a => ({ ...a, unresolvedReferences: [] })); }} priority={priority} setPriority={setPriority} /> : null)}
+          </fieldset>
+          {mode === "advanced" && <FormSection title={t("advanced")} tone="domain">
+            {caddy ? <FieldHelp label={t("siteBlock")} help={t("help.siteBlock")}><div className="grid min-w-0 gap-2"><Label htmlFor="site-block">{t("siteBlock")}</Label><Textarea id="site-block" className="min-h-64 font-mono text-xs" value={advanced} onChange={e => { setAdvanced(e.target.value); setTextChanged(true); }} /></div></FieldHelp> : <>
+              <FieldHelp label={t("rule")} help={t("help.rule")}><TextField id="route-rule" label={t("rule")} value={rule} onChange={v => { setRule(v); setDomain(simpleHost(v) ?? ""); }} /></FieldHelp>
+              <FieldHelp label={t("priority")} help={t("help.priority")}><TextField id="advanced-priority" label={t("priority")} type="number" value={priority} onChange={setPriority} /></FieldHelp>
+              <TlsFields inventory={inventory} route={route} resolver={resolver} setResolver={setResolver} entryPoints={entryPoints} setEntryPoints={setEntryPoints} />
+            </>}
+          </FormSection>}
+          {duplicate && <p role="status" className="text-sm text-warning">{t("domainInUse", { domain })}</p>}
+          {(!narrow || mode === "advanced" || step === 3) && <AcknowledgementFields inventory={inventory} unresolved={caddy ? [] : unresolved} value={ack} onChange={setAck} />}
         </fieldset>
+        {invalid && <p role="alert">{t("requiredField", { name: t(({ "route-name": "name", "route-domain": "domain", "route-rule": "rule", "backend-host": "backendHost", "site-block": "siteBlock", "route-resolver": "resolver" } as const)[invalid as "route-name"] ?? "name") })}</p>}
         <RefusalView refusal={refusal} />
         <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" disabled={busy} onClick={close}>
-            {t("cancel")}
-          </Button>
-          <Button type="submit" disabled={!valid || busy}>
-            {t("save")}
-          </Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={close}>{t("cancel")}</Button>
+          {narrow && mode === "easy" && <>
+            <Button type="button" variant="outline" disabled={busy || step === 0} onClick={() => setStep(s => s - 1)}>{t("previous")}</Button>
+            {step < 3 && <Button type="submit" disabled={busy}>{t("next")}</Button>}
+          </>}
+          {(!narrow || mode === "advanced" || step === 3) && <Button type="submit" disabled={!acknowledgementsValid || busy}>{t("save")}</Button>}
         </div>
       </form>
     </ProxyDialog>
