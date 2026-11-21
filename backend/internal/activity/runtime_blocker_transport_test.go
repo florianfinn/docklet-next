@@ -2,7 +2,7 @@
 // Revision: b4f894ff7f35186d4c39be1fc9fccd01b4b5934a
 // Retrieved: 2026-11-16
 // License: Apache-2.0
-// Deviations: Original allowlisted blocker detail over real Direct and Edge runtime transport.
+// Deviations: Original allowlisted blocker detail over real Direct and Edge runtime transport. M34 #547: unreadable peers resolve without a blocker.
 
 package activity_test
 
@@ -36,16 +36,9 @@ func TestRuntimeBlockerDetailDirectEdge(t *testing.T) {
 			require.NoError(t, f.agent.db.Model(&project.Project{}).Where("id = ?", "example-peer").Update("is_archived", true).Error)
 			request := a.RuntimeTargetRequest{Registration: a.RuntimeExecutorIdentity{ManagerID: f.store.ManagerID, RegistrationID: f.store.RegistrationID, ExecutorGeneration: f.store.ExecutorGeneration}, Target: activity.RuntimeTarget{Kind: "stack", ID: "example-target"}}
 			_, err := f.sender.Resolve(t.Context(), request)
+			require.NoError(t, err, "an unreadable archived peer never blocks over Direct or Edge")
+			require.Zero(t, f.executeCalls.Load(), "resolution does not dispatch")
 			var problem *imageDTO.OperationError
-			require.ErrorAs(t, err, &problem)
-			require.Equal(t, "runtime.target-unavailable", problem.Problem.Code)
-			require.True(t, problem.Problem.Blocker.Confirmable)
-			require.Equal(t, "compose.selection-unsupported", problem.Problem.Blocker.Uncertainty.Peers[0].Reason)
-			require.True(t, problem.Problem.Blocker.Uncertainty.Peers[0].Archived)
-			encoded, err := json.Marshal(problem)
-			require.NoError(t, err)
-			require.NotContains(t, string(encoded), path)
-			require.Zero(t, f.executeCalls.Load(), "identity refusal must precede dispatch")
 
 			// Authenticated transport does not authorize arbitrary diagnostics or blocker fields.
 			for _, candidate := range []struct{ code, name, reason string }{

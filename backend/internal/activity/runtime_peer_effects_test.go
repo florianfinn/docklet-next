@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-11-20
 // License: Apache-2.0
-// Deviations: Original peer identity confirmation contract for issue 531.
+// Deviations: Original peer identity confirmation contract for issue 531. M34 #547: unreadable peers never block; a peer duplicate refuses only name-addressed lookups.
 
 package activity_test
 
@@ -102,8 +102,8 @@ func (e *s4HeldExecutor) ExecuteRuntime(ctx context.Context, c activity.RuntimeC
 	return e.adapter.ExecuteRuntime(ctx, c, w)
 }
 
-func TestS4AcknowledgedPreEffectRechecksHaveZeroEffectsOnChange(t *testing.T) {
-	for _, change := range []string{"unchanged", "new-peer", "changed-reason", "duplicate", "target", "recreated", "archived-target"} {
+func TestS4PreEffectRecheckIgnoresPeersButNotTheTarget(t *testing.T) {
+	for _, change := range []string{"unchanged", "new-peer", "changed-reason", "duplicate", "recreated", "target", "archived-target"} {
 		t.Run(change, func(t *testing.T) {
 			f := newRuntimeServicesFixture(t, false)
 			targetPath := f.project("example-target", "target", "name: target_stack\n"+identitySDKServices)
@@ -111,8 +111,7 @@ func TestS4AcknowledgedPreEffectRechecksHaveZeroEffectsOnChange(t *testing.T) {
 			s4SetRuntimeContainer(f)
 			target := activity.RuntimeTarget{Kind: "stack", ID: "example-target"}
 			_, err := f.adapter.ResolveRuntimeTarget(t.Context(), target)
-			b := s4RuntimeProblem(t, err)
-			require.True(t, b.Confirmable)
+			require.NoError(t, err, "an unreadable peer never blocks admission")
 			held := &s4HeldExecutor{adapter: f.adapter, entered: make(chan struct{}), release: make(chan struct{})}
 			var once sync.Once
 			release := func() { once.Do(func() { close(held.release) }) }
@@ -124,7 +123,6 @@ func TestS4AcknowledgedPreEffectRechecksHaveZeroEffectsOnChange(t *testing.T) {
 			require.NoError(t, runtime.ConfigureLocal(activity.RuntimeLocalConfig{ApplicationContext: t.Context(), Store: store, Executor: held}))
 			c := f.command(activity.RuntimeStopProject, target)
 			c.Store = store
-			c.Options.AcknowledgedUncertainty = b.Uncertainty.Digest
 			admitted, err := runtime.Admit(t.Context(), c)
 			require.NoError(t, err)
 			select {
@@ -141,7 +139,7 @@ func TestS4AcknowledgedPreEffectRechecksHaveZeroEffectsOnChange(t *testing.T) {
 				require.NoError(t, os.WriteFile(filepath.Join(peer, "compose.yaml"), []byte(identitySDKServices), 0600))
 				require.NoError(t, os.WriteFile(filepath.Join(peer, ".env"), []byte("COMPOSE_FILE=nested/compose.yaml\n"), 0600))
 			case "duplicate":
-				require.NoError(t, os.WriteFile(filepath.Join(peer, "compose.yaml"), []byte("name: target_stack\n"+s4MissingService), 0600))
+				require.NoError(t, os.WriteFile(filepath.Join(peer, "compose.yaml"), []byte("name: target_stack\n"+identitySDKServices), 0600))
 			case "target":
 				require.NoError(t, os.WriteFile(filepath.Join(targetPath, "compose.yaml"), []byte("name: changed_target\n"+identitySDKServices), 0600))
 			case "recreated":
@@ -156,21 +154,21 @@ func TestS4AcknowledgedPreEffectRechecksHaveZeroEffectsOnChange(t *testing.T) {
 			result, err := runtime.WaitLocal(ctx, activity.RuntimeRunReference{Store: store, RunID: admitted.ActivityID})
 			require.NoError(t, err)
 			effects := identitySDKEffects(f.http.snapshot()[before:])
-			if change == "unchanged" {
-				require.Equal(t, a.StatusSuccess, result.Status)
-				require.NotEmpty(t, effects, "unchanged admitted uncertainty must permit the intended effect")
-			} else {
-				require.Empty(t, effects, "fresh identity changes must refuse before every Docker mutation")
+			if change == "target" || change == "archived-target" {
+				require.Empty(t, effects, "a changed target must refuse before every Docker mutation")
 				require.Equal(t, a.StatusFailed, result.Status)
+			} else {
+				require.Equal(t, a.StatusSuccess, result.Status, "peer changes, including a new duplicate, never stop a project-ID action")
+				require.NotEmpty(t, effects)
 			}
 			var receipt activity.RuntimeReceipt
 			require.NoError(t, f.db.First(&receipt, "run_id = ?", admitted.ActivityID).Error)
-			require.Equal(t, c.Options.AcknowledgedUncertainty, receipt.AcknowledgedUncertainty)
+			require.Empty(t, receipt.AcknowledgedUncertainty)
 		})
 	}
 }
 
-func TestS4UncertaintyProducerDirectEdgeAndDurableAudit(t *testing.T) {
+func TestS4UnreadablePeerDirectEdgeRunsWithoutAcknowledgement(t *testing.T) {
 	for _, isEdge := range []bool{false, true} {
 		t.Run(map[bool]string{false: "direct", true: "edge"}[isEdge], func(t *testing.T) {
 			f := newRemoteIntegration(t, isEdge)
@@ -178,19 +176,14 @@ func TestS4UncertaintyProducerDirectEdgeAndDurableAudit(t *testing.T) {
 			f.agent.project("example-peer", "peer", "name: ${PEER_NAME:?required}\n"+identitySDKServices)
 			s4SetRuntimeContainer(f.agent)
 			req := a.RuntimeTargetRequest{Registration: a.RuntimeExecutorIdentity{ManagerID: f.store.ManagerID, RegistrationID: f.store.RegistrationID, ExecutorGeneration: f.store.ExecutorGeneration}, Target: activity.RuntimeTarget{Kind: "stack", ID: "example-target"}}
-			_, err := f.sender.Resolve(t.Context(), req)
-			b := s4RuntimeProblem(t, err)
-			require.True(t, b.Confirmable)
-			require.Equal(t, "example-peer", b.PeerID)
-			require.Equal(t, 1, b.Uncertainty.Count)
-			require.Equal(t, "compose.identity-unreadable", b.Uncertainty.Peers[0].Reason)
-			require.Zero(t, f.executeCalls.Load())
-			require.Empty(t, identitySDKEffects(f.agent.http.snapshot()))
+			metadata, err := f.sender.Resolve(t.Context(), req)
+			require.NoError(t, err, "the agent skips an unreadable peer")
+			require.Nil(t, metadata.PeerOverrides)
 			req.AcknowledgedUncertainty = "invalid"
 			_, invalidErr := f.sender.Resolve(t.Context(), req)
 			var invalidProblem *imageDTO.OperationError
 			require.ErrorAs(t, invalidErr, &invalidProblem)
-			require.Equal(t, "runtime.invalid-acknowledgement", invalidProblem.Problem.Code)
+			require.Equal(t, "runtime.invalid-acknowledgement", invalidProblem.Problem.Code, "contract 20 validation stays")
 			require.Equal(t, 400, invalidProblem.Status)
 			req.AcknowledgedUncertainty = ""
 			mux := s4PeerHubRoute(t, f, req)
@@ -207,55 +200,29 @@ func TestS4UncertaintyProducerDirectEdgeAndDurableAudit(t *testing.T) {
 				mux.ServeHTTP(recorder, request)
 				return recorder
 			}
-			publicRefusal := post("")
-			require.Equal(t, 409, publicRefusal.Code, publicRefusal.Body.String())
-			var publicProblem imageDTO.OperationError
-			require.NoError(t, json.Unmarshal(publicRefusal.Body.Bytes(), &publicProblem))
-			require.Equal(t, b, publicProblem.Problem.Blocker, "hub HTTP preserves the sanitized actual remote blocker")
-			// The real agent, transport, and hub HTTP producer share the web fixture.
-			encoded, err := json.Marshal(publicProblem.Problem.Blocker)
-			require.NoError(t, err)
-			require.Contains(t, string(encoded), `"confirmable":true`)
-			fixture, err := os.ReadFile("../../../web/src/data/http/runtime-peer.fixture.json")
-			require.NoError(t, err)
-			require.JSONEq(t, string(fixture), string(encoded), "web fixture must match the actual producer through Direct and Edge")
-			req.AcknowledgedUncertainty = b.Uncertainty.Digest
-			metadata, err := f.sender.Resolve(t.Context(), req)
-			require.NoError(t, err)
-			require.Equal(t, 1, metadata.PeerOverrides.Count)
-			publicAdmission := post(req.AcknowledgedUncertainty)
-			require.Equal(t, 202, publicAdmission.Code, publicAdmission.Body.String())
-			var admitted struct{ Data a.RuntimeAdmission }
-			require.NoError(t, json.Unmarshal(publicAdmission.Body.Bytes(), &admitted))
-			ref := activity.RuntimeRunReference{Store: f.store, RunID: admitted.Data.ActivityID}
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-			require.NoError(t, f.control.WaitDispatch(ctx, ref.RunID))
-			result, err := f.agent.waitLocal(ref.RunID)
-			require.NoError(t, err)
-			require.Equal(t, a.StatusSuccess, result.Status)
-			require.NotEmpty(t, identitySDKEffects(f.agent.http.snapshot()))
-			_, err = f.control.Wait(ctx, ref, nil)
-			require.NoError(t, err)
-			var hubRun activity.Activity
-			require.NoError(t, f.db.First(&hubRun, "id = ?", ref.RunID).Error)
-			require.Equal(t, a.StatusSuccess, hubRun.Status, "the confirmed remote run settles on the hub with its audit row already present")
-			var unknown int64
-			require.NoError(t, f.db.Table("activity_messages").Where("activity_id = ? AND code = ?", ref.RunID, "runtime.outcome-unknown").Count(&unknown).Error)
-			require.Zero(t, unknown)
-			for _, db := range []*runtimeServicesFixture{f.agent} {
-				var row activity.RuntimeReceipt
-				require.NoError(t, db.db.First(&row, "run_id = ?", ref.RunID).Error)
-				require.Equal(t, req.AcknowledgedUncertainty, row.AcknowledgedUncertainty)
-				require.Contains(t, row.PeerOverrides, "example-peer")
+			// A digest from an older hub's earlier confirmation is accepted and ignored.
+			for _, digest := range []string{"", strings.Repeat("a", 64)} {
+				admission := post(digest)
+				require.Equal(t, 202, admission.Code, admission.Body.String())
+				var admitted struct{ Data a.RuntimeAdmission }
+				require.NoError(t, json.Unmarshal(admission.Body.Bytes(), &admitted))
+				ref := activity.RuntimeRunReference{Store: f.store, RunID: admitted.Data.ActivityID}
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				require.NoError(t, f.control.WaitDispatch(ctx, ref.RunID))
+				result, err := f.agent.waitLocal(ref.RunID)
+				require.NoError(t, err)
+				require.Equal(t, a.StatusSuccess, result.Status)
+				_, err = f.control.Wait(ctx, ref, nil)
+				cancel()
+				require.NoError(t, err)
+				var hubRun activity.Activity
+				require.NoError(t, f.db.First(&hubRun, "id = ?", ref.RunID).Error)
+				require.Equal(t, a.StatusSuccess, hubRun.Status)
+				var count int64
+				require.NoError(t, f.db.Table("activity_messages").Where("activity_id = ? AND code = ?", ref.RunID, "runtime.peer-acknowledged").Count(&count).Error)
+				require.Zero(t, count, "nothing was overridden, so nothing is audited")
 			}
-			var count int64
-			require.NoError(t, f.db.Table("activity_messages").Where("activity_id = ? AND code = ?", ref.RunID, "runtime.peer-acknowledged").Count(&count).Error)
-			require.EqualValues(t, 1, count, "remote actual-use audit reaches hub history once")
-			var hubReceipt activity.RuntimeReceipt
-			require.NoError(t, f.db.First(&hubReceipt, "run_id = ?", ref.RunID).Error)
-			require.Equal(t, req.AcknowledgedUncertainty, hubReceipt.AcknowledgedUncertainty)
-			require.Contains(t, hubReceipt.PeerOverrides, "example-peer")
+			require.NotEmpty(t, identitySDKEffects(f.agent.http.snapshot()))
 		})
 	}
 }
@@ -266,8 +233,12 @@ func TestS4UnsafeFileNamesOmittedAndStrictBoundaries(t *testing.T) {
 			f := newRuntimeServicesFixture(t)
 			f.project("example-target", "target", "name: target_stack\n"+identitySDKServices)
 			f.project("example-peer", "peer", "name: target_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n    env_file: ['"+path+"']\n")
+			s4SetRuntimeContainer(f)
 			_, err := f.adapter.ResolveRuntimeTarget(t.Context(), activity.RuntimeTarget{Kind: "stack", ID: "example-target"})
+			require.NoError(t, err, "a project-ID action proceeds despite the duplicate")
+			_, err = f.adapter.ResolveRuntimeTarget(t.Context(), activity.RuntimeTarget{Kind: "container", ID: runtimeContainerID})
 			b := s4RuntimeProblem(t, err)
+			require.Equal(t, "compose.duplicate", b.Reason, "the container's parent name is ambiguous")
 			require.False(t, b.Confirmable)
 			require.Empty(t, b.File, "unsafe paths must never be displayed")
 		})

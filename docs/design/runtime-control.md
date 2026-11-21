@@ -193,28 +193,24 @@ Compose/include/label inputs, malformed environment files and permission errors
 remain undeterminable. Metadata and executable selection and names must agree.
 No bind preparation, cache authority or project writes participate.
 
-A known distinct degraded peer passes automatically. Proven duplicates take
-precedence after the full scan and cannot be acknowledged. Undeterminable peers
-produce a confirmable refusal with a SHA-256 digest of all sorted `peerId:reason`
-lines, total count and up to sixteen display peers. A deliberate confirmation
-resends the original intent with `acknowledgedUncertainty`; the fresh resolver
-accepts only an equal digest. Target read failures remain non-overridable.
-Stack start, stop, restart, down, deploy, redeploy and stack update/restore carry the
-confirmation. Container recreate, container image update and container image restore
-requests have no acknowledgement member, so the web shows their refusal without a
-confirm control; extending those three bodies is the way to add it later.
-Archived identity remains usable as a parent while the archived stack mutation
-guard remains in force. The existing definition-invalid marker gains a concrete
-reason and a safe project-relative missing filename; live/unknown rows retain
-its existing coverage limit.
+Peers do not gate other targets ([independent stacks](stack-env-and-peers.md)).
+A peer whose model cannot be read is skipped. A shared effective Compose name
+refuses only name-addressed lookups with `compose.duplicate`, because such a
+lookup needs an unambiguous parent; a container's parent from its project label
+is the typical case. An action addressed by project ID proceeds, and the
+duplicate is a warning on both stacks. A read failure of the target itself stays
+non-overridable. Archived identity remains usable as a parent while the archived
+stack mutation guard remains in force. The existing definition-invalid marker
+carries a concrete reason and a safe project-relative missing filename.
 
-The admitted digest participates in request and gate identity only when nonempty,
-and survives admission, receiver intake, retained reconstruction and the pre-effect
-recheck. Receipts own the digest and actual-use override snapshot independently
-of history; catalogue-backed activity audit records only overrides freshly used.
-New uncertainty, a changed target or a proven duplicate at the pre-effect seam
-settles with zero effects. External edits after that read remain outside atomic
-application control. See [the agent contract](api-contract.md#peer-identity-confirmation-agent-contract-v20)
+Agent contract 20 keeps the acknowledgement member, its validation and receipt
+reconstruction, so released 1.2.0 hubs and agents stay compatible. New producers
+never emit the confirmable blocker. A stored or resent digest is accepted and
+changes nothing. The web keeps its confirmation dialog for 1.2.0 agents, which
+still produce it on their own hosts. The pre-effect recheck applies the same
+rule: a peer change never stops a project-ID action, while a changed target or
+parent settles with zero effects. External edits after that read remain outside
+atomic application control. See [the agent contract](api-contract.md#peer-identity-confirmation-agent-contract-v20)
 for Direct/Edge announcements and mixed-version behavior.
 
 | Target | Stored primary scope | Conflict predicate in the same environment |

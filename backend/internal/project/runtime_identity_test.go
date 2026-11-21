@@ -133,16 +133,19 @@ func TestResolveRuntimeProjectIdentityEnvDefaultAndUnreadable(t *testing.T) {
 	require.False(t, found)
 }
 
-func TestResolveRuntimeProjectIdentityUnrelatedUnreadableRowFailsClosed(t *testing.T) {
+func TestResolveRuntimeProjectIdentityUnrelatedUnreadableRowIsSkipped(t *testing.T) {
 	svc, root := runtimeIdentityFixture(t)
 	healthy := runtimeIdentityProject(t, svc, root, "example-project-healthy", "healthy", "name: healthy_stack\nservices:\n  app:\n    image: example.invalid/app:1\n")
 	unrelated := runtimeIdentityProject(t, svc, root, "example-project-broken", "broken", "not: [valid")
 	for _, selector := range []struct{ id, name string }{{healthy.ID, ""}, {"", "healthy_stack"}} {
 		ref, found, err := svc.ResolveRuntimeProjectIdentity(t.Context(), selector.id, selector.name)
-		require.Error(t, err, "an unreadable project cannot be skipped during ambiguity checking")
-		require.False(t, found)
-		require.Empty(t, ref.ID)
+		require.NoError(t, err, "an unreadable project is its own problem")
+		require.True(t, found)
+		require.Equal(t, healthy.ID, ref.ID)
 	}
+	_, found, err := svc.ResolveRuntimeProjectIdentity(t.Context(), unrelated.ID, "")
+	require.Error(t, err, "the unreadable project itself stays unavailable")
+	require.False(t, found)
 	require.NoError(t, os.WriteFile(filepath.Join(unrelated.Path, "compose.yaml"), []byte("name: unrelated_stack\nservices:\n  app:\n    image: example.invalid/app:1\n"), 0644))
 	ref, found, err := svc.ResolveRuntimeProjectIdentity(t.Context(), healthy.ID, "")
 	require.NoError(t, err)
@@ -374,8 +377,8 @@ func TestProjectIdentityReadOnlyAndAvailabilityRecovery(t *testing.T) {
 			}
 			for _, selector := range []struct{ id, name string }{{row.ID, ""}, {"", "healthy_stack"}} {
 				_, found, err := svc.ResolveRuntimeProjectIdentity(t.Context(), selector.id, selector.name)
-				require.Error(t, err, "unknown peers block exact ID and parent/name lookup")
-				require.False(t, found)
+				require.NoError(t, err, "unknown peers never block ID or parent/name lookup")
+				require.True(t, found)
 			}
 			if failure == "permission-locked" {
 				require.NoError(t, os.Chmod(compose, 0600))
@@ -393,14 +396,14 @@ func TestProjectIdentityReadOnlyAndAvailabilityRecovery(t *testing.T) {
 	}
 	require.NoError(t, svc.db.Model(peer).Updates(map[string]any{"is_archived": true}).Error)
 	require.NoError(t, os.WriteFile(filepath.Join(peer.Path, "compose.yaml"), []byte("name: healthy_stack\n"+identityServices), 0600))
-	for _, selector := range []struct{ id, name string }{{row.ID, ""}, {peer.ID, ""}, {"", "healthy_stack"}, {"missing-id", "healthy_stack"}, {row.ID, "other_stack"}} {
-		_, found, err := svc.ResolveRuntimeProjectIdentity(t.Context(), selector.id, selector.name)
-		if selector.id != "missing-id" && selector.name != "other_stack" {
-			require.Error(t, err)
-		} else {
-			require.NoError(t, err)
-		}
-		require.False(t, found)
+	// An archived same-name peer: ID actions proceed, the name stays ambiguous.
+	for _, tc := range []struct {
+		id, name    string
+		fail, found bool
+	}{{row.ID, "", false, true}, {peer.ID, "", false, true}, {"", "healthy_stack", true, false}, {row.ID, "healthy_stack", true, false}, {"missing-id", "healthy_stack", false, false}, {row.ID, "other_stack", false, false}} {
+		_, found, err := svc.ResolveRuntimeProjectIdentity(t.Context(), tc.id, tc.name)
+		require.Equal(t, tc.fail, err != nil, "%s/%s: %v", tc.id, tc.name, err)
+		require.Equal(t, tc.found, found, "%s/%s", tc.id, tc.name)
 	}
 }
 

@@ -7,9 +7,7 @@
 package project
 
 import (
-	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -26,9 +24,12 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 	return ref, found, err
 }
 
-// Every persisted row contributes fresh evidence before duplicate precedence or
-// an acknowledgement is evaluated. Archived rows retain ownership too.
-func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.Context, projectID, composeName, acknowledgement string) (projecttypes.Reference, bool, *imageDTO.RuntimePeerOverrides, error) {
+// Every persisted row contributes fresh evidence. A peer whose model cannot be
+// read is that stack's own problem and is skipped (#547). A shared Compose name
+// refuses only name-addressed lookups, whose parent must be unambiguous; a
+// project-ID action proceeds and the duplicate is a warning on both stacks.
+// The acknowledgement stays accepted for agent contract 20 but is never needed.
+func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.Context, projectID, composeName, _ string) (projecttypes.Reference, bool, *imageDTO.RuntimePeerOverrides, error) {
 	empty := projecttypes.Reference{}
 	if projectID == "" && composeName == "" {
 		return empty, false, nil, nil
@@ -40,40 +41,27 @@ func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.C
 	type evidence struct {
 		row        *Project
 		name, file string
-		err        error
 	}
 	all := make([]evidence, 0, len(rows))
 	owners := map[string][]int{}
 	match := -1
-	var targetErr error
-	var unknown []imageDTO.RuntimeIdentityPeer
 	for i := range rows {
 		row := &rows[i]
 		name, file, err := s.runtimeComposeEvidence(ctx, row)
-		all = append(all, evidence{row, name, file, err})
-		if err == nil && name != "" {
+		if err != nil {
+			if row.ID == projectID {
+				return empty, false, nil, fmt.Errorf("read runtime project identity: %w", err)
+			}
+			all = append(all, evidence{row: row})
+			continue
+		}
+		all = append(all, evidence{row, name, file})
+		if name != "" {
 			owners[name] = append(owners[name], i)
 			if projectID != "" && row.ID == projectID || projectID == "" && name == composeName {
 				match = i
 			}
 		}
-		if err != nil {
-			if row.ID == projectID {
-				targetErr = err
-			}
-			reason := "compose.identity-unreadable"
-			var missing *projects.MissingServiceEnvironmentError
-			if errors.As(err, &missing) {
-				reason = "compose.env-file-missing"
-			}
-			if UnsupportedUpdateLayout(err) != nil {
-				reason = "compose.selection-unsupported"
-			}
-			unknown = append(unknown, imageDTO.RuntimeIdentityPeer{PeerID: row.ID, Name: imageDTO.RuntimeDisplayName(row.Name, row.ID), Reason: reason, Archived: row.IsArchived, File: runtimeIdentityDisplayFile(file)})
-		}
-	}
-	if targetErr != nil {
-		return empty, false, nil, fmt.Errorf("read runtime project identity: %w", targetErr)
 	}
 	if match < 0 {
 		return empty, false, nil, nil
@@ -86,7 +74,7 @@ func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.C
 	if composeName != "" && current.name != composeName {
 		return empty, false, nil, nil
 	}
-	if len(owners[current.name]) != 1 {
+	if composeName != "" && len(owners[current.name]) != 1 {
 		peer := current
 		for _, i := range owners[current.name] {
 			if i != match {
@@ -100,18 +88,7 @@ func (s *ProjectService) ResolveRuntimeProjectIdentityAcknowledged(ctx context.C
 	if current.file != "" {
 		return empty, false, nil, fmt.Errorf("target service environment unavailable")
 	}
-	uncertainty := imageDTO.NewRuntimeUncertainty(unknown)
-	if uncertainty != nil && uncertainty.Digest != acknowledgement {
-		first := uncertainty.Peers[0]
-		blocker := &imageDTO.RuntimeIdentityBlocker{Name: first.Name, PeerID: first.PeerID, Archived: first.Archived, Reason: "compose.name-undeterminable", Confirmable: true, Uncertainty: uncertainty}
-		return empty, false, nil, runtimeIdentityProblem(blocker)
-	}
-	var used *imageDTO.RuntimePeerOverrides
-	if uncertainty != nil {
-		slices.SortFunc(unknown, func(a, b imageDTO.RuntimeIdentityPeer) int { return cmp.Compare(a.PeerID, b.PeerID) })
-		used = &imageDTO.RuntimePeerOverrides{Count: len(unknown), Peers: slices.Clone(unknown[:min(len(unknown), 64)])}
-	}
-	return projecttypes.Reference{ID: current.row.ID, Name: current.name}, true, used, nil
+	return projecttypes.Reference{ID: current.row.ID, Name: current.name}, true, nil, nil
 }
 
 func runtimeIdentityProblem(blocker *imageDTO.RuntimeIdentityBlocker) error {

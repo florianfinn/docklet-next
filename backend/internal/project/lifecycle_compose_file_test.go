@@ -60,7 +60,7 @@ func TestLifecycleRefusesNestedComposeFileBaseAsUnsupported(t *testing.T) {
 }
 
 // Update checks refuse a nested base before reading details; a peer's nested base
-// keeps blocking identity lookups but never reads as the target's own refusal.
+// is that peer's own problem and never blocks or reads as the target's refusal.
 func TestNestedComposeFileRefusalForChecksAndIdentity(t *testing.T) {
 	f := newLifecycleFixture(t)
 	require.NoError(t, f.service.UpdateLayoutRefusal(t.Context(), f.project.ID))
@@ -74,7 +74,7 @@ func TestNestedComposeFileRefusalForChecksAndIdentity(t *testing.T) {
 	lifecycleCode(t, f.service.UpdateLayoutRefusal(t.Context(), peer.ID), "update.image-binding-unsupported")
 	_, _, err := f.service.ResolveRuntimeProjectIdentity(t.Context(), peer.ID, "")
 	require.True(t, errors.Is(err, projects.ErrComposeFileNestedBase), "%v", err)
-	_, _, err = f.service.ResolveRuntimeProjectIdentity(t.Context(), f.project.ID, "")
-	require.Error(t, err)
-	require.False(t, errors.Is(err, projects.ErrComposeFileNestedBase), "a peer's layout must not read as the target's refusal")
+	_, found, err := f.service.ResolveRuntimeProjectIdentity(t.Context(), f.project.ID, "")
+	require.NoError(t, err, "a peer's layout must not block the target")
+	require.True(t, found)
 }

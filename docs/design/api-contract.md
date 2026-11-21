@@ -425,3 +425,9 @@ Receipts retain `acknowledged_uncertainty` and a bounded `peer_overrides` snapsh
 independently of activity history. Actual-use audit uses
 `runtime.peer-acknowledged` with count and at most sixteen safe peer descriptions.
 Unused supplied acknowledgements do not create audit entries.
+
+Since M34 an M34 or newer hub or agent never produces the confirmable response:
+unreadable peers are skipped and a duplicate refuses only name-addressed lookups
+([independent stacks](stack-env-and-peers.md)). The v20 wire, validation and
+receipt fields stay unchanged for 1.2.0 peers. A supplied digest is accepted and
+leaves the result unchanged.

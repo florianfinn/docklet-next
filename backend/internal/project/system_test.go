@@ -156,8 +156,8 @@ func TestSyncRemovesStoredDockletInstallDirectory(t *testing.T) {
 	}).Error)
 	server := newProjectRuntimeDockerServer(t, nil)
 	service := NewProjectService(db, settings, nil, nil, &docker.DockerClientService{Client: newTestDockerClient(t, server)}, nil, nil, config.Load(), nil, nil)
-	_, _, err = service.ResolveRuntimeProjectIdentity(t.Context(), "user", "")
-	require.Error(t, err, "precondition: the stored, unreadable install row blocks")
+	_, _, err = service.ResolveRuntimeProjectIdentity(t.Context(), "docklet", "")
+	require.Error(t, err, "precondition: the stored install row is unreadable")
 
 	require.NoError(t, service.SyncProjectsFromFileSystem(t.Context()))
 	var remaining []string

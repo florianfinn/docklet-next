@@ -2,16 +2,14 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-11-20
 // License: Apache-2.0
-// Deviations: Original peer identity confirmation contract for issue 531.
+// Deviations: Original peer identity confirmation contract for issue 531. M34 #547: unreadable peers never produce a refusal for any hub version.
 
 package activity_test
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -19,16 +17,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	a "github.com/florianfinn/docklet-next/types/activity"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type s4CapturedWriter struct {
-	*httptest.ResponseRecorder
-	underlying http.ResponseWriter
-}
-
-func (w *s4CapturedWriter) Unwrap() http.ResponseWriter { return w.underlying }
 
 func TestS4LegacyAgentAndHubContractsDirectEdge(t *testing.T) {
 	for _, isEdge := range []bool{false, true} {
@@ -83,40 +73,20 @@ func TestS4LegacyAgentAndHubContractsDirectEdge(t *testing.T) {
 			_, err = old.Execute(t.Context(), a.RuntimeExecutionEnvelope{Options: a.RuntimeOptions{AcknowledgedUncertainty: req.AcknowledgedUncertainty}})
 			require.ErrorIs(t, err, remenv.ErrAgentUpdateRequired)
 			require.Len(t, bodies, before)
+			// An unreadable peer is skipped by every producer, so no hub version sees a refusal.
 			f.agent.project("example-peer", "peer", "name: ${PEER_NAME:?required}\n"+identitySDKServices)
 			req.AcknowledgedUncertainty = ""
-			_, oldRefusal := old.Resolve(t.Context(), req)
-			legacyBlocker := s4RuntimeProblem(t, oldRefusal)
-			require.False(t, legacyBlocker.Confirmable, "a host below v20 must not expose confirmation even when a newer receiver responds")
-			require.Empty(t, legacyBlocker.PeerID)
-			require.Nil(t, legacyBlocker.Uncertainty)
+			_, err = old.Resolve(t.Context(), req)
+			require.NoError(t, err, "a host below v20 never needs a confirmation")
 			for _, header := range []string{"", "invalid", "19"} {
 				f.handlerMu.Lock()
 				f.receiverHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					r.Header.Set(a.RuntimeHubContractHeader, header)
-					rec := httptest.NewRecorder()
-					previous.ServeHTTP(&s4CapturedWriter{ResponseRecorder: rec, underlying: w}, r)
-					var body struct {
-						Error struct {
-							Blocker map[string]any `json:"blocker"`
-						} `json:"error"`
-					}
-					assert.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-					assert.Len(t, body.Error.Blocker, 3, "unannounced hubs get only the legacy three-field blocker: header=%q status=%d body=%s", header, rec.Code, rec.Body.String())
-					assert.Equal(t, "compose.identity-unreadable", body.Error.Blocker["reason"])
-					for key, values := range rec.Header() {
-						w.Header()[key] = values
-					}
-					w.WriteHeader(rec.Code)
-					_, _ = w.Write(rec.Body.Bytes())
+					previous.ServeHTTP(w, r)
 				})
 				f.handlerMu.Unlock()
-				req.AcknowledgedUncertainty = ""
 				_, err = f.sender.Resolve(t.Context(), req)
-				b := s4RuntimeProblem(t, err)
-				require.False(t, b.Confirmable)
-				require.Nil(t, b.Uncertainty)
-				require.Empty(t, b.PeerID)
+				require.NoError(t, err, "header=%q", header)
 			}
 			f.handlerMu.Lock()
 			f.receiverHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -2,7 +2,7 @@
 // Revision: 2b938d4fceea508777a188307ba1f8bf356d78fc59ad898bf0adead266953182
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Fresh project identity and environment proofs at the actual Compose SDK HTTP boundary.
+// Deviations: Fresh project identity and environment proofs at the actual Compose SDK HTTP boundary. M34 #547: peer changes never stop an ID action; ambiguous container parents still refuse.
 
 package activity_test
 
@@ -121,7 +121,7 @@ func TestRuntimeExecutorIdentityFreshNameHasZeroEffects(t *testing.T) {
 	}
 }
 
-func TestRuntimeExecutorIdentityUncertainOwnershipHasZeroEffects(t *testing.T) {
+func TestRuntimeExecutorIdentityPeerChangesAndTargetEffects(t *testing.T) {
 	for _, change := range []string{"duplicate", "archived-duplicate", "same-mtime-peer", "missing-peer", "malformed-peer", "malformed-primary"} {
 		for _, kind := range []string{"stack", "container"} {
 			t.Run(change+"/"+kind, func(t *testing.T) {
@@ -156,9 +156,17 @@ func TestRuntimeExecutorIdentityUncertainOwnershipHasZeroEffects(t *testing.T) {
 				}
 				before := len(f.http.snapshot())
 				err = identitySDKExecute(t, f, command)
-				require.Empty(t, identitySDKEffects(f.http.snapshot()[before:]), "unknown or duplicate owner must issue zero mutating HTTP")
-				t.Logf("change=%s kind=%s mutatingHTTP=%d", change, kind, len(identitySDKEffects(f.http.snapshot()[before:])))
-				require.Error(t, err)
+				effects := identitySDKEffects(f.http.snapshot()[before:])
+				t.Logf("change=%s kind=%s mutatingHTTP=%d", change, kind, len(effects))
+				duplicate := change == "duplicate" || change == "archived-duplicate" || change == "same-mtime-peer"
+				// The target's own read and an ambiguous container parent refuse; peers never do.
+				if change == "malformed-primary" || duplicate && kind == "container" {
+					require.Empty(t, effects, "an unreadable target or ambiguous parent must issue zero mutating HTTP")
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+					require.NotEmpty(t, effects)
+				}
 			})
 		}
 	}
