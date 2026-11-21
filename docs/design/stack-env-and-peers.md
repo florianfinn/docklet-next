@@ -127,13 +127,13 @@ Docklet keeps only the checks that protect the action's own target.
   - **Fresh checks.** Update, restore, recovery and the restart barrier
     recompute the external hashes before any image, tag, file or deploy effect
     and compare them with the snapshot. A mismatch settles with zero effects as
-    `update.external-input-changed`. Recovery never adopts a fresh model whose
+    `update.target-changed`. Recovery never adopts a fresh model whose
     external hashes differ.
   - A baseline counts as available only while the current external hashes
     equal the recorded ones. Otherwise it reports `update.config-drift`, and
     deploying once captures a new baseline.
   - Restoring a point whose external hashes differ from the current files is
-    refused with the new code `update.external-input-changed`. Docklet cannot
+    refused with `update.target-changed`. Docklet cannot
     reconstruct those files.
   - The project-root rule for writable files stays as it is.
   - Old snapshots without `External` decode as an empty list and so differ from
@@ -209,8 +209,10 @@ Rejected alternatives:
   The new values go into `types/project`, OpenAPI, the generated DTOs, the
   wire-code catalogue and both locales. A focused drift test keeps them outside
   the fingerprint. Clients render an unknown reason as the generic hint.
-- **New code.** `update.external-input-changed` goes into `types/updater`, the
-  catalogue and both locales.
+- **No new code (AUTO-18).** The updater enums are part of the agent
+  fingerprint, so an external input change reuses existing codes:
+  `update.config-drift` for the baseline, and `update.target-changed` at the
+  effect, at the restart barrier and for a restore.
 - **No migration.** Migration 006 is untouched. Snapshot payloads gain an
   optional field (see Lifecycle).
 
@@ -230,10 +232,10 @@ Rejected alternatives:
 | 10 | replacement | malformed `.env` with recorded selection; stale keys in `.env`; conflicting `COMPOSE_FILE`/`COMPOSE_PROFILES`; ordered files; AutoInject on/off | recorded bytes replace `.env` before selection | resolved-input function | loader tests | merge `.env` first |
 | 11 | cache | label added/removed/conflicting; same-mtime byte change; symlink retarget inside root; repaired file | cache key changes; current label always resolved | `cache.go` lookup | cache tests | resolve label after cache lookup / omit content hash |
 | 12 | deploy | Docklet redeploy of recorded-selection project | every created/recreated service carries the same `environment_file`; fresh read stays readable | `applyCustomLabelsInternal` | model label test + sandbox P4 | omit the label |
-| 13 | lifecycle | external file inside root but outside the stack; baseline query, update preflight, effect; unused key changed between admission and effect; restore and interrupted recovery | hash-checked before effects, never written; drift → `config-drift` / zero-effect `update.external-input-changed`; recovery does not adopt a changed external | `lifecycle_inputs.go:84,146`, `lifecycle_baseline.go:33`, `lifecycle_preflight.go:43`, `lifecycle_recovery.go:52,70,129,203` | lifecycle tests with write counter on external path | include external file in the writable set / omit `External` from `SavedRevision` / skip the recovery comparison |
+| 13 | lifecycle | external file inside root but outside the stack; baseline query, update preflight, effect; unused key changed between admission and effect; restore and interrupted recovery | hash-checked before effects, never written; drift → `config-drift` / zero-effect `update.target-changed`; recovery does not adopt a changed external | `lifecycle_inputs.go:84,146`, `lifecycle_baseline.go:33`, `lifecycle_preflight.go:43`, `lifecycle_recovery.go:52,70,129,203` | lifecycle tests with write counter on external path | include external file in the writable set / omit `External` from `SavedRevision` / skip the recovery comparison |
 | 14 | persisted state | sealed point and baseline payloads from 1.2.0, with stored revisions | `Hash(Open(payload))` unchanged; reopened recovery accepts them | `lifecycle/store.go` Hash/Open, `snapshot.go` alias | test with real old sealed payloads | encode empty `External` |
 | 15 | leak | sentinel in a recorded file used in environment, `command` and a label; `${VAR:?hint}` with expanded sentinel; malformed dotenv; panic path | absent from hub and executor logs, all project APIs, activity output; projections show placeholders | every listed sink; service projections | log capture + body assertions per sink class and per field | restore a raw-error sink / project the interpolated model |
-| 16 | new codes | definition reasons, `update.external-input-changed` | rendered in en/de; unknown reason → generic hint; older producers omit optional fields | types, OpenAPI, catalogue, web | wire catalogue, OpenAPI drift, mapper and rendering tests | omit a key / map unknown to blank |
+| 16 | new codes | definition reasons (updater codes reused, AUTO-18) | rendered in en/de; unknown reason → generic hint; older producers omit optional fields | types, OpenAPI, catalogue, web | wire catalogue, OpenAPI drift, mapper and rendering tests | omit a key / map unknown to blank |
 | 17 | transport parity | unreadable peer, recorded selection and label preservation on Direct and Edge | same results as hub-local | real sender and receiver adapters | parity test over both transports | agent path keeps old resolver |
 | 18 | mixed versions | new hub + 1.2.0 agent; 1.2.0 hub + new agent with stray or retained digest; v18/v19 notice | as in Contract | `runtime-commands.ts`, `runtime_sender.go:236` | dialog test, digest acceptance test, notice test | delete dialog branch / reject valid digest |
 | 19 | migration | none for receipts; snapshot field optional | manifest unchanged | migration guard | existing guard | — |
