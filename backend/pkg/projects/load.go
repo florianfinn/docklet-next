@@ -739,7 +739,14 @@ func ValidateComposeContentForUpdate(ctx context.Context,
 	overrideFileName string,
 	lenient bool,
 ) (err error) {
-	defer func() { err = SafeError(err) }()
+	// Editor errors stay detailed for the stack's own files; once recorded env
+	// files take part, only the classified problem may leave (values never in API).
+	recorded := false
+	defer func() {
+		if recorded {
+			err = SafeError(err)
+		}
+	}()
 	defer func() {
 		if panicErr := utils.PanicToError(recover()); panicErr != nil {
 			err = fmt.Errorf("compose file contains invalid syntax: %w", panicErr)
@@ -747,6 +754,7 @@ func ValidateComposeContentForUpdate(ctx context.Context,
 	}()
 
 	input, inputErr := ResolveComposeInputs(ctx, projectsDirectory, projectPath, false)
+	recorded = input != nil && input.State != "none"
 	if inputErr == nil {
 		ctx = WithResolvedInputs(ctx, input)
 	} else if input != nil && input.State != "none" {

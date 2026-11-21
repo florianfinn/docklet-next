@@ -8,6 +8,8 @@ package project
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -244,4 +246,63 @@ func TestRecordedValidationDoesNotCreateConventionalEnv(t *testing.T) {
 	require.Equal(t, "UNUSED=original\n", readRecordedLifecycleFile(t, path))
 	_, _, err := f.service.loadComposeProjectForProject(ctx, f.project, nil)
 	require.NoError(t, err)
+}
+
+func TestRecordedProjectionTypedFieldsStayReadableAndValueFree(t *testing.T) {
+	f := newLifecycleFixture(t)
+	ctx, path, _, _ := recordedLifecycle(t, f)
+	source := `name: example-stack
+services:
+  app:
+    image: registry.example.com/app:${TAG}
+    build: .
+    ports: ["${PORT}:80"]
+    cpus: ${CPUS}
+    environment:
+      VALUE: ${VALUE}
+    healthcheck:
+      test: [CMD, "true"]
+      interval: ${INTERVAL}
+    deploy:
+      replicas: ${REPL}
+`
+	require.NoError(t, os.WriteFile(path, []byte("VALUE=recorded-sentinel\nTAG=1.0.0\nPORT=18443\nCPUS=0.5\nINTERVAL=17s\nREPL=3\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, "compose.yaml"), []byte(source), 0600))
+	model, _, err := f.service.loadComposeProjectForProject(ctx, f.project, nil)
+	require.NoError(t, err, "precondition: the executable load succeeds")
+	projected, err := projects.ProjectServiceProjection(ctx, model, f.root, nil)
+	require.NoError(t, err, "a typed ${VAR} field never makes the stack unreadable")
+	service := projected.Services["app"]
+	require.Equal(t, "registry.example.com/app:1.0.0", service.Image)
+	require.NotNil(t, service.Build, "build presence survives")
+	body, err := json.Marshal(projected)
+	require.NoError(t, err)
+	for _, value := range []string{"recorded-sentinel", "18443", "17s"} {
+		require.NotContains(t, string(body), value)
+	}
+	details := projectDetailsForRecordedProjection(ctx, f)
+	require.Len(t, details, 1, "services[] stays available")
+	require.Equal(t, "app", details[0].Name)
+}
+
+func TestRecordedFailedRebuildRollsBackAfterExternalChange(t *testing.T) {
+	f := newLifecycleFixture(t)
+	ctx, path, _, intent := recordedLifecycle(t, f)
+	writes := recordedWriteCounter(t, path)
+	rebuild := *intent
+	rebuild.Selections = []dto.ImageSelection{intent.Selections[0]}
+	rebuild.Selections[0].Kind, rebuild.Selections[0].Reference = "rebuild", "registry.example.com/app:1.0.0"
+	f.up = func(context.Context, *compose.Project) error {
+		require.NoError(t, os.WriteFile(path, []byte("UNUSED=changed\n"), 0600))
+		return errors.New("synthetic deployment failure")
+	}
+	_, err := f.service.ExecuteImageLifecycle(ctx, f.project.ID, uuid.NewString(), f.registration, &rebuild, user.Actor{ID: "operator"})
+	require.Error(t, err)
+	var uncertain *dto.UncertainImageEffect
+	require.False(t, errors.As(err, &uncertain), "the compensating re-tag reads no env input, so it is not gated: %v", err)
+	f.mu.Lock()
+	tag := f.tags["registry.example.com/app:1.0.0"]
+	f.mu.Unlock()
+	require.Equal(t, lifecycleOldID, tag, "the previous image is tagged back")
+	require.Zero(t, *writes)
 }

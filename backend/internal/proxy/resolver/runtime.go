@@ -77,6 +77,27 @@ func (r *Runtime) project(ctx context.Context, name string) (Target, error) {
 	}
 	return Target{ProjectID: rows[0].ID, Directory: rows[0].Path, Project: name, AutoInject: r.AutoInject}, nil
 }
+
+// recordedInputs refuses stacks whose containers record an env file: the
+// resolver's .env edit would be inert and its recreate would drop the label.
+func (r *Runtime) recordedInputs(ctx context.Context, dir string) error {
+	if r.List == nil {
+		return nil
+	}
+	ctx = projects.WithComposeContainerLabels(ctx, func(ctx context.Context) ([]map[string]string, error) {
+		rows, err := r.List(ctx)
+		labels := make([]map[string]string, 0, len(rows))
+		for _, row := range rows {
+			labels = append(labels, row.Labels)
+		}
+		return labels, err
+	})
+	input, _ := projects.ResolveComposeInputs(ctx, r.ProjectsDirectory, dir, false)
+	if input != nil && input.State != "none" {
+		return dto.Fail(dto.EnvConflict, 422)
+	}
+	return nil
+}
 func (r *Runtime) Prepare(ctx context.Context, q dto.ResolverApplyRequest) (Target, error) {
 	i := q.Instance
 	if i.Kind != dto.Traefik || i.Source.Kind != dto.ProjectSource || i.Source.ReadOnly {
@@ -95,6 +116,9 @@ func (r *Runtime) Prepare(ctx context.Context, q dto.ResolverApplyRequest) (Targ
 		return t, err
 	}
 	t.Service = service
+	if err = r.recordedInputs(ctx, t.Directory); err != nil {
+		return t, err
+	}
 	if i.Source.Canonical != t.Directory && !strings.HasPrefix(i.Source.Canonical, t.Directory+"/") {
 		return t, layout(dto.StaticOutsideProject)
 	}
@@ -222,6 +246,9 @@ func (r *Runtime) Preflight(ctx context.Context, t Target) error {
 	current, err := r.project(ctx, t.Project)
 	if err != nil || current.ProjectID != t.ProjectID || current.Directory != t.Directory {
 		return dto.Fail(dto.TargetUnclear, 409)
+	}
+	if err = r.recordedInputs(ctx, t.Directory); err != nil {
+		return err
 	}
 	file, err := projects.DetectComposeFile(ctx, r.ProjectsDirectory, t.Directory)
 	if err != nil || file != path.Join(t.Directory, t.Compose) {

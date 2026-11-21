@@ -14,6 +14,8 @@ import (
 
 // ProjectServiceProjection returns an isolated definition copy; only image is
 // copied from execution. No env-file resolution or AutoInject enters this copy.
+// A raw load that cannot type a `${VAR}` field never makes the stack unreadable:
+// it falls back to a value-free service list.
 func ProjectServiceProjection(ctx context.Context, model *compose.Project, root string, mapper *PathMapper) (*compose.Project, error) {
 	input, err := ResolveComposeInputs(ctx, root, model.WorkingDir, false)
 	if err != nil {
@@ -32,11 +34,31 @@ func ProjectServiceProjection(ctx context.Context, model *compose.Project, root 
 		o.SkipResolveEnvironment = true
 	}, false, nil, nil, nil)
 	if err != nil {
-		return nil, err
+		return valueFreeProjection(model), nil
 	}
 	for key, service := range projection.Services {
 		service.Image = model.Services[key].Image
 		projection.Services[key] = service
 	}
 	return projection, nil
+}
+
+// valueFreeProjection keeps only names, images, build presence, dependency keys
+// and conditions; every other field could carry a recorded value.
+func valueFreeProjection(model *compose.Project) *compose.Project {
+	out := &compose.Project{Name: model.Name, WorkingDir: model.WorkingDir, ComposeFiles: model.ComposeFiles, Services: compose.Services{}}
+	for key, service := range model.Services {
+		minimal := compose.ServiceConfig{Name: service.Name, Image: service.Image}
+		if service.Build != nil {
+			minimal.Build = &compose.BuildConfig{}
+		}
+		if len(service.DependsOn) > 0 {
+			minimal.DependsOn = compose.DependsOnConfig{}
+			for dep, cfg := range service.DependsOn {
+				minimal.DependsOn[dep] = compose.ServiceDependency{Condition: cfg.Condition, Required: cfg.Required, Restart: cfg.Restart}
+			}
+		}
+		out.Services[key] = minimal
+	}
+	return out
 }

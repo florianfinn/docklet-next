@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture. M34 #548: recorded Compose environment inputs.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture.
 
 package project
 
@@ -188,8 +188,8 @@ func TestProjectService_UpdateProject_ReturnsEnvParseErrorDuringComposeValidatio
 
 	require.Error(t, err)
 	assert.Nil(t, updated)
-	assert.Contains(t, err.Error(), "invalid compose file: load compose project: compose.identity-unreadable")
-	assert.NotContains(t, err.Error(), "BROKEN")
+	assert.Contains(t, err.Error(), "invalid compose file: parse provided env content")
+	assert.Contains(t, err.Error(), "parse env")
 }
 
 func TestProjectService_GetProjectDetails_ReturnsEffectiveEnvContent(t *testing.T) {

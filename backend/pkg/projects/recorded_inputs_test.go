@@ -82,6 +82,20 @@ func TestRecordedInputSafeRead(t *testing.T) {
 		})
 	}
 }
+func TestRecordedInputSymlinkedProjectsRoot(t *testing.T) {
+	root, _, _, _ := recordedFixture(t)
+	link := filepath.Join(t.TempDir(), "projects")
+	require.NoError(t, os.Symlink(root, link))
+	for name, base := range map[string]string{"configured": link, "resolved": root} {
+		t.Run(name, func(t *testing.T) {
+			label := map[string]string{"com.docker.compose.project.working_dir": filepath.Join(base, "stack"), "com.docker.compose.project.config_files": filepath.Join(root, "stack", "compose.yaml"), EnvironmentFileLabel: filepath.Join(base, "runtime.env")}
+			input, err := ResolveComposeInputs(recordedContext(t, label), link, filepath.Join(link, "stack"), false)
+			require.NoError(t, err)
+			require.Equal(t, "recorded", input.State)
+			require.Equal(t, "recorded-sentinel", input.Environment["VALUE"])
+		})
+	}
+}
 func TestRecordedInputDescriptorBytesAndFlags(t *testing.T) {
 	root, dir, env, label := recordedFixture(t)
 	inside := filepath.Join(root, "inside")

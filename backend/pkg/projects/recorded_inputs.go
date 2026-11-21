@@ -172,8 +172,9 @@ func pathBelow(root, path string) bool {
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-func (i *ResolvedInputs) readRecorded(rootPath string, inject bool) error {
-	rootPath, err := filepath.EvalSymlinks(rootPath)
+func (i *ResolvedInputs) readRecorded(configured string, inject bool) error {
+	configured = filepath.Clean(configured)
+	rootPath, err := filepath.EvalSymlinks(configured)
 	if err != nil {
 		return err
 	}
@@ -185,7 +186,7 @@ func (i *ResolvedInputs) readRecorded(rootPath string, inject bool) error {
 	i.Environment = allowedProcessEnvInternal()
 	i.Injection = EnvMap{}
 	for _, path := range i.Paths {
-		content, err := readRecordedFile(root, rootPath, path)
+		content, err := readRecordedFile(root, path, configured, rootPath)
 		if err != nil {
 			return err
 		}
@@ -209,13 +210,21 @@ func (i *ResolvedInputs) readRecorded(rootPath string, inject bool) error {
 
 // Open relative to the root and validate/read that descriptor. Nonblocking
 // open prevents a FIFO from blocking before its file type can be rejected.
-func readRecordedFile(root *os.Root, rootPath, path string) ([]byte, error) {
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path || !pathBelow(rootPath, path) {
+// The label may name the configured or the resolved projects directory; the
+// os.Root confines the open either way.
+func readRecordedFile(root *os.Root, path string, bases ...string) ([]byte, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, os.ErrInvalid
 	}
-	rel, err := filepath.Rel(rootPath, path)
-	if err != nil {
-		return nil, err
+	rel := ""
+	for _, base := range bases {
+		if pathBelow(base, path) {
+			rel, _ = filepath.Rel(base, path)
+			break
+		}
+	}
+	if rel == "" {
+		return nil, os.ErrInvalid
 	}
 	file, err := openRecordedFile(root, rel, os.O_RDONLY|syscall.O_NONBLOCK)
 	if err != nil {

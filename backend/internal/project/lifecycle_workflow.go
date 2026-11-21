@@ -529,9 +529,7 @@ func (s *ProjectService) reconcileFailedRebuild(ctx context.Context, run string,
 		if current.InspectResponse.ID != sel.ImageID {
 			return lifecycleFailure("update.target-changed")
 		}
-		if err := s.checkLifecycleExternal(ctx, before, after); err != nil {
-			return err
-		}
+		// The compensating re-tag reads no env input, so recorded files never gate it.
 		if _, e = c.ImageTag(ctx, client.ImageTagOptions{Source: old.ImageID, Target: old.Reference}); e != nil {
 			return lifecycleFailure("image.tag-failed")
 		}

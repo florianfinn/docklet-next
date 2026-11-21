@@ -129,7 +129,7 @@ func TestScopedRecreateHasNoBuildPullOrDependencies(t *testing.T) {
 }
 
 func TestR8RealAdmissionLayouts(t *testing.T) {
-	for _, branch := range []string{"flags", "file", "unmanaged", "replicas", "overrides", "include", "extends", "anchor", "env-selection", "symlink-env", "namespace", "toml", "entrypoint", "scalar", "environment", "mixed", "outside", "storage", "nested-storage", "shadow-static", "implicit-file", "command-mismatch", "network-owner", "volumes-from"} {
+	for _, branch := range []string{"flags", "file", "unmanaged", "replicas", "overrides", "include", "extends", "anchor", "env-selection", "symlink-env", "namespace", "toml", "entrypoint", "scalar", "environment", "mixed", "outside", "storage", "nested-storage", "shadow-static", "implicit-file", "command-mismatch", "network-owner", "volumes-from", "recorded-env", "recorded-preflight"} {
 		t.Run(branch, func(t *testing.T) {
 			v := target(t, branch == "file" || branch == "toml" || branch == "outside" || branch == "mixed" || branch == "implicit-file")
 			q := request()
@@ -208,6 +208,11 @@ func TestR8RealAdmissionLayouts(t *testing.T) {
 				inspected.Config.Cmd = []string{"--configfile=" + inv.RootFile}
 				content = strings.Replace(content, "      - --entrypoints.web.address=:80 # listener\n      - --providers.file.directory=/etc/traefik/routes", "      - --configfile="+inv.RootFile, 1)
 				inspected.Mounts = append(inspected.Mounts, container.MountPoint{Type: mount.TypeBind, Source: t.TempDir(), Destination: "/etc/traefik/config", RW: true})
+			case "recorded-env", "recorded-preflight":
+				require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(dir), "shared.env"), []byte("KEY=1\n"), 0600))
+				if branch == "recorded-env" {
+					recordEnvFile(labels, dir)
+				}
 			case "nested-storage":
 				q.Storage = "/certs/missing/acme.json"
 			case "storage":
@@ -217,8 +222,12 @@ func TestR8RealAdmissionLayouts(t *testing.T) {
 			runtime := &resolver.Runtime{DB: db.DB, ProjectsDirectory: filepath.Dir(dir), Splice: traefik.Splice, Inspect: func(context.Context, string) (container.InspectResponse, error) { return inspected, nil }, List: func(context.Context) ([]container.Summary, error) { return rows, nil }, Source: func(context.Context, container.InspectResponse, container.MountPoint) (dto.Source, error) {
 				return source, nil
 			}, Inventory: func(context.Context, dto.Instance) (dto.Inventory, error) { return inv, nil }}
-			_, err = runtime.Prepare(t.Context(), dto.ResolverApplyRequest{Instance: dto.Instance{Kind: dto.Traefik, Identity: dto.Identity{ContainerID: "original"}, Source: source}, Request: q})
-			if branch == "file" || branch == "flags" || branch == "implicit-file" {
+			prepared, err := runtime.Prepare(t.Context(), dto.ResolverApplyRequest{Instance: dto.Instance{Kind: dto.Traefik, Identity: dto.Identity{ContainerID: "original"}, Source: source}, Request: q})
+			if branch == "recorded-preflight" {
+				require.NoError(t, err, "precondition: the same layout without a recorded env file is admitted")
+				recordEnvFile(labels, dir)
+				requireCode(t, runtime.Preflight(t.Context(), prepared), dto.EnvConflict)
+			} else if branch == "file" || branch == "flags" || branch == "implicit-file" {
 				require.NoError(t, err)
 			} else {
 				require.Error(t, err)
@@ -230,6 +239,9 @@ func TestR8RealAdmissionLayouts(t *testing.T) {
 			}
 			if branch == "command-mismatch" {
 				requireCode(t, err, dto.TargetUnclear)
+			}
+			if branch == "recorded-env" {
+				requireCode(t, err, dto.EnvConflict)
 			}
 			if branch == "toml" {
 				var refused *resolver.LayoutError
@@ -260,6 +272,13 @@ func TestR8RealAdmissionLayouts(t *testing.T) {
 			}
 		})
 	}
+}
+
+// recordEnvFile labels the gateway as started with an env file outside its stack.
+func recordEnvFile(labels map[string]string, dir string) {
+	labels["com.docker.compose.project.working_dir"] = dir
+	labels["com.docker.compose.project.config_files"] = filepath.Join(dir, "compose.yaml")
+	labels["com.docker.compose.project.environment_file"] = filepath.Join(filepath.Dir(dir), "shared.env")
 }
 
 func TestScopedRecreateUsesTheExportedComposePort(t *testing.T) {

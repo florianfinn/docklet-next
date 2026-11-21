@@ -79,7 +79,9 @@ Docklet keeps only the checks that protect the action's own target.
     request.
 - **Safe read.** Every recorded file is read through an `os.Root` opened on the
   projects directory, after resolving the root itself once:
-  - The entry must be an absolute, clean path below the root.
+  - The entry must be an absolute, clean path below the root. The root may
+    be named as configured or as its resolved real path, so a symlinked
+    projects directory works; the `os.Root` confines the open either way.
   - The file is opened relative to the root with `O_NONBLOCK`. Symlinks resolve
     only inside the root.
   - On the opened descriptor the file must be regular.
@@ -108,6 +110,11 @@ Docklet keeps only the checks that protect the action's own target.
     conflict, invalid), the ordered paths and the content hash of the bytes
     read.
   - A cache hit never skips resolving the current label and bytes.
+  - Editor validation keeps detailed errors for a stack's own files. Once a
+    recorded selection takes part, it returns only the classified problem.
+  - The Traefik certificate resolver refuses a stack with a recorded,
+    conflicting or invalid selection (`env-conflict`, before any write). Its
+    `.env` edit would be inert, and its scoped recreate would drop the label.
 - **Deploy keeps the label.** A Docklet deploy of a project with a recorded
   selection writes `environment_file` with the same ordered path list. This
   applies to every created or recreated service, through
@@ -136,12 +143,22 @@ Docklet keeps only the checks that protect the action's own target.
     refused with `update.target-changed`. Docklet cannot
     reconstruct those files.
   - The project-root rule for writable files stays as it is.
+  - The compensating re-tag after a failed rebuild reads no env input, so the
+    external check never gates it; it restores the previous image tag.
   - Old snapshots without `External` decode as an empty list and so differ from
     a recorded selection. Deploying once captures the new baseline. No
     migration is needed because the payload is versionless encrypted JSON.
 - **After `down`.** The containers and their labels are gone. The stack falls
   back to its own files and may show "required variable missing" again. This is
   a documented limit (AUTO-4).
+- **Changed file selection.** Adding an override file or changing
+  `COMPOSE_FILE` after the containers were created breaks the confirmation and
+  shows "conflicting recorded env files". The recovery is to recreate the
+  containers once with the Compose CLI and the same `--env-file`, or to run
+  `down` and deploy from Docklet with the values in the stack's own `.env`.
+- **Listing failure (AUTO-19).** Without a container listing, a request uses
+  the stack's own inputs. A deploy in that state would recreate services
+  without the label; this is a documented limit (follow-up).
 
 ### Problems and values
 
@@ -175,6 +192,12 @@ Docklet keeps only the checks that protect the action's own target.
   models are not changed. No production web consumer reads these environment
   maps (design review R2). Daemon data, meaning container inspect and the
   runtime `ContainerLabels`, is outside this rule.
+  - When a raw load cannot type a `${VAR}` field (ports, cpus, durations,
+    replicas), the projection falls back to a value-free list: service name,
+    image, build presence and dependency keys. A projection never makes a
+    loadable stack unreadable.
+  - Project and service URLs come from interpolated labels on purpose: they
+    are operator-configured links, and placeholders would break them.
 
 Rejected alternatives:
 - Keeping the confirmation and remembering it: the maintainer rejected any
