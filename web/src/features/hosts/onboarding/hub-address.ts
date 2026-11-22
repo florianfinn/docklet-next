@@ -19,7 +19,8 @@ export function defaultAgentHubUrl(general: GeneralSettings, discovery?: HubDisc
   if (preferred) return preferred.url;
   // Without a reachable published candidate, the saved address takes the listen port's published host port (the General warning's port).
   const missing = hubAddressPortWarning(general.hubAddress, discovery);
-  const bareIpv6 = authority.includes(":") && !authority.startsWith("[");
-  if (authority && !bareIpv6 && missing !== undefined) return agentHubUrl({ ...general, hubAddress: `${authority}:${missing}` });
+  // A portless IPv6 address is stored bare; the port needs brackets.
+  const host = authority.includes(":") && !authority.startsWith("[") ? `[${authority}]` : authority;
+  if (authority && missing !== undefined) return agentHubUrl({ ...general, hubAddress: `${host}:${missing}` });
   return candidates?.[0]?.url ?? agentHubUrl(general);
 }
