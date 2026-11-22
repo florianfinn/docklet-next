@@ -315,6 +315,8 @@ export const enSettings = {
     engineImage: "Effective engine image (read-only)",
     untested: "Not tested yet",
     checkRepository: "Check repository",
+    snapshotCount: "{count, plural, one {# snapshot} other {# snapshots}}",
+    checkRepositoryHint: "Checks access, key and repository integrity. Initialises an empty repository; never changes existing backups.",
     repositories: "Local repositories by host",
     retired: "Retired",
     delivered: "Current settings delivered",

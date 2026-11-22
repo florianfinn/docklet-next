@@ -243,6 +243,10 @@ export const enVolumes = {
     offline: "Host not connected – files unavailable.",
   },
   backups: {
+    repositoryCheck: {
+      steps: { connect: "Mounting the repository", save: "Testing write access", init: "Initialising the empty repository", open: "Opening with the stored key", check: "Checking integrity" },
+      result: "Repository checked · {count, plural, one {# snapshot} other {# snapshots}}",
+    },
     hostZoneHint: "Backups use this host’s zone ({host}); the hub uses {hub}.",
     restoreSafety: "Restore safety snapshot",
     deploymentHint: "Restore points contain images and configuration. Back up and restore volume data separately.",

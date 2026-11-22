@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original activity following for rediscovered backup operations. M19: total contract-code catalogue maps.
+// Deviations: Original activity following for rediscovered backup operations. M19: total contract-code catalogue maps. M36 #571: repository check stage and result.
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,7 +10,9 @@ import { backupCodeKey } from "@/data/backup-error";
 import { BACKUP_REASON_KEYS } from "@/data/wire-catalogue-backup";
 import { BACKUP_STATUS_KEYS } from "@/data/wire-catalogue-states";
 import { wireKey } from "@/data/wire-catalogue";
-import { useTranslations } from "use-intl";
+import { useLocale, useTranslations } from "use-intl";
+import { renderMessage } from "@/data/message-code";
+import type { AppLocale } from "@/app/i18n/locale-store";
 import { useAdapter } from "@/data/use-adapter";
 import type { ActionDetailState } from "@/data/adapter";
 import { openActionDialog } from "@/features/activity/action-dialog-store";
@@ -20,7 +22,8 @@ export function BackupOperation({ hostId, activityId }: { hostId: string; activi
   const adapter = useAdapter(),
     client = useQueryClient(),
     t = useTranslations("volumes.backups"),
-    all = useTranslations();
+    all = useTranslations(),
+    locale = useLocale() as AppLocale;
   const [state, setState] = useState<ActionDetailState>();
   useEffect(
     () =>
@@ -47,12 +50,16 @@ export function BackupOperation({ hostId, activityId }: { hostId: string; activi
   const reasonKey = wireKey(BACKUP_REASON_KEYS, reason), statusKey = wireKey(BACKUP_STATUS_KEYS, outcome);
   const detail = reasonKey ? ` ${all(reasonKey)}` : "";
   const status = statusKey ? all(statusKey) : undefined;
+  // A repository check names its current stage and, after success, its result instead of a percentage.
+  const current = run?.kind === "repository-check" && run.status === "running" ? [...run.steps].reverse().find((s) => s.state === "running")?.label : undefined;
+  const stage = current ? renderMessage(current, locale) : undefined;
+  const checked = run?.kind === "repository-check" && run.status === "succeeded" && run.repositoryCheck ? t("repositoryCheck.result", { count: run.repositoryCheck.snapshotCount }) : undefined;
   return (
     <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm">
       <span>
         {t("operation")}: {code
           ? `${all(code)}${detail}`
-          : (status ?? (run ? `${Math.round(run.progress)}%` : t("following")))}
+          : (checked ?? stage ?? status ?? (run ? `${Math.round(run.progress)}%` : t("following")))}
       </span>
       <Button variant="outline" size="sm" onClick={() => openActionDialog(activityId)}>
         {t("openActivity")}

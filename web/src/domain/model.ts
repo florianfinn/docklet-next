@@ -227,6 +227,7 @@ export type ActionKind =
   | "reconnect"
   | "onboard"
   | "backup"
+  | "repository-check"
   | "volume-restore"
   | "pull"
   | "prune"
@@ -295,6 +296,8 @@ export interface ActionRun {
   restorePointId?: string;
   pointCode?: string;
   sourceOperation?: string;
+  /** Validated result of a successful backup repository check. */
+  repositoryCheck?: { snapshotCount: number };
 }
 
 export type RuntimeActionRun = ActionRun & RuntimeKnowledge;

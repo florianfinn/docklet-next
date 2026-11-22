@@ -244,6 +244,10 @@ export const deVolumes: typeof enVolumes = {
     offline: "Host nicht verbunden – Dateien nicht verfügbar.",
   },
   backups: {
+    repositoryCheck: {
+      steps: { connect: "Repository einhängen", save: "Schreibzugriff prüfen", init: "Leeres Repository anlegen", open: "Mit gespeichertem Schlüssel öffnen", check: "Integrität prüfen" },
+      result: "Repository geprüft · {count, plural, one {# Snapshot} other {# Snapshots}}",
+    },
     hostZoneHint: "Backups verwenden die Host-Zeitzone ({host}); der Hub verwendet {hub}.",
     restoreSafety: "Sicherheitskopie wiederherstellen",
     deploymentHint: "Wiederherstellungspunkte enthalten Images und Konfiguration. Volume-Daten separat sichern und wiederherstellen.",

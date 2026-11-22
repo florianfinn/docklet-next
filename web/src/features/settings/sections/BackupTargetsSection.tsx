@@ -144,7 +144,7 @@ function TargetCard({
           {delivery?.code && delivery.state !== "current" && <p className="text-xs">{all(backupCodeKey(delivery.code) ?? "common.commandErrors.failed")}</p>}
           <p className="text-xs text-muted-foreground">
             {check
-              ? `${check.ok ? t("testOk") : t("testFailed")} · ${new Date(check.at).toLocaleString()}`
+              ? [check.ok ? t("testOk") : t("testFailed"), ...(check.ok && typeof check.snapshotCount === "number" ? [t("snapshotCount", { count: check.snapshotCount })] : []), new Date(check.at).toLocaleString()].join(" · ")
               : t("untested")}
             {check && (check.earlierSettings || check.configVersion < target.configVersion)
               ? ` · ${t("earlierSettings")}`

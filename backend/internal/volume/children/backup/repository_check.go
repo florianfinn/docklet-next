@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original asynchronous repository tests with admission-time configuration and safe results; preserve injected host.busy admission refusals.
+// Deviations: Original asynchronous repository tests with admission-time configuration and safe results; preserve injected host.busy admission refusals. M36 #571: stage messages and output lines.
 
 package backup
 
@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"uuid"
@@ -100,7 +101,7 @@ func (s *Service) startRepositoryCheck(ctx context.Context, id string) (dto.Targ
 		defer lease.Release(context.WithoutCancel(workCtx))
 		worker, cancel := context.WithTimeout(workCtx, 5*time.Minute)
 		defer cancel()
-		count, err := s.checkRepository(worker, id)
+		count, err := s.checkRepository(worker, id, s.repositoryCheckStage(workCtx, activityID))
 		result := volume.BackupRepositoryCheck{OK: err == nil, At: time.Now().UTC(), Initialized: err == nil}
 		if err != nil {
 			var p *dto.Problem
@@ -111,6 +112,7 @@ func (s *Service) startRepositoryCheck(ctx context.Context, id string) (dto.Targ
 			}
 		} else {
 			result.SnapshotCount = &count
+			s.repositoryCheckResult(workCtx, activityID, count)
 		}
 		check.OK, check.Code, check.At, check.SnapshotCount = result.OK, result.Code, result.At, result.SnapshotCount
 		if id == "local" {
@@ -126,7 +128,44 @@ func (s *Service) startRepositoryCheck(ctx context.Context, id string) (dto.Targ
 	}()
 	return dto.TargetTestOperation{ActivityID: activityID}, nil
 }
-func (s *Service) checkRepository(ctx context.Context, id string) (int64, error) {
+
+// repositoryCheckStages are the English run messages of the check stages; the web maps the step keys.
+var repositoryCheckStages = map[string]string{
+	"connect": "Mounting the repository",
+	"save":    "Testing write access",
+	"init":    "Initialising the empty repository",
+	"open":    "Opening the repository with the stored key",
+	"check":   "Checking repository integrity",
+}
+
+// repositoryCheckStage records each stage before its operation runs, so a failure
+// leaves the failing stage visible. Recording errors never change the check result.
+func (s *Service) repositoryCheckStage(ctx context.Context, activityID string) func(string) {
+	return func(name string) {
+		if s.deps.Activity == nil {
+			return
+		}
+		text := repositoryCheckStages[name]
+		line := activitytypes.OutputLine{Timestamp: time.Now().UTC(), Stream: "note", Text: text, Step: name}
+		_, _ = s.deps.Activity.AppendMessage(ctx, activityID, activitylib.AppendMessageRequest{Level: activitytypes.MessageLevelInfo, Message: text, Step: name, Output: &line})
+	}
+}
+
+func (s *Service) repositoryCheckResult(ctx context.Context, activityID string, count int64) {
+	if s.deps.Activity == nil {
+		return
+	}
+	text := fmt.Sprintf("Repository holds %d snapshots", count)
+	line := activitytypes.OutputLine{Timestamp: time.Now().UTC(), Stream: "note", Text: text, Step: "check"}
+	_, _ = s.deps.Activity.AppendMessage(ctx, activityID, activitylib.AppendMessageRequest{Level: activitytypes.MessageLevelSuccess, Message: text, Step: "check", Output: &line})
+}
+
+func (s *Service) checkRepository(ctx context.Context, id string, stage ...func(string)) (int64, error) {
+	enter := func(name string) {
+		for _, observe := range stage {
+			observe(name)
+		}
+	}
 	cli, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
 		return 0, dto.NewProblem(503, "volume.backup.engine-unavailable", err)
@@ -144,6 +183,7 @@ func (s *Service) checkRepository(ctx context.Context, id string) (int64, error)
 	if err != nil {
 		return 0, err
 	}
+	enter("connect")
 	root := ""
 	for _, value := range repository.Environment {
 		if strings.HasPrefix(value, "RUSTIC_REPOSITORY=") {
@@ -171,6 +211,7 @@ func (s *Service) checkRepository(ctx context.Context, id string) (int64, error)
 	if _, err = cli.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		return 0, dto.NewProblem(503, "backup.target.mount-failed", err)
 	}
+	enter("save")
 	probeOutput, _, err := s.deps.Exec(ctx, created.ID, "", []string{"sh", "-c", `set -e; root="$1"; probe="$root/.docklet-probe-$2"; mkdir -p "$root"; state=empty; for entry in "$root"/* "$root"/.[!.]* "$root"/..?*; do if test -e "$entry" || test -L "$entry"; then state=present; break; fi; done; printf docklet > "$probe"; value=$(head -c 7 "$probe"); test "$value" = docklet; rm -f -- "$probe"; printf '%s' "$state"`, "sh", root, uuid.New().String()})
 	if err != nil {
 		return 0, dto.NewProblem(422, "backup.target.permission-denied", err)
@@ -183,5 +224,5 @@ func (s *Service) checkRepository(ctx context.Context, id string) (int64, error)
 	if state != "empty" && state != "present" {
 		return 0, dto.NewProblem(422, "volume.backup.engine-output-invalid", nil)
 	}
-	return s.deps.Engine.CheckRepository(ctx, cli, repository, password, state == "empty")
+	return s.deps.Engine.CheckRepository(ctx, cli, repository, password, state == "empty", stage...)
 }

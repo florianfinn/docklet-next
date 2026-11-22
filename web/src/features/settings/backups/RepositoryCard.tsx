@@ -46,7 +46,7 @@ export function RepositoryCard({ host, recovery }: { host: Host; recovery: () =>
           </dl>
           <p className="text-sm">
             {value.lastCheck
-              ? `${value.lastCheck.ok ? t("testOk") : t("testFailed")} · ${new Date(value.lastCheck.at).toLocaleString()}`
+              ? [value.lastCheck.ok ? t("testOk") : t("testFailed"), ...(value.lastCheck.ok && typeof value.lastCheck.snapshotCount === "number" ? [t("snapshotCount", { count: value.lastCheck.snapshotCount })] : []), new Date(value.lastCheck.at).toLocaleString()].join(" · ")
               : t("untested")}
           </p>
           {value.lastCheck?.code && <p>{all(backupCodeKey(value.lastCheck.code) ?? "common.commandErrors.failed")}</p>}
@@ -73,6 +73,7 @@ export function RepositoryCard({ host, recovery }: { host: Host; recovery: () =>
           {t("recoveryKey")}
         </Button>
       </div>
+      <p className="text-xs text-muted-foreground">{t("checkRepositoryHint")}</p>
       {(value?.running?.activityId || activity) && (
         <BackupOperation hostId={host.id} activityId={(value?.running?.activityId || activity)!} />
       )}

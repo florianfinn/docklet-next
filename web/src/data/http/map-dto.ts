@@ -29,6 +29,21 @@ type Event = components["schemas"]["EventEvent"];
 // generic action dialog, toasts and history show the same labels as the recreate view.
 const RECREATE_STEPS: Record<string, string> = { "Renaming container": "renaming", "Creating replacement": "creating", "Starting replacement": "starting", "Removing previous container": "removing", "Restoring previous container": "restoring" };
 const STEP_KEYS = new Set<DeployStepKey>(["validate", "pull", "build", "create", "stop", "start", "health", "scan", "collect", "save", "wait", "connect"]);
+// Backup repository check stages (backend volume backup repository_check.go) with catalogued labels.
+const REPOSITORY_CHECK_STEPS = new Set(["connect", "save", "init", "open", "check"]);
+const REPOSITORY_CHECK_ACTION = "check_volume_backup_repository";
+
+/** Only a successful check of this run's own target names a snapshot count; anything else stays unclaimed. */
+function repositoryCheckResult(run: Activity): { snapshotCount: number } | undefined {
+  const metadata = run.metadata;
+  const check = metadata?.backupTargetCheck;
+  if (run.status !== "success" || !check || typeof check !== "object" || Array.isArray(check)) return undefined;
+  const value = check as Record<string, unknown>;
+  if (metadata?.backupTargetId !== run.resourceId || value.activityId !== run.id || value.ok !== true || (value.code !== undefined && value.code !== "")) return undefined;
+  const count = value.snapshotCount;
+  return typeof count === "number" && Number.isSafeInteger(count) && count >= 0 ? { snapshotCount: count } : undefined;
+}
+
 const STREAMS = new Set<OutputStream>(["cmd", "stdout", "stderr", "note"]);
 const KINDS: Record<string, ActionKind> = {
   image_pull: "pull", image_update_check: "check-updates", image_patch: "update",
@@ -192,7 +207,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       ((run.outcomeState !== "known" && run.outcomeState !== "unknown") || typeof run.cancelRequested !== "boolean")) throw new Error("dto.invalid-runtime-knowledge");
   const action = typeof run.metadata?.action === "string" ? run.metadata.action : "";
   const backup = /volume_backup/.test(action) || run.resourceType === "backup_target" || run.resourceType === "volume_backup_download";
-  const kind: ActionKind = backup ? action.startsWith("restore_") ? "volume-restore" : "backup" : KINDS[run.type] ?? jobKind(run) ?? "activity";
+  const repositoryCheck = action === REPOSITORY_CHECK_ACTION;
+  const kind: ActionKind = backup ? action.startsWith("restore_") ? "volume-restore" : repositoryCheck ? "repository-check" : "backup" : KINDS[run.type] ?? jobKind(run) ?? "activity";
   const job = run.type === "job_run";
   // The hub's fallback job summary is "<job name>: <scheduler state>"; a real outcome message stays.
   const jobSummary = (text: string | undefined, code = run.messageCode): MessageCode | undefined => {
@@ -268,11 +284,13 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     steps: (detail.stepTrace ?? []).map((step) => ({
       key: stepKey(step.name), state: stepState(step.status),
       label: Object.hasOwn(RECREATE_STEPS, step.name) ? { code: `containers.recreate.steps.${RECREATE_STEPS[step.name]}`, params: {}, sourceText: step.name }
+        : repositoryCheck && REPOSITORY_CHECK_STEPS.has(step.name) ? { code: `volumes.backups.repositoryCheck.steps.${step.name}`, params: {}, sourceText: step.name }
         : job && JOB_STEPS.has(step.name) ? { code: `activity.jobStep.${step.name}`, params: {} } : coded(step.code, step.name),
       startedAt: step.startedAt, finishedAt: step.endedAt,
     })),
     log: detail.messages?.length ? detail.messages.map((item) => runtimePeerAudit(item.code, item.payload) ?? jobSummary(item.message, item.code) ?? coded(item.code, item.message)) : run.latestMessage ? [jobSummary(run.latestMessage) ?? coded(run.messageCode, run.latestMessage)] : [],
     ...(peerAudit ? { peerAudit } : {}),
+    ...(repositoryCheck && repositoryCheckResult(run) ? { repositoryCheck: repositoryCheckResult(run) } : {}),
     output,
     outputTruncated: detail.outputTruncated,
   }, { summary: { stepsAvailable: true } });

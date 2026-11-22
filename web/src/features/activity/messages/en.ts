@@ -67,6 +67,7 @@ export const enActivity = {
     reconnect: "Reconnect",
     onboard: "Host onboarding",
     backup: "Backup",
+    "repository-check": "Repository check",
     "volume-restore": "Volume restore",
     pull: "Image pull",
     prune: "Cleanup",

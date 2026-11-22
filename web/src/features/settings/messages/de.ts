@@ -316,6 +316,8 @@ export const deSettings: typeof enSettings = {
     engineImage: "Verwendetes Engine-Image (schreibgeschützt)",
     untested: "Noch nicht getestet",
     checkRepository: "Repository prüfen",
+    snapshotCount: "{count, plural, one {# Snapshot} other {# Snapshots}}",
+    checkRepositoryHint: "Prüft Zugriff, Schlüssel und Integrität. Legt ein leeres Repository an, ändert aber nie bestehende Backups.",
     repositories: "Lokale Repositories je Host",
     retired: "Stillgelegt",
     delivered: "Aktuelle Einstellungen zugestellt",

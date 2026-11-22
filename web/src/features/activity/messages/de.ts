@@ -68,6 +68,7 @@ export const deActivity: typeof enActivity = {
     reconnect: "Neu verbinden",
     onboard: "Host-Anbindung",
     backup: "Backup",
+    "repository-check": "Repository-Prüfung",
     "volume-restore": "Volume-Wiederherstellung",
     pull: "Image-Pull",
     prune: "Aufräumen",
