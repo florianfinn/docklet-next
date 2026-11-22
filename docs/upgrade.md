@@ -124,6 +124,13 @@ and peer-stack confirmations (see [compatibility](compatibility.md)).
 Upgrading to 1.2.0: back up the hub database first, because migration 006 adds two
 runtime receipt columns at startup; then update every agent to 1.2.0.
 
+Upgrading to 1.3.0: there is no migration and no new environment variable. Update
+every agent to 1.3.0 afterwards. Older agents report an externally changed env
+file without revisions, so the hub offers no restore consent for their stacks, and
+they keep the earlier peer stack confirmation. A stack started with an external
+env file becomes readable after the update; deploy it once from Docklet to record
+a new update baseline.
+
 ## Recover a failed in-app update
 
 The helper keeps a per-operation backup beside the interpolation env file:
