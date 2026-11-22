@@ -9,6 +9,7 @@ package environment
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -37,6 +38,7 @@ type fakeTailnetRoute struct {
 	whoTag   bool
 	lookups  int
 	peerSeen string
+	mints    int
 }
 
 func (f *fakeTailnetRoute) Status() tailnettypes.Status {
@@ -47,6 +49,7 @@ func (f *fakeTailnetRoute) ProvisionHostKey(_ context.Context, pasted string) (s
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.pasted = pasted
+	f.mints++
 	if f.keyErr != nil {
 		return "", "", f.keyErr
 	}
@@ -234,8 +237,8 @@ func TestCreateTailnetHostRefusalsStoreNothing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			h, db, fake := newTailnetHandler(t, "disabled")
 			fake.keyErr = tc.keyErr
-			route, isEdge, useKey := tailnettypes.RouteTailnet, true, true
-			_, err := h.CreateEnvironment(operatorContext(t), &CreateEnvironmentInput{Body: environment.Create{ApiUrl: "edge://example", IsEdge: &isEdge, UseApiKey: &useKey, Route: &route}})
+			route, isEdge, useKey, name := tailnettypes.RouteTailnet, true, true, "edge-refused"
+			_, err := h.CreateEnvironment(operatorContext(t), &CreateEnvironmentInput{Body: environment.Create{ApiUrl: "edge://example", Name: &name, IsEdge: &isEdge, UseApiKey: &useKey, Route: &route}})
 			var problem *tailnettypes.Problem
 			require.ErrorAs(t, err, &problem)
 			require.Equal(t, tc.code, problem.Code)
@@ -244,6 +247,20 @@ func TestCreateTailnetHostRefusalsStoreNothing(t *testing.T) {
 			require.Zero(t, count)
 		})
 	}
+	// A refused name is checked before a one-use key is minted (review question Q-C).
+	t.Run("invalid or taken name mints no key", func(t *testing.T) {
+		h, db, fake := newTailnetHandler(t, "disabled")
+		tailnetHost(t, db, "existing")
+		var existing Environment
+		require.NoError(t, db.First(&existing, "id = ?", "existing").Error)
+		route, isEdge, useKey := tailnettypes.RouteTailnet, true, true
+		for _, name := range []string{"", strings.Repeat("n", 41), existing.Name} {
+			_, err := h.CreateEnvironment(operatorContext(t), &CreateEnvironmentInput{Body: environment.Create{ApiUrl: "edge://example", Name: &name, IsEdge: &isEdge, UseApiKey: &useKey, Route: &route}})
+			var problem *environment.HostProblem
+			require.ErrorAs(t, err, &problem, name)
+		}
+		require.Zero(t, fake.mints, "no key is minted for a refused name")
+	})
 	t.Run("manual key forwarded unchanged and route only for Edge", func(t *testing.T) {
 		h, _, fake := newTailnetHandler(t, "disabled")
 		route, isEdge, useKey, pasted, name := tailnettypes.RouteTailnet, true, true, "pasted-host-key", "edge-manual"

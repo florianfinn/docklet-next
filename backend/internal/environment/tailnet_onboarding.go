@@ -11,6 +11,7 @@ import (
 	"errors"
 
 	"github.com/danielgtaylor/huma/v2"
+	"go.getarcane.app/kit/normalization"
 
 	"github.com/florianfinn/docklet-next/backend/internal/tailnet"
 	"github.com/florianfinn/docklet-next/types/environment"
@@ -42,6 +43,13 @@ func (h *EnvironmentHandler) prepareNetworkRouteInternal(ctx context.Context, en
 	tailnetRoute := h.environmentService.tailnetRoute()
 	if tailnetRoute == nil {
 		return nil, &tailnettypes.Problem{Code: tailnettypes.CodeNotConnected, Status: 409}
+	}
+	// A refused name must not consume a minted key; the create transaction checks the name again.
+	if err := normalization.Normalize(env); err != nil {
+		return nil, err
+	}
+	if err := validateHostName(h.environmentService.db.WithContext(ctx), "", env.Name); err != nil {
+		return nil, err
 	}
 	pasted := ""
 	if body.TailnetAuthKey != nil {
