@@ -14,6 +14,7 @@ const (
 	CodeCoordinationUnreachable = "tailnet.coordination-unreachable"
 	CodeNotConnected            = "tailnet.not-connected"
 	CodeKeyMintFailed           = "tailnet.key-mint-failed"
+	CodeProviderUnavailable     = "tailnet.provider-unavailable"
 	CodeMTLSUnsupported         = "tailnet.mtls-unsupported"
 )
 
@@ -48,8 +49,8 @@ type Connection struct {
 
 // Provisioning is the credential's ability to admit new hosts, independent of the connection.
 type Provisioning struct {
-	State string `json:"state" enum:"not-configured,not-applicable,checking,ok,rejected"`
-	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected"`
+	State string `json:"state" enum:"not-configured,not-applicable,checking,ok,rejected,unavailable"`
+	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.provider-unavailable"`
 	// ProviderStatus is the last rejecting HTTP status from the Tailscale API.
 	ProviderStatus int `json:"providerStatus,omitempty"`
 }

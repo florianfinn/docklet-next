@@ -101,12 +101,20 @@ func (m *Manager) ProvisionHostKey(ctx context.Context, pasted string) (string, 
 		}
 		return key, managerURL, nil
 	}
+	seq := m.beginProvisioning()
 	mintCtx, cancel := context.WithTimeout(ctx, providerTimeout)
 	defer cancel()
 	key, err := m.cfg.Provisioner.MintHostKey(mintCtx, cred.ClientID, cred.ClientSecret)
-	m.recordProvisioning(gen, err)
+	m.recordProvisioning(gen, seq, cred, err, false)
 	if err != nil {
 		return "", "", err
+	}
+	// A key minted for a disabled, reset or replaced identity is discarded; it expires unused upstream.
+	m.mu.Lock()
+	stale := m.gen != gen || m.cred != cred || m.routeRefusalLocked() != ""
+	m.mu.Unlock()
+	if stale {
+		return "", "", &tailnettypes.Problem{Code: tailnettypes.CodeNotConnected, Status: http.StatusConflict}
 	}
 	return key, managerURL, nil
 }

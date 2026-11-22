@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -34,13 +36,21 @@ const (
 // watchMask seeds from the initial status and receives state, health and peer-set changes.
 const watchMask = ipn.NotifyInitialStatus | ipn.NotifyInitialState | ipn.NotifyInitialHealthState | ipn.NotifyPeerChanges
 
-// NodeConfig configures one embedded node. AuthKey is consumed only while the state has no identity.
+// NodeConfig configures one embedded node. AuthKey is consumed only while the state has no identity;
+// Secrets are exact values redacted from every tsnet log line in addition to the tskey- pattern.
 type NodeConfig struct {
 	Dir           string
 	Hostname      string
 	ControlURL    string
 	AuthKey       string
 	AdvertiseTags []string
+	Secrets       []string
+}
+
+// HasNodeState reports whether dir holds a node identity from an earlier join (tsnet's Dir/tailscaled.state).
+func HasNodeState(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, "tailscaled.state"))
+	return err == nil && info.Size() > 0
 }
 
 // Watcher is one IPN bus subscription.
@@ -72,7 +82,7 @@ type tsnetNode struct {
 func NewTSNetNode(cfg NodeConfig) (Node, error) {
 	envknob.SetNoLogsNoSupport()
 	logf := func(format string, args ...any) {
-		slog.Debug("tailscale", "message", Redact(fmt.Sprintf(format, args...)))
+		slog.Debug("tailscale", "message", redactSecrets(fmt.Sprintf(format, args...), cfg.Secrets...))
 	}
 	return &tsnetNode{server: &tsnet.Server{
 		Dir:           cfg.Dir,
@@ -133,11 +143,13 @@ func Redact(text string) string {
 	return credentialPattern.ReplaceAllString(text, "tskey-[redacted]")
 }
 
-// redactSecret removes one exact secret value as well, for values that lack the tskey prefix.
-func redactSecret(text, secret string) string {
+// redactSecrets removes exact secret values as well, for values that lack the tskey prefix.
+func redactSecrets(text string, secrets ...string) string {
 	text = Redact(text)
-	if secret = strings.TrimSpace(secret); len(secret) >= 8 {
-		text = strings.ReplaceAll(text, secret, "[redacted]")
+	for _, secret := range secrets {
+		if secret = strings.TrimSpace(secret); len(secret) >= 8 {
+			text = strings.ReplaceAll(text, secret, "[redacted]")
+		}
 	}
 	return text
 }

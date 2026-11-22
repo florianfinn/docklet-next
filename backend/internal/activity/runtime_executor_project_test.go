@@ -393,7 +393,8 @@ func TestRuntimeExecutorBuildCollaboratorErrorBeforeUp(t *testing.T) {
 	f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n    pull_policy: build\n    build:\n      context: .\n      dockerfile: Missing.Dockerfile\n")
 	f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-hash"})
 	command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
-	command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
+	// The service policy "build" forces the build; an explicit request "never" would run the local image instead (AUTO-5).
+	command.Options.Deploy = &projecttypes.DeployOptions{}
 	admitted, err := f.runtime.Admit(t.Context(), command)
 	require.NoError(t, err)
 	waitCtx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
@@ -719,7 +720,8 @@ func TestRuntimeExecutorBuildErrorReturnsParentSlotAtLimitOne(t *testing.T) {
 	require.NoError(t, f.settings.SetIntSetting(t.Context(), "maxConcurrentActivities", 1))
 	f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n    pull_policy: build\n    build:\n      context: .\n      dockerfile: Missing.Dockerfile\n")
 	command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
-	command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
+	// The service policy "build" forces the build; an explicit request "never" would run the local image instead (AUTO-5).
+	command.Options.Deploy = &projecttypes.DeployOptions{}
 	admitted, err := f.runtime.Admit(t.Context(), command)
 	require.NoError(t, err)
 	snapshot, err := f.waitLocal(admitted.ActivityID)

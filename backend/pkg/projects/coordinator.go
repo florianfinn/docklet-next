@@ -99,8 +99,8 @@ func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request project
 	return model, nil
 }
 
-// forceLocalImages makes an explicit request policy "never" win over service pull_policy and build, as Compose's
-// `up --pull never` does: every service runs its existing local image (build services their resolved image name).
+// forceLocalImages makes an explicit request policy "never" win over service pull_policy and build, as the restore
+// path does: every service runs its existing local image (build services their resolved image name).
 func forceLocalImages(projectID string, model *composetypes.Project) {
 	for name, svc := range model.Services {
 		if svc.Build != nil {

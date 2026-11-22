@@ -9,6 +9,8 @@ package tailnet
 import (
 	"context"
 	"log/slog"
+	"tailscale.com/health"
+	"tailscale.com/tsconst"
 	"time"
 
 	"tailscale.com/ipn"
@@ -57,6 +59,9 @@ func (m *Manager) consume(ctx context.Context, gen int64, watcher Watcher, trigg
 		if err != nil {
 			return
 		}
+		if n.Health != nil {
+			m.applyHealth(gen, n.Health)
+		}
 		if n.InitialStatus != nil {
 			m.applyStatus(gen, n.InitialStatus)
 		}
@@ -98,6 +103,32 @@ func (m *Manager) refreshLoop(ctx context.Context, gen int64, node Node, kick <-
 	}
 }
 
+// coordinationWarnings are the health warnables meaning the control server no longer delivers network maps;
+// other warnings do not change the connection state.
+var coordinationWarnings = []health.WarnableCode{tsconst.HealthWarnableNotInMapPoll, tsconst.HealthWarnableMapResponseTimeout}
+
+// applyHealth records whether the bus health state of generation gen reports coordination trouble.
+func (m *Manager) applyHealth(gen int64, state *health.State) {
+	warning := false
+	for _, code := range coordinationWarnings {
+		if _, ok := state.Warnings[code]; ok {
+			warning = true
+		}
+	}
+	m.mu.Lock()
+	if m.gen != gen {
+		m.mu.Unlock()
+		return
+	}
+	m.coordWarning = warning
+	if m.status != nil {
+		m.deriveConnectionLocked()
+	}
+	fns := m.notifyLocked()
+	m.mu.Unlock()
+	fire(fns)
+}
+
 // applyStatus records a status snapshot of generation gen and derives the connection state.
 func (m *Manager) applyStatus(gen int64, status *ipnstate.Status) {
 	if status == nil {
@@ -109,6 +140,16 @@ func (m *Manager) applyStatus(gen int64, status *ipnstate.Status) {
 		return
 	}
 	m.status = status
+	m.deriveConnectionLocked()
+	fns := m.notifyLocked()
+	m.mu.Unlock()
+	fire(fns)
+}
+
+// deriveConnectionLocked: Running is control-unreachable while the bus reports coordination trouble or Self
+// has been offline longer than the grace period.
+func (m *Manager) deriveConnectionLocked() {
+	status := m.status
 	now := m.cfg.Now()
 	switch status.BackendState {
 	case ipn.Running.String():
@@ -119,7 +160,7 @@ func (m *Manager) applyStatus(gen int64, status *ipnstate.Status) {
 		} else {
 			m.offlineSince = time.Time{}
 		}
-		if !m.offlineSince.IsZero() && now.Sub(m.offlineSince) > m.cfg.ControlGrace {
+		if m.coordWarning || !m.offlineSince.IsZero() && now.Sub(m.offlineSince) > m.cfg.ControlGrace {
 			m.conn = tailnettypes.Connection{State: "control-unreachable", Code: tailnettypes.CodeCoordinationUnreachable}
 		} else {
 			m.conn = tailnettypes.Connection{State: "connected"}
@@ -129,7 +170,4 @@ func (m *Manager) applyStatus(gen int64, status *ipnstate.Status) {
 	default:
 		m.conn = tailnettypes.Connection{State: "joining"}
 	}
-	fns := m.notifyLocked()
-	m.mu.Unlock()
-	fire(fns)
 }

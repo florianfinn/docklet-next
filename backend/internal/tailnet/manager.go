@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"tailscale.com/ipn"
 	"tailscale.com/ipn/ipnstate"
 
 	tailnettypes "github.com/florianfinn/docklet-next/types/tailnet"
@@ -30,6 +31,9 @@ type Credential struct {
 	AuthKey      string `json:"authKey,omitempty"`
 }
 
+// secrets lists the values redacted from every log line besides the tskey- pattern.
+func (c Credential) secrets() []string { return []string{c.ClientSecret, c.AuthKey} }
+
 func (c Credential) configured() bool {
 	switch c.Mode {
 	case tailnettypes.ModeOAuth:
@@ -42,18 +46,20 @@ func (c Credential) configured() bool {
 
 // ManagerConfig holds process configuration; zero durations take the documented defaults.
 type ManagerConfig struct {
-	StateDir        string
-	Hostname        string
-	ControlURL      string
-	MTLSDisabled    bool
-	Factory         NodeFactory
-	Provisioner     *Provisioner
-	Now             func() time.Time
-	JoinTimeout     time.Duration // 60 s per join attempt
-	RetryMin        time.Duration // 5 s
-	RetryMax        time.Duration // 60 s
-	RefreshInterval time.Duration // at most one Status refresh per 5 s
-	ControlGrace    time.Duration // Self offline longer than 60 s means control unreachable
+	StateDir          string
+	Hostname          string
+	ControlURL        string
+	MTLSDisabled      bool
+	Factory           NodeFactory
+	Provisioner       *Provisioner
+	Now               func() time.Time
+	JoinTimeout       time.Duration // 60 s per join attempt
+	RetryMin          time.Duration // 5 s
+	RetryMax          time.Duration // 60 s
+	RefreshInterval   time.Duration // at most one Status refresh per 5 s
+	ControlGrace      time.Duration // Self offline longer than 60 s means control unreachable
+	ProvisionRetryMin time.Duration // 30 s between credential checks after a provider failure
+	ProvisionRetryMax time.Duration // 5 min
 }
 
 func (c *ManagerConfig) defaults() {
@@ -69,7 +75,7 @@ func (c *ManagerConfig) defaults() {
 	for _, d := range []struct {
 		v   *time.Duration
 		def time.Duration
-	}{{&c.JoinTimeout, 60 * time.Second}, {&c.RetryMin, 5 * time.Second}, {&c.RetryMax, 60 * time.Second}, {&c.RefreshInterval, 5 * time.Second}, {&c.ControlGrace, 60 * time.Second}} {
+	}{{&c.JoinTimeout, 60 * time.Second}, {&c.RetryMin, 5 * time.Second}, {&c.RetryMax, 60 * time.Second}, {&c.RefreshInterval, 5 * time.Second}, {&c.ControlGrace, 60 * time.Second}, {&c.ProvisionRetryMin, 30 * time.Second}, {&c.ProvisionRetryMax, 5 * time.Minute}} {
 		if *d.v <= 0 {
 			*d.v = d.def
 		}
@@ -90,13 +96,17 @@ type Manager struct {
 	conn         tailnettypes.Connection
 	prov         tailnettypes.Provisioning
 	status       *ipnstate.Status
+	coordWarning bool // bus health reports the control server not delivering network maps
 	offlineSince time.Time
+	provSeq      int64 // last started provisioning operation
+	provApplied  int64 // newest provisioning operation whose result was recorded
 	listeners    map[int]func()
 	nextListener int
 }
 
 type run struct {
 	gen      int64
+	ctx      context.Context
 	cancel   context.CancelFunc
 	done     chan struct{}
 	node     Node
@@ -155,6 +165,9 @@ func (m *Manager) SetIngressHandler(handler http.Handler) {
 
 // Apply replaces the desired state. The old node, listener and watcher are closed before a new run starts.
 func (m *Manager) Apply(ctx context.Context, enabled bool, cred Credential) {
+	if m.updateCredential(enabled, cred) {
+		return
+	}
 	m.mu.Lock()
 	m.gen++
 	gen := m.gen
@@ -163,7 +176,9 @@ func (m *Manager) Apply(ctx context.Context, enabled bool, cred Credential) {
 	m.enabled = enabled
 	m.cred = cred
 	m.status = nil
+	m.coordWarning = false
 	m.offlineSince = time.Time{}
+	m.provApplied = m.provSeq
 	m.prov = initialProvisioning(enabled, cred)
 	if enabled && cred.configured() {
 		m.conn = tailnettypes.Connection{State: "joining"}
@@ -183,7 +198,7 @@ func (m *Manager) Apply(ctx context.Context, enabled bool, cred Credential) {
 		return
 	}
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	r := &run{gen: gen, cancel: cancel, done: make(chan struct{})}
+	r := &run{gen: gen, ctx: runCtx, cancel: cancel, done: make(chan struct{})}
 	m.mu.Lock()
 	if m.gen != gen {
 		m.mu.Unlock()
@@ -199,6 +214,28 @@ func (m *Manager) Apply(ctx context.Context, enabled bool, cred Credential) {
 	if cred.Mode == tailnettypes.ModeOAuth {
 		go m.checkCredential(runCtx, gen, cred)
 	}
+}
+
+// updateCredential keeps a connected node when only the credential changes: the retained node needs no
+// enrollment, so a new credential only re-validates provisioning (the same mode keeps the node's tags).
+func (m *Manager) updateCredential(enabled bool, cred Credential) bool {
+	m.mu.Lock()
+	r := m.run
+	if r == nil || r.ctx == nil || !m.enabled || !enabled || !cred.configured() || cred.Mode != m.cred.Mode || m.conn.State != "connected" {
+		m.mu.Unlock()
+		return false
+	}
+	m.cred = cred
+	m.provApplied = m.provSeq
+	m.prov = initialProvisioning(true, cred)
+	gen := m.gen
+	fns := m.notifyLocked()
+	m.mu.Unlock()
+	fire(fns)
+	if cred.Mode == tailnettypes.ModeOAuth {
+		go m.checkCredential(r.ctx, gen, cred)
+	}
+	return true
 }
 
 func initialProvisioning(enabled bool, cred Credential) tailnettypes.Provisioning {
@@ -256,36 +293,77 @@ func (m *Manager) setConnection(gen int64, conn tailnettypes.Connection) {
 	fire(fns)
 }
 
-func (m *Manager) setProvisioning(gen int64, prov tailnettypes.Provisioning) {
+// current reports whether gen and cred are still the desired state.
+func (m *Manager) current(gen int64, cred Credential) bool {
 	m.mu.Lock()
-	if m.gen != gen {
+	defer m.mu.Unlock()
+	return m.gen == gen && m.cred == cred
+}
+
+// beginProvisioning numbers a provisioning operation; only a newer operation's result may replace a recorded one.
+func (m *Manager) beginProvisioning() int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.provSeq++
+	return m.provSeq
+}
+
+func (m *Manager) setProvisioning(gen, seq int64, cred Credential, prov tailnettypes.Provisioning) {
+	m.mu.Lock()
+	if m.gen != gen || m.cred != cred || seq <= m.provApplied {
 		m.mu.Unlock()
 		return
 	}
+	m.provApplied = seq
 	m.prov = prov
 	fns := m.notifyLocked()
 	m.mu.Unlock()
 	fire(fns)
 }
 
+// checkCredential validates the OAuth credential; a provider failure without a refusal is recorded as
+// unavailable and retried with backoff until the credential is accepted or refused, or the generation ends.
 func (m *Manager) checkCredential(ctx context.Context, gen int64, cred Credential) {
-	checkCtx, cancel := context.WithTimeout(ctx, providerTimeout)
-	defer cancel()
-	_, err := m.cfg.Provisioner.AccessToken(checkCtx, cred.ClientID, cred.ClientSecret)
-	m.recordProvisioning(gen, err)
+	delay := m.cfg.ProvisionRetryMin
+	for {
+		seq := m.beginProvisioning()
+		checkCtx, cancel := context.WithTimeout(ctx, providerTimeout)
+		_, err := m.cfg.Provisioner.AccessToken(checkCtx, cred.ClientID, cred.ClientSecret)
+		cancel()
+		if m.recordProvisioning(gen, seq, cred, err, true) || ctx.Err() != nil || !m.current(gen, cred) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		delay = min(delay*2, m.cfg.ProvisionRetryMax)
+	}
 }
 
-// recordProvisioning maps a provider result: only a credential refusal marks provisioning rejected.
-func (m *Manager) recordProvisioning(gen int64, err error) {
+// recordProvisioning maps a provider result and reports whether it is final (accepted or refused).
+// Only a credential refusal marks provisioning rejected; other failures of a check end checking as
+// unavailable, while a failed mint leaves the recorded state to the check (the request reports its error).
+func (m *Manager) recordProvisioning(gen, seq int64, cred Credential, err error, check bool) bool {
 	var problem *tailnettypes.Problem
 	switch {
 	case err == nil:
-		m.setProvisioning(gen, tailnettypes.Provisioning{State: "ok"})
+		m.setProvisioning(gen, seq, cred, tailnettypes.Provisioning{State: "ok"})
+		return true
 	case errors.As(err, &problem) && problem.Code == tailnettypes.CodeCredentialRejected:
-		m.setProvisioning(gen, tailnettypes.Provisioning{State: "rejected", Code: problem.Code, ProviderStatus: problem.ProviderStatus})
-	default:
-		slog.Debug("Tailnet credential check failed without a refusal", "error", Redact(err.Error()))
+		m.setProvisioning(gen, seq, cred, tailnettypes.Provisioning{State: "rejected", Code: problem.Code, ProviderStatus: problem.ProviderStatus})
+		return true
 	}
+	slog.Debug("Tailnet provisioning failed without a refusal", "error", redactSecrets(err.Error(), cred.secrets()...))
+	if check {
+		prov := tailnettypes.Provisioning{State: "unavailable", Code: tailnettypes.CodeProviderUnavailable}
+		if errors.As(err, &problem) {
+			prov.ProviderStatus = problem.ProviderStatus
+		}
+		m.setProvisioning(gen, seq, cred, prov)
+	}
+	return false
 }
 
 func (m *Manager) runNode(ctx context.Context, r *run, cred Credential) {
@@ -294,13 +372,21 @@ func (m *Manager) runNode(ctx context.Context, r *run, cred Credential) {
 	if cred.Mode == tailnettypes.ModeOAuth {
 		tags = []string{HubTag}
 	}
+	// A retained identity starts without the credential, so enrollment problems cannot stop a registered node;
+	// the credential is used only for a first join or when the retained node needs a new login.
+	enroll := !HasNodeState(m.cfg.StateDir)
 	for {
+		authKey := ""
+		if enroll {
+			authKey = HubAuthKey(cred.Mode, cred.ClientSecret, cred.AuthKey)
+		}
 		node, err := m.cfg.Factory(NodeConfig{
 			Dir:           m.cfg.StateDir,
 			Hostname:      m.cfg.Hostname,
 			ControlURL:    m.cfg.ControlURL,
-			AuthKey:       HubAuthKey(cred.Mode, cred.ClientSecret, cred.AuthKey),
+			AuthKey:       authKey,
 			AdvertiseTags: tags,
+			Secrets:       cred.secrets(),
 		})
 		if err == nil {
 			upCtx, cancel := context.WithTimeout(ctx, m.cfg.JoinTimeout)
@@ -311,20 +397,23 @@ func (m *Manager) runNode(ctx context.Context, r *run, cred Credential) {
 				_ = node.Close()
 				return
 			}
+			if !enroll && needsLogin(ctx, node) {
+				enroll = true
+			}
 			_ = node.Close()
 		}
 		if ctx.Err() != nil {
 			return
 		}
 		if joinRejected(err) {
-			slog.Warn("Tailnet credential rejected", "error", redactSecret(err.Error(), cred.ClientSecret))
+			slog.Warn("Tailnet credential rejected", "error", redactSecrets(err.Error(), cred.secrets()...))
 			m.setConnection(r.gen, tailnettypes.Connection{State: "error", Code: tailnettypes.CodeCredentialRejected})
 			if cred.Mode == tailnettypes.ModeOAuth {
-				m.setProvisioning(r.gen, tailnettypes.Provisioning{State: "rejected", Code: tailnettypes.CodeCredentialRejected})
+				m.setProvisioning(r.gen, m.beginProvisioning(), cred, tailnettypes.Provisioning{State: "rejected", Code: tailnettypes.CodeCredentialRejected})
 			}
 			return
 		}
-		slog.Info("Tailnet join failed; retrying", "error", redactSecret(err.Error(), cred.ClientSecret), "retryIn", delay)
+		slog.Info("Tailnet join failed; retrying", "error", redactSecrets(err.Error(), cred.secrets()...), "retryIn", delay, "enroll", enroll)
 		m.setConnection(r.gen, tailnettypes.Connection{State: "joining", Code: tailnettypes.CodeCoordinationUnreachable})
 		select {
 		case <-ctx.Done():
@@ -333,6 +422,14 @@ func (m *Manager) runNode(ctx context.Context, r *run, cred Credential) {
 		}
 		delay = min(delay*2, m.cfg.RetryMax)
 	}
+}
+
+// needsLogin reports whether a node that failed to come up waits for a new login (expired or removed identity).
+func needsLogin(ctx context.Context, node Node) bool {
+	statusCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	status, err := node.Status(statusCtx)
+	return err == nil && status != nil && (status.BackendState == ipn.NeedsLogin.String() || status.BackendState == ipn.NeedsMachineAuth.String())
 }
 
 // joinRejected recognises control refusing the key (backend error) or the OAuth exchange refusing the secret.

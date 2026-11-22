@@ -13,6 +13,7 @@ export const deTailnetContract: typeof enTailnetContract = {
     "not-connected": "Der Hub ist nicht mit dem Tailnet verbunden. Tailscale unter Einstellungen → Verbindungen einschalten oder warten, bis die Verbindung steht.",
     "key-mint-failed": "Tailscale konnte keinen Schlüssel für diesen Host erstellen. Gleich noch einmal versuchen.",
     "mtls-unsupported": "Der Tailscale-Weg setzt ausgeschaltetes Edge-mTLS voraus (EDGE_MTLS_MODE=disabled).",
+    "provider-unavailable": "Die Tailscale-API kann den Zugang gerade nicht prüfen. Docklet versucht es automatisch erneut; bestehende Hosts bleiben verbunden.",
   },
   "connection": {
     "off": "Aus",
@@ -27,6 +28,7 @@ export const deTailnetContract: typeof enTailnetContract = {
     "checking": "Zugang wird geprüft",
     "ok": "Zugang akzeptiert",
     "rejected": "Zugang abgelehnt",
+    "unavailable": "Zugangsprüfung nicht möglich",
   },
   "peer": {
     "online": "Online",

@@ -11,6 +11,7 @@ export const enTailnetContract = {
     "not-connected": "The hub is not connected to the tailnet. Turn on Tailscale under Settings → Connections or wait until it is connected.",
     "key-mint-failed": "Tailscale could not create a key for this host. Try again in a moment.",
     "mtls-unsupported": "The Tailscale route needs Edge mTLS to be off (EDGE_MTLS_MODE=disabled).",
+    "provider-unavailable": "The Tailscale API cannot check the credential right now. Docklet retries automatically; existing hosts stay connected.",
   },
   "connection": {
     "off": "Off",
@@ -25,6 +26,7 @@ export const enTailnetContract = {
     "checking": "Checking credential",
     "ok": "Credential accepted",
     "rejected": "Credential rejected",
+    "unavailable": "Credential check unavailable",
   },
   "peer": {
     "online": "Online",

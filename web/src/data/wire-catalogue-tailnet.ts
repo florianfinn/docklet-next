@@ -15,6 +15,7 @@ export const TAILNET_CODE_KEYS = {
   "tailnet.not-connected": "tailnetContract.codes.not-connected",
   "tailnet.key-mint-failed": "tailnetContract.codes.key-mint-failed",
   "tailnet.mtls-unsupported": "tailnetContract.codes.mtls-unsupported",
+  "tailnet.provider-unavailable": "tailnetContract.codes.provider-unavailable",
 } satisfies Record<Schema["TailnetProblem"]["code"] | NonNullable<Schema["TailnetConnection"]["code"]> | NonNullable<Schema["TailnetProvisioning"]["code"]>, CatalogueKey>;
 
 export const TAILNET_CONNECTION_KEYS = {
@@ -31,6 +32,7 @@ export const TAILNET_PROVISIONING_KEYS = {
   "checking": "tailnetContract.provisioning.checking",
   "ok": "tailnetContract.provisioning.ok",
   "rejected": "tailnetContract.provisioning.rejected",
+  "unavailable": "tailnetContract.provisioning.unavailable",
 } satisfies Record<Schema["TailnetProvisioning"]["state"], CatalogueKey>;
 
 export const TAILNET_PEER_KEYS = {

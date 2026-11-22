@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 1246cdd61a8d0be8d9c1363fc9ae92e1cdfdcf1e928eab2fb9409b1416d1ac82
+// Revision: 059c475e7e0ef495aaa4d89814476e967aeffff75ac3a5748dca95554a02f27c
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -13499,11 +13499,11 @@ export interface components {
         };
         TailnetProvisioning: {
             /** @enum {string} */
-            code?: "tailnet.credential-rejected";
+            code?: "tailnet.credential-rejected" | "tailnet.provider-unavailable";
             /** Format: int64 */
             providerStatus?: number;
             /** @enum {string} */
-            state: "not-configured" | "not-applicable" | "checking" | "ok" | "rejected";
+            state: "not-configured" | "not-applicable" | "checking" | "ok" | "rejected" | "unavailable";
         };
         TailnetSettings: {
             clientId?: string;

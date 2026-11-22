@@ -28,8 +28,11 @@ type AgentConfig struct {
 	RetryMax   time.Duration // 60 s
 }
 
-// Enabled reports whether the agent uses the tailnet route.
-func (c AgentConfig) Enabled() bool { return strings.TrimSpace(c.AuthKey) != "" }
+// Enabled reports whether the agent uses the tailnet route: a first-join key, the installer's tailnet
+// hostname or a retained node identity. A restart without the consumed key keeps the route.
+func (c AgentConfig) Enabled() bool {
+	return strings.TrimSpace(c.AuthKey) != "" || strings.TrimSpace(c.Hostname) != "" || HasNodeState(c.StateDir)
+}
 
 // Agent is the agent's joined node.
 type Agent struct {
@@ -50,11 +53,20 @@ func JoinAgent(ctx context.Context, cfg AgentConfig) (*Agent, error) {
 	}
 	delay := cfg.RetryMin
 	for attempt := 1; ; attempt++ {
+		// The one-use key is offered only without a retained identity; it is consumed after the first join.
+		retained := HasNodeState(cfg.StateDir)
+		key := strings.TrimSpace(cfg.AuthKey)
+		if retained {
+			key = ""
+		} else if key == "" {
+			slog.ErrorContext(ctx, "Tailnet node state is missing and no auth key is configured; re-add this host to issue a new key", "attempt", attempt)
+		}
 		node, err := cfg.Factory(NodeConfig{
 			Dir:        cfg.StateDir,
 			Hostname:   cfg.Hostname,
 			ControlURL: cfg.ControlURL,
-			AuthKey:    strings.TrimSpace(cfg.AuthKey),
+			AuthKey:    key,
+			Secrets:    []string{cfg.AuthKey},
 		})
 		if err == nil {
 			upCtx, cancel := context.WithTimeout(ctx, cfg.RetryMax)
@@ -69,7 +81,7 @@ func JoinAgent(ctx context.Context, cfg AgentConfig) (*Agent, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		slog.WarnContext(ctx, "Tailnet join failed; retrying", "attempt", attempt, "retryIn", delay, "error", redactSecret(err.Error(), cfg.AuthKey))
+		slog.WarnContext(ctx, "Tailnet join failed; retrying", "attempt", attempt, "retryIn", delay, "error", redactSecrets(err.Error(), cfg.AuthKey))
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -93,7 +105,7 @@ type AgentRoute struct {
 	agent atomic.Pointer[Agent]
 }
 
-// NewAgentRoute returns a route; Enabled is false when no auth key is configured.
+// NewAgentRoute returns a route; Enabled is false when no key, tailnet hostname or retained identity exists.
 func NewAgentRoute(cfg AgentConfig) *AgentRoute { return &AgentRoute{cfg: cfg} }
 
 func (r *AgentRoute) Enabled() bool { return r != nil && r.cfg.Enabled() }
