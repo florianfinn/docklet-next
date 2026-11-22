@@ -69,6 +69,7 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
     {mtls && <p role="alert" className="border-b p-4 text-sm text-warning">{t("mtls")}</p>}
     {rejected && <div role="alert" className="border-b p-4 text-sm text-destructive"><p>{t(connected ? "rejected" : "rejectedDisconnected")}</p>{status.provisioning.providerStatus && <p>{t("providerStatus", { status: status.provisioning.providerStatus })}</p>}</div>}
     {status.provisioning.state === "checking" && <p role="status" className="p-4 text-sm">{t("checking")}</p>}
+    {status.provisioning.state === "unavailable" && <p role="status" className="border-b p-4 text-sm">{wire("codes.provider-unavailable")}</p>}
     {(connected || status.connection.state === "control-unreachable") && <dl className="grid min-w-0 gap-2 border-b p-4 text-sm sm:grid-cols-[10rem_minmax(0,1fr)]">
       <dt className="text-muted-foreground">{t("tailnet")}</dt><dd className="break-all">{status.tailnetName ?? "–"}</dd>
       <dt className="text-muted-foreground">{t("hub")}</dt><dd className="font-mono break-all">{settings.hostname} · {status.hubAddress ?? "–"}</dd>

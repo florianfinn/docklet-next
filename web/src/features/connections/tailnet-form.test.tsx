@@ -121,3 +121,10 @@ it("explains a control outage reported while the hub is still joining", async ()
   await screen.findByLabelText("Client secret");
   expect(screen.queryByText(/The control server cannot be reached/) !== null).toBe(true);
 });
+
+it("tells the operator when the provider cannot check the credential", async () => {
+  const f = tailnetFixture({ ...connectedStatus(), provisioning: { state: "unavailable", code: "tailnet.provider-unavailable" } });
+  renderWithApp(<TailnetConnection />, f.adapter);
+  const line = await screen.findByText(/cannot check the credential right now/);
+  expect(line.textContent).toContain("existing hosts stay connected");
+});

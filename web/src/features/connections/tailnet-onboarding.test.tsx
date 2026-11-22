@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original Tailscale UI and generation-fenced stream consumers.
 
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setAppLocale } from "@/app/i18n/locale-store";
@@ -77,14 +77,21 @@ it("revokes tailnet admission live when provisioning rejects after selection", a
   expect(f.writes).toHaveLength(0);
 });
 
-it("blocks only the missing custom-control installer handoff", async () => {
-  const f = tailnetFixture({ ...connectedStatus(), mode: "manual", provisioning: { state: "not-applicable" } }); f.state.settings.customControl = true;
-  renderRoutes([{ path: "/hosts/new", element: <OnboardingPage /> }], ["/hosts/new"], f.adapter);
-  await screen.findByText(/custom control server/);
-  expect((screen.getByRole("radio", { name: /Tailscale Private/ }) as HTMLButtonElement).disabled).toBe(true);
-  expect((within(screen.getByRole("radiogroup", { name: "Route to the hub" })).getByRole("radio", { name: /LAN address/ }) as HTMLButtonElement).disabled).toBe(false);
+it("writes the hub's self-hosted control server into the agent installer", async () => {
+  const f = tailnetFixture({ ...connectedStatus(), mode: "manual", provisioning: { state: "not-applicable" } });
+  f.state.settings.mode = "manual"; f.state.settings.customControl = true; f.state.settings.controlUrl = "https://control.example.com";
+  renderRoutes([{ path: "/hosts/new", element: <OnboardingPage /> }, { path: "/hosts", element: <p>Host list</p> }], ["/hosts/new"], f.adapter);
+  await userEvent.type(await screen.findByLabelText("Host name in Docklet"), "New agent");
+  const route = await screen.findByRole("radio", { name: /Tailscale Private/ });
+  await waitFor(() => expect((route as HTMLButtonElement).disabled).toBe(false));
+  await userEvent.click(route);
+  await userEvent.type(screen.getByLabelText("One-use agent auth key"), "tskey-auth-example-manual");
+  await userEvent.click(screen.getByRole("button", { name: "Next" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Create host and wait for agent" }));
+  await screen.findByTestId("agent-token");
+  await userEvent.click(screen.getByRole("radio", { name: /Compose/ }));
+  expect(document.body.textContent).toContain("TAILSCALE_CONTROL_URL='https://control.example.com'");
 });
-
 
 it("retains the created host but refuses a partial one-time installer response", async () => {
   const f = tailnetFixture();

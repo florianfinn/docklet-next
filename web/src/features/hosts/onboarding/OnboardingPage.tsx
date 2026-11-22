@@ -67,7 +67,7 @@ function OnboardingFlow() {
   const taken = useMemo(() => hosts.all.filter((h) => h.id !== draft?.hostId).map((h) => h.name), [hosts.all, draft?.hostId]);
   const errors = draft ? validateStep(step, draft, taken) : {};
   const general = settings.data?.general;
-  const tailnetBlocked = draft?.connection === "edge" && draft.route === "tailnet" && (!!tailnetRouteReason(tailnet.status) || !tailnetSettings.data || tailnetSettings.data.customControl || tailnet.status?.mode === "manual" && !draft.tailnetAuthKey?.trim());
+  const tailnetBlocked = draft?.connection === "edge" && draft.route === "tailnet" && (!!tailnetRouteReason(tailnet.status) || !tailnetSettings.data || tailnet.status?.mode === "manual" && !draft.tailnetAuthKey?.trim());
   const plan = draft && general ? planFromDraft(draft, draft.route === "tailnet" && tailnet.status?.hubAddress ? `http://${tailnet.status.hubAddress}:3552` : draft.hubUrl ?? defaultAgentHubUrl(general, discovery.data), general.timeZone) : undefined;
 
   if (plan && discovery.data?.agentImage) plan.image = discovery.data.agentImage;
@@ -95,7 +95,7 @@ function OnboardingFlow() {
       });
       setBusy(false);
       if (!registration) return;
-      patchDraft({ hostId: registration.host.id, token: registration.token, hubUrl: registration.tailnetManagerUrl ?? plan.hubUrl, ...(registration.tailnetAuthKey ? { tailnetAuthKey: registration.tailnetAuthKey, tailnetManagerUrl: registration.tailnetManagerUrl } : {}) });
+      patchDraft({ hostId: registration.host.id, token: registration.token, hubUrl: registration.tailnetManagerUrl ?? plan.hubUrl, ...(registration.tailnetAuthKey ? { tailnetAuthKey: registration.tailnetAuthKey, tailnetManagerUrl: registration.tailnetManagerUrl, tailnetControlUrl: tailnetSettings.data?.controlUrl } : {}) });
     }
     const nextIndex = index + 1;
     patchDraft({ reached: Math.max(reached, nextIndex) });

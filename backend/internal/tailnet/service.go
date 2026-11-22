@@ -22,10 +22,10 @@ type HostCounter func(ctx context.Context) (total, online int)
 
 // Service is the hub's tailnet route: stored credential, node lifecycle and status.
 type Service struct {
-	manager       *Manager
-	store         *Store
-	hostname      string
-	customControl bool
+	manager    *Manager
+	store      *Store
+	hostname   string
+	controlURL string
 
 	writes sync.Mutex
 	mu     sync.Mutex
@@ -44,11 +44,11 @@ func NewService(cfg *config.Config, settings SettingsBackend) *Service {
 		MTLSDisabled: edge.NormalizeEdgeMTLSMode(cfg.EdgeMTLSMode) == edge.EdgeMTLSModeDisabled,
 		Provisioner:  &Provisioner{},
 	})
-	return newService(manager, NewStore(settings), cmpOr(cfg.TailscaleHostname, "docklet-hub"), strings.TrimSpace(cfg.TailscaleControlURL) != "")
+	return newService(manager, NewStore(settings), cmpOr(cfg.TailscaleHostname, "docklet-hub"), strings.TrimSpace(cfg.TailscaleControlURL))
 }
 
-func newService(manager *Manager, store *Store, hostname string, customControl bool) *Service {
-	return &Service{manager: manager, store: store, hostname: hostname, customControl: customControl}
+func newService(manager *Manager, store *Store, hostname, controlURL string) *Service {
+	return &Service{manager: manager, store: store, hostname: hostname, controlURL: controlURL}
 }
 
 func cmpOr(value, fallback string) string {
@@ -114,7 +114,7 @@ func (s *Service) Settings(ctx context.Context) (tailnettypes.Settings, error) {
 	if err != nil {
 		return tailnettypes.Settings{}, err
 	}
-	return ReadModel(enabled, cred, s.hostname, s.customControl), nil
+	return ReadModel(enabled, cred, s.hostname, s.controlURL), nil
 }
 
 // Update stores the credential and switch, then restarts the node in a new generation.
@@ -133,7 +133,7 @@ func (s *Service) Update(ctx context.Context, update tailnettypes.SettingsUpdate
 		return tailnettypes.Settings{}, err
 	}
 	s.manager.Apply(ctx, update.Enabled, next)
-	return ReadModel(update.Enabled, next, s.hostname, s.customControl), nil
+	return ReadModel(update.Enabled, next, s.hostname, s.controlURL), nil
 }
 
 // Reset turns the route off and deletes the hub's local node identity; the credential is kept.

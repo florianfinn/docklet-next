@@ -8,6 +8,8 @@ export interface HostDraft {
   route?: import("@/domain/tailnet").NetworkRoute;
   tailnetAuthKey?: string;
   tailnetManagerUrl?: string;
+  /** Self-hosted control server the hub uses; written into the agent installer. */
+  tailnetControlUrl?: string;
   address: string;
   port: string;
   projectDir: string;

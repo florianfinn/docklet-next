@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 059c475e7e0ef495aaa4d89814476e967aeffff75ac3a5748dca95554a02f27c
+// Revision: 048aa3bb08c3995e36e13403d102c7ff3ead9c64309c41cd9cf2f22ed77600f2
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -13507,6 +13507,8 @@ export interface components {
         };
         TailnetSettings: {
             clientId?: string;
+            /** @description Self-hosted control server (TAILSCALE_CONTROL_URL) that new agents join; written into their installer */
+            controlUrl?: string;
             /** @description TAILSCALE_CONTROL_URL is set */
             customControl: boolean;
             enabled: boolean;

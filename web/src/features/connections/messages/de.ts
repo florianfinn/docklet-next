@@ -87,7 +87,6 @@ export const deConnections = {
   "manualHostHint": "Dieser Schlüssel wird nur im Installer dieses Hosts verwendet. Der Hub speichert ihn nicht.",
   "automaticHostKey": "Docklet erstellt beim Registrieren des Hosts einen einmaligen Agent-Schlüssel.",
   "fixedHub": "Der Installer verwendet diese feste Tailnet-Hub-URL.",
-  "customControlGap": "Der Hub verwendet einen eigenen Kontrollserver. Der passende Installer ist noch nicht verfügbar. Nutze eine LAN-Adresse oder öffentliche Domain, bis dieser Weg bereit ist.",
   "cause": "Verbindungsursache",
   "showCause": "Ursache anzeigen",
   "chainTitle": "Warum ist {name} getrennt?",

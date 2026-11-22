@@ -81,7 +81,7 @@ export function planFromDraft(d: HostDraft, hubUrl: string, timeZone: string): A
     address: d.address.trim(),
     port: Number(d.port) || AGENT_PORT,
     hubUrl: d.route === "tailnet" ? d.tailnetManagerUrl ?? hubUrl : hubUrl,
-    ...(d.connection === "edge" && d.route === "tailnet" && d.tailnetAuthKey ? { tailnet: { authKey: d.tailnetAuthKey, hostname: tailnetHostname(d.name) } } : {}),
+    ...(d.connection === "edge" && d.route === "tailnet" && d.tailnetAuthKey ? { tailnet: { authKey: d.tailnetAuthKey, hostname: tailnetHostname(d.name), ...(d.tailnetControlUrl ? { controlUrl: d.tailnetControlUrl } : {}) } } : {}),
     projectDir: normalizePath(d.projectDir),
     installDir: normalizePath(d.installDir),
     fileOwner: draftFileOwner(d),

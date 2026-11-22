@@ -115,14 +115,15 @@ func Merge(stored Credential, update tailnettypes.SettingsUpdate) (Credential, e
 }
 
 // ReadModel is the write-only settings view: secrets are reported only as configured.
-func ReadModel(enabled bool, cred Credential, hostname string, customControl bool) tailnettypes.Settings {
+func ReadModel(enabled bool, cred Credential, hostname, controlURL string) tailnettypes.Settings {
 	return tailnettypes.Settings{
 		Enabled:          enabled,
 		Mode:             cred.Mode,
 		ClientID:         cred.ClientID,
 		SecretConfigured: cred.configured(),
 		Hostname:         hostname,
-		CustomControl:    customControl,
+		CustomControl:    controlURL != "",
+		ControlURL:       controlURL,
 		PolicySnippet:    PolicySnippet(),
 	}
 }

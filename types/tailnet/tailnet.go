@@ -91,6 +91,7 @@ type Settings struct {
 	SecretConfigured bool   `json:"secretConfigured"`
 	Hostname         string `json:"hostname"`
 	CustomControl    bool   `json:"customControl" doc:"TAILSCALE_CONTROL_URL is set"`
+	ControlURL       string `json:"controlUrl,omitempty" doc:"Self-hosted control server (TAILSCALE_CONTROL_URL) that new agents join; written into their installer"`
 	PolicySnippet    string `json:"policySnippet"`
 }
 

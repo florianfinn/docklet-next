@@ -70,10 +70,15 @@ func TestCredentialIsEncryptedAndWriteOnly(t *testing.T) {
 	require.True(t, enabled)
 	require.Equal(t, secret, loaded.ClientSecret)
 
-	read, err := json.Marshal(tailnet.ReadModel(enabled, loaded, "docklet-hub", false))
+	read, err := json.Marshal(tailnet.ReadModel(enabled, loaded, "docklet-hub", ""))
 	require.NoError(t, err)
 	require.NotContains(t, string(read), "SECRETVALUE")
 	require.Contains(t, string(read), `"secretConfigured":true`)
+	require.NotContains(t, string(read), "controlUrl")
+	// A self-hosted control server is reported so new agents' installers join it.
+	custom := tailnet.ReadModel(enabled, loaded, "docklet-hub", "https://control.example.com")
+	require.True(t, custom.CustomControl)
+	require.Equal(t, "https://control.example.com", custom.ControlURL)
 
 	// An empty secret keeps the stored one (rotation is an explicit new value).
 	kept, err := tailnet.Merge(loaded, tailnettypes.SettingsUpdate{Enabled: true, Mode: tailnettypes.ModeOAuth})
