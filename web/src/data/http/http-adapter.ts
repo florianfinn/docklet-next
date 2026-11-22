@@ -723,11 +723,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     const version = identityGeneration;
     await requireCapability("listHosts");
     freshFrom(attempt);
-    const catalogue = catalogueVersion;
+    const catalogue = catalogueVersion, frame = tailnet.frame();
     const rows = await environments();
     if (version !== identityGeneration) throw new CancelledError();
     try {
-      const hosts = rows.map((row) => ({ ...mapHost(tailnet.project(principal?.isAdmin === false ? { ...row, apiUrl: "", enabled: true } : row)), inventory: observations.get(row.id) }));
+      const hosts = rows.map((row) => ({ ...mapHost(tailnet.project(principal?.isAdmin === false ? { ...row, apiUrl: "", enabled: true } : row, frame)), inventory: observations.get(row.id) }));
       // A catalogue from before a later stream frame does not replace the state that frame compared against.
       if (catalogue === catalogueVersion) { environmentState = environmentKey(rows); navState.observe(rows); }
       return hosts;

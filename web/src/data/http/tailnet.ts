@@ -15,6 +15,7 @@ type PeerProjection = Pick<Environment, "registrationRevision" | "networkRoute" 
 
 export function createTailnet(baseUrl: string, client: CsrfClient, identity: () => number) {
   const peers = new Map<string, PeerProjection>();
+  let frame = 0;
   let current: TailnetStatus | undefined;
   let revision = 0;
   let streamEpoch = 0, observedEpoch = 0;
@@ -62,12 +63,15 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
     async reset() { ++revision; observe(await request<TailnetStatus>("/tailnet/reset", "POST")); },
   };
   function observeHosts(rows: Environment[]) {
-    peers.clear();
+    ++frame; peers.clear();
     for (const row of rows) peers.set(row.id, { registrationRevision: row.registrationRevision, networkRoute: row.networkRoute, tailnet: row.tailnet });
   }
-  function project(row: Environment): Environment {
+  /** `readFrom` is frame() when the catalogue read started: a read after the latest frame keeps the peer fields it carries. */
+  function project(row: Environment, readFrom = -1): Environment {
     const peer = peers.get(row.id);
-    return peer && typeof peer.registrationRevision === "number" && peer.registrationRevision === row.registrationRevision ? { ...row, ...peer } : row;
+    if (!peer || typeof peer.registrationRevision !== "number" || peer.registrationRevision !== row.registrationRevision) return row;
+    if (readFrom >= frame) return { ...row, networkRoute: row.networkRoute ?? peer.networkRoute, tailnet: row.tailnet ?? peer.tailnet };
+    return { ...row, ...peer };
   }
   // Generations are process-local. An SSE reopen starts a fresh observation boundary while preserving owned writes.
   async function reconnect() {
@@ -78,5 +82,5 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
     for (const write of writes) if (write.epoch === streamEpoch && next.generation <= write.floor) return false;
     return observe(next);
   }
-  return { api, observe: observeStream, observeHosts, project, reconnect, clear: () => { ++revision; peers.clear(); lifetime.abort(); lifetime = new AbortController(); current = undefined; notify(); } };
+  return { api, observe: observeStream, observeHosts, frame: () => frame, project, reconnect, clear: () => { ++revision; peers.clear(); lifetime.abort(); lifetime = new AbortController(); current = undefined; notify(); } };
 }

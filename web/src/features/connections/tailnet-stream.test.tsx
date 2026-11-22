@@ -191,3 +191,19 @@ it("fences each overlapping credential save until its own status read settles", 
   reply(1, connectedStatus()); await first;
   expect(tailnet.observe({ ...connectedStatus(), connection: { state: "joining" } })).toBe(true);
 });
+
+it("lets a catalogue read after the latest frame show the newer peer state", async () => {
+  const f = tailnetFixture(); const notify = vi.spyOn(toast, "warning");
+  renderWithApp(<Hosts />, f.adapter);
+  await screen.findByText("Example agent");
+  // Diagnosis timeline: the delayed frame still carries the peer online; the refetch it triggers already reads the peer offline.
+  const sessionGone = { ...peerHost, status: "offline", tailnet: { ...peerHost.tailnet!, state: "online" as const, failingLink: "tunnel" } };
+  await act(async () => {
+    f.send(connectedStatus(), [sessionGone]);
+    f.state.rows = [{ ...sessionGone, tailnet: { ...sessionGone.tailnet, state: "offline", path: "unknown", failingLink: "peer" } }];
+  });
+  await userEvent.click(await screen.findByRole("button", { name: "Show cause" }));
+  const dialog = await screen.findByRole("dialog");
+  await waitFor(() => expect(dialog.querySelector('[data-link="peer"]')?.getAttribute("data-state")).toBe("failed"));
+  expect(notify).toHaveBeenLastCalledWith("Example agent disconnected: Agent in the tailnet.");
+});
