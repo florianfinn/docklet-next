@@ -79,6 +79,15 @@ func TestCredentialIsEncryptedAndWriteOnly(t *testing.T) {
 	custom := tailnet.ReadModel(enabled, loaded, "docklet-hub", "https://control.example.com")
 	require.True(t, custom.CustomControl)
 	require.Equal(t, "https://control.example.com", custom.ControlURL)
+	// A value installers must not carry is never serialised; customControl still makes onboarding refuse the route.
+	for _, unusable := range []string{"https://example-user:" + "example-pass@control.example.com", "control.example.com", "ftp://control.example.com", "https://control.example.com/'x"} {
+		refused := tailnet.ReadModel(enabled, loaded, "docklet-hub", unusable)
+		body, err := json.Marshal(refused)
+		require.NoError(t, err)
+		require.True(t, refused.CustomControl, unusable)
+		require.Empty(t, refused.ControlURL, unusable)
+		require.NotContains(t, string(body), "example-pass")
+	}
 
 	// An empty secret keeps the stored one (rotation is an explicit new value).
 	kept, err := tailnet.Merge(loaded, tailnettypes.SettingsUpdate{Enabled: true, Mode: tailnettypes.ModeOAuth})

@@ -44,7 +44,12 @@ func NewService(cfg *config.Config, settings SettingsBackend) *Service {
 		MTLSDisabled: edge.NormalizeEdgeMTLSMode(cfg.EdgeMTLSMode) == edge.EdgeMTLSModeDisabled,
 		Provisioner:  &Provisioner{},
 	})
-	return newService(manager, NewStore(settings), cmpOr(cfg.TailscaleHostname, "docklet-hub"), strings.TrimSpace(cfg.TailscaleControlURL))
+	controlURL := strings.TrimSpace(cfg.TailscaleControlURL)
+	if _, ok := InstallerControlURL(controlURL); controlURL != "" && !ok {
+		// Never log the value: it may carry credentials.
+		slog.Warn("TAILSCALE_CONTROL_URL is not an http(s) URL without credentials; new hosts cannot use the Tailscale route")
+	}
+	return newService(manager, NewStore(settings), cmpOr(cfg.TailscaleHostname, "docklet-hub"), controlURL)
 }
 
 func newService(manager *Manager, store *Store, hostname, controlURL string) *Service {

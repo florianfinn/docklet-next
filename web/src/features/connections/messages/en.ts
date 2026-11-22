@@ -87,6 +87,7 @@ export const enConnections = {
   "manualHostHint": "This key is used only in this host’s installer. It is never stored by the hub.",
   "automaticHostKey": "Docklet creates a one-use agent key when you register the host.",
   "fixedHub": "The installer uses this fixed tailnet hub URL.",
+  "customControlUnusable": "The hub’s TAILSCALE_CONTROL_URL cannot be written into an agent installer. It must be an http or https URL without a user name or password. Fix it on the hub, or use a LAN address or public domain.",
   "cause": "Connection cause",
   "showCause": "Show cause",
   "chainTitle": "Why is {name} disconnected?",

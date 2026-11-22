@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -114,8 +115,23 @@ func Merge(stored Credential, update tailnettypes.SettingsUpdate) (Credential, e
 	return next, nil
 }
 
-// ReadModel is the write-only settings view: secrets are reported only as configured.
+// InstallerControlURL returns TAILSCALE_CONTROL_URL when agents' installers may carry it: an absolute http(s) URL with a host,
+// no userinfo and no whitespace, quotes or backslashes (web/src/domain/agent-install.ts applies the same rule).
+func InstallerControlURL(raw string) (string, bool) {
+	if raw == "" || strings.ContainsAny(raw, " \t\r\n'\"\\") {
+		return "", false
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+		return "", false
+	}
+	return raw, true
+}
+
+// ReadModel is the write-only settings view: secrets are reported only as configured, and a control URL only when installers may
+// carry it; customControl stays true for any configured value so onboarding can refuse the route instead of joining the default server.
 func ReadModel(enabled bool, cred Credential, hostname, controlURL string) tailnettypes.Settings {
+	usable, _ := InstallerControlURL(controlURL)
 	return tailnettypes.Settings{
 		Enabled:          enabled,
 		Mode:             cred.Mode,
@@ -123,7 +139,7 @@ func ReadModel(enabled bool, cred Credential, hostname, controlURL string) tailn
 		SecretConfigured: cred.configured(),
 		Hostname:         hostname,
 		CustomControl:    controlURL != "",
-		ControlURL:       controlURL,
+		ControlURL:       usable,
 		PolicySnippet:    PolicySnippet(),
 	}
 }

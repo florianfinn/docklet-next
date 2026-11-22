@@ -118,3 +118,12 @@ it("retains the created host but refuses a partial one-time installer response",
   expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(true);
   expect(f.writes.filter((write) => write.path === "/api/environments")).toHaveLength(1);
 });
+
+it("refuses the Tailscale route when the hub's control server cannot be written into an installer", async () => {
+  const f = tailnetFixture({ ...connectedStatus(), mode: "manual", provisioning: { state: "not-applicable" } });
+  f.state.settings.mode = "manual"; f.state.settings.customControl = true;
+  renderRoutes([{ path: "/hosts/new", element: <OnboardingPage /> }], ["/hosts/new"], f.adapter);
+  await userEvent.type(await screen.findByLabelText("Host name in Docklet"), "New agent");
+  await screen.findByText(/TAILSCALE_CONTROL_URL cannot be written into an agent installer/);
+  expect((screen.getByRole("radio", { name: /Tailscale Private/ }) as HTMLButtonElement).disabled).toBe(true);
+});

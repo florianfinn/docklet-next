@@ -87,6 +87,7 @@ export const deConnections = {
   "manualHostHint": "Dieser Schlüssel wird nur im Installer dieses Hosts verwendet. Der Hub speichert ihn nicht.",
   "automaticHostKey": "Docklet erstellt beim Registrieren des Hosts einen einmaligen Agent-Schlüssel.",
   "fixedHub": "Der Installer verwendet diese feste Tailnet-Hub-URL.",
+  "customControlUnusable": "TAILSCALE_CONTROL_URL des Hubs kann nicht in einen Agent-Installer übernommen werden. Sie muss eine http- oder https-URL ohne Benutzername und Passwort sein. Korrigiere sie am Hub oder nutze eine LAN-Adresse oder öffentliche Domain.",
   "cause": "Verbindungsursache",
   "showCause": "Ursache anzeigen",
   "chainTitle": "Warum ist {name} getrennt?",
