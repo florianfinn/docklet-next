@@ -122,6 +122,30 @@ func TestManagerDropsLateResultsOfOlderGenerations(t *testing.T) {
 	}
 }
 
+// A status refresh already in flight when the operator disables or resets must not report connected afterwards.
+func TestManagerDropsLateRefreshesOfOlderGenerations(t *testing.T) {
+	for _, change := range []string{"disable", "reset"} {
+		t.Run(change, func(t *testing.T) {
+			fleet := tailnettest.NewFleet()
+			m := newManager(t, fleet)
+			m.Apply(t.Context(), true, manual)
+			require.Eventually(t, func() bool { return connectionState(m) == "connected" }, 2*time.Second, 5*time.Millisecond)
+			entered, release := fleet.HoldStatus()
+			fleet.Notify(ipn.Notify{PeersChanged: []*tailcfg.Node{{ID: 3}}})
+			<-entered
+			if change == "disable" {
+				m.Apply(t.Context(), false, manual)
+			} else {
+				require.NoError(t, m.Reset(t.Context()))
+			}
+			release()
+			time.Sleep(80 * time.Millisecond)
+			require.Equal(t, "off", connectionState(m), "a stale refresh must not report connected")
+			require.Empty(t, m.Status().HubAddress)
+		})
+	}
+}
+
 func TestManagerClosesOldListenerBeforeReplacement(t *testing.T) {
 	fleet := tailnettest.NewFleet()
 	m := newManager(t, fleet)

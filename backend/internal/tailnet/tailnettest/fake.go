@@ -46,6 +46,8 @@ type Fleet struct {
 	watchers  []*Watcher
 	whois     map[string]*apitype.WhoIsResponse
 	whoisGate chan struct{}
+	statusIn  chan struct{}
+	statusOut chan struct{}
 	upErrs    []error
 	gate      chan struct{}
 	nodes     []*Node
@@ -189,6 +191,15 @@ func (f *Fleet) HoldWhoIs() func() {
 	return func() { close(gate) }
 }
 
+// HoldStatus makes the next Status call take its snapshot, signal entered, and return only after release.
+func (f *Fleet) HoldStatus() (entered <-chan struct{}, release func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.statusIn, f.statusOut = make(chan struct{}), make(chan struct{})
+	out := f.statusOut
+	return f.statusIn, func() { close(out) }
+}
+
 func (n *Node) Up(ctx context.Context) error {
 	if n.Gate != nil {
 		select {
@@ -229,7 +240,16 @@ func (n *Node) Dial(ctx context.Context, network, address string) (net.Conn, err
 
 func (n *Node) Status(context.Context) (*ipnstate.Status, error) {
 	n.Fleet.Refreshes.Add(1)
-	return n.Fleet.snapshot(), nil
+	snapshot := n.Fleet.snapshot()
+	n.Fleet.mu.Lock()
+	in, out := n.Fleet.statusIn, n.Fleet.statusOut
+	n.Fleet.statusIn, n.Fleet.statusOut = nil, nil
+	n.Fleet.mu.Unlock()
+	if in != nil {
+		close(in)
+		<-out // deliberately ignores cancellation: the reply was already on its way
+	}
+	return snapshot, nil
 }
 
 func (n *Node) Watch(context.Context) (tailnet.Watcher, error) {
