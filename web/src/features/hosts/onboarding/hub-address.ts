@@ -6,6 +6,7 @@
 
 import { preferredIpCandidate, type HubDiscovery } from "@/domain/hub-discovery";
 import { agentHubUrl, type GeneralSettings } from "@/domain/settings";
+import { hubAddressPortWarning } from "@/features/settings/sections/hub-address-guidance";
 
 /** A saved portless address is usable only when discovery confirms host port 80. */
 export function defaultAgentHubUrl(general: GeneralSettings, discovery?: HubDiscovery): string {
@@ -15,5 +16,10 @@ export function defaultAgentHubUrl(general: GeneralSettings, discovery?: HubDisc
   if (authority && (explicitPort || publishedOn80)) return agentHubUrl(general);
   const candidates = discovery?.candidates;
   const preferred = preferredIpCandidate(candidates?.filter((c) => !!new URL(c.url).port));
-  return (preferred ?? candidates?.[0])?.url ?? agentHubUrl(general);
+  if (preferred) return preferred.url;
+  // Without a reachable published candidate, the saved address takes the listen port's published host port (the General warning's port).
+  const missing = hubAddressPortWarning(general.hubAddress, discovery);
+  const bareIpv6 = authority.includes(":") && !authority.startsWith("[");
+  if (authority && !bareIpv6 && missing !== undefined) return agentHubUrl({ ...general, hubAddress: `${authority}:${missing}` });
+  return candidates?.[0]?.url ?? agentHubUrl(general);
 }

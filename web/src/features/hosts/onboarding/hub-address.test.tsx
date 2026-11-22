@@ -32,7 +32,9 @@ it.each([
   ["published non-80", "192.0.2.10", discovery, "http://192.0.2.20:3552"],
   ["IPv6 with port", "[2001:db8::10]:3552", discovery, "http://[2001:db8::10]:3552"],
   ["bare IPv6", "2001:db8::10", discovery, "http://192.0.2.20:3552"],
-  ["no candidates", "192.0.2.10", { ...discovery, candidates: [] }, "http://192.0.2.10"],
+  ["no candidates", "192.0.2.10", { ...discovery, candidates: [] }, "http://192.0.2.10:3552"],
+  // A published address that only the same host reaches is no default; the saved address takes the published port instead.
+  ["same-host published only", "192.0.2.10", { ...discovery, candidates: [discovery.candidates![0]!, discovery.candidates![1]!, { ...discovery.candidates![2]!, reach: "same-host" }] }, "http://192.0.2.10:3552"],
   ["domain remains candidate", "", { ...discovery, candidates: [discovery.candidates![0]!] }, "https://hub.example.com"],
 ] satisfies [string, string, HubDiscovery, string][])("chooses the Edge default: %s", (_name, hubAddress, found, want) => {
   expect(defaultAgentHubUrl({ ...general, hubAddress }, found)).toBe(want);
