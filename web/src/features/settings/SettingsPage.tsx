@@ -56,11 +56,12 @@ export default function SettingsPage() {
   const hub = useConnectedSettings(connected && id !== "auth");
   const s = settings.data;
   if (!validSection) return <Navigate to="/settings/general" replace />;
+  const personal = id === "appearance" || id === "help";
 
   return (
     <>
       {/* Appearance and explanations are stored per user; every other section applies to the hub. */}
-      <PageHeader title={t("title")} description={t(id === "appearance" || id === "help" ? "personalDescription" : "description")} />
+      <PageHeader title={t(personal ? "personalTitle" : "title")} description={t(personal ? "personalDescription" : "description")} />
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <nav aria-label={t("navLabel")} className="min-w-0 lg:sticky lg:top-20">
           {/* Narrow screens: one grouped section picker; the sidebar list starts at lg. */}

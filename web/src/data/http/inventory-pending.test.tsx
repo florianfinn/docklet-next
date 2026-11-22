@@ -146,6 +146,46 @@ it("a cancelled read's late answer leaves neither its rows nor its pending host"
   expect(screen.queryByText("obsolete") === null).toBe(true);
 });
 
+it("a cancelled read's late annotated partial is not published by the query", async () => {
+  // An adapter that ignores the abort signal: only the query's publication guard can drop the late callback.
+  const f = resourceFixture();
+  const rows = await f.adapter.listContainers();
+  type Rows = typeof rows;
+  const reads: { publish: (rows: Rows) => void; finish: (rows: Rows) => void }[] = [];
+  f.adapter.listContainers = (publish = () => {}) => new Promise((finish) => { reads.push({ publish, finish }); });
+  const recovery = inventoryRecovery();
+  recovery.answered("first");
+  const initial = recovery.partial(rows.filter((row) => row.hostId === "first"));
+  const obsolete = recovery.partial(initial.map((row) => ({ ...row, name: "obsolete" })));
+  renderWithApp(<><Containers /><ContainersProbe /></>, f.adapter);
+  await waitFor(() => expect(reads.length).toBe(1));
+  act(() => reads[0]!.publish(initial));
+  await published();
+  expect(probeText()).toBe("2:true:false");
+  let refresh!: Promise<unknown>;
+  act(() => { refresh = refetch(); });
+  await waitFor(() => expect(reads.length).toBe(2));
+  await act(async () => { reads[1]!.publish(rows); reads[1]!.finish(rows); await refresh; });
+  await waitFor(() => expect(probeText()).toBe("2:false:false"));
+  await act(async () => { reads[0]!.publish(obsolete); reads[0]!.finish(obsolete); });
+  await settle();
+  expect(probeText()).toBe("2:false:false");
+});
+
+it("a scope change ends pending for a host that already answered", async () => {
+  preferencesStore.set((p) => ({ ...p, hostSelection: ["second"] }));
+  const x = heldSecond();
+  renderWithApp(<><Containers /><ContainersProbe /></>, x.f.adapter);
+  await published();
+  expect(probeText()).toBe("2:true:false");
+  // The second host is still held; narrowing the scope to the answered host settles the page at once.
+  act(() => preferencesStore.set((p) => ({ ...p, hostSelection: ["first"] })));
+  await settle();
+  expect(probeText()).toBe("2:false:false");
+  expect(total()).toBe("2");
+  await act(async () => { x.release("rows"); });
+});
+
 it("an identity reset after a partial discards the late answer and its pending host", async () => {
   const x = heldSecond();
   x.state.rename = true;

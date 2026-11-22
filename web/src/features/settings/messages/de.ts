@@ -81,6 +81,7 @@ export const deSettings: typeof enSettings = {
   },
   title: "Hub-Einstellungen",
   description: (import.meta.env.DEV ? "Gelten für den ganzen Hub – unabhängig vom Hostfilter. Speichern wirkt im Demo-Datenbestand dieses Tabs." : "Gilt für den ganzen Hub – unabhängig vom Hostfilter."),
+  personalTitle: "Persönliche Einstellungen",
   personalDescription: "Deine persönlichen Einstellungen; andere Benutzer sind nicht betroffen.",
   navLabel: "Bereiche der Hub-Einstellungen",
   groups: { hub: "Hub", operations: "Betrieb", system: "System" },

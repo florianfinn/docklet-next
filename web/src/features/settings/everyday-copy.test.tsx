@@ -21,9 +21,9 @@ afterEach(() => { simulationStore.reset(); localStorage.clear(); });
 const de = catalogs.de;
 
 it("appearance and explanations name the personal scope; hub sections keep the hub scope", async () => {
-  for (const [section, text] of [["appearance", de.settings.personalDescription], ["help", de.settings.personalDescription], ["general", de.settings.description]] as const) {
+  for (const [section, title, text] of [["appearance", de.settings.personalTitle, de.settings.personalDescription], ["help", de.settings.personalTitle, de.settings.personalDescription], ["general", de.settings.title, de.settings.description]] as const) {
     const view = renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], [`/settings/${section}`]);
-    await screen.findByRole("heading", { name: de.settings.title });
+    expect((await screen.findByRole("heading", { level: 1 })).textContent).toBe(title);
     expect(screen.queryAllByText(text).length > 0).toBe(true);
     view.unmount();
   }

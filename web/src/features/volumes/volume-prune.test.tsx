@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { catalogs } from "@/app/i18n/catalog";
 import { errorCode } from "@/data/api";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
@@ -95,6 +96,8 @@ describe("volumes page actions", () => {
     await userEvent.click(includeNamed);
     // Named volumes added by the toggle start unselected (M35 #557); the user picks the one to delete.
     await within(dialog).findByText(/^0 von 2 Volumes ausgewählt/);
+    // They are what the user asked to see, so they carry no "new" marker; that is kept for host changes.
+    expect(within(dialog).queryAllByText(new RegExp(catalogs.de.volumes.prune.new)).length).toBe(0);
     expect(within(dialog).getByText(/Nicht verbunden und deshalb nicht geprüft: Cedar/) !== null).toBe(true);
     expect(within(dialog).queryByText("wiki_uploads_old") === null).toBe(true);
 

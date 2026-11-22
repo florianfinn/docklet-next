@@ -53,14 +53,15 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
   const plan = useQuery({ queryKey: ["volume-prune-plan", session, all, scopeKey(hosts), available.join(",")], queryFn: () => adapter.planVolumePrune({ hostIds, all }), staleTime: Infinity, gcTime: 0 });
   const [result, setResult] = useState<VolumePruneResult>();
   // Choices per candidate identity (host, name, creation). The first plan selects its candidates; candidates that
-  // appear later start unselected and are marked new, so a refresh never deletes something nobody chose.
+  // appear later start unselected, so a refresh never deletes something nobody chose. Only arrivals from a host
+  // change are marked new; the named-volume toggle adds what the user just asked to see.
   const [choices, setChoices] = useState<ReadonlyMap<string, boolean>>(new Map());
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
-  const [adopted, setAdopted] = useState<unknown>();
-  if (plan.data && plan.data !== adopted) {
-    const first = adopted === undefined, next = new Map(choices), added = new Set(fresh);
-    for (const v of plan.data.candidates) if (!next.has(identity(v))) { next.set(identity(v), first); if (!first) added.add(identity(v)); }
-    setAdopted(plan.data); setChoices(next); setFresh(added);
+  const [adopted, setAdopted] = useState<{ data: unknown; all: boolean }>();
+  if (plan.data && plan.data !== adopted?.data) {
+    const first = adopted === undefined, mark = !first && adopted.all === all, next = new Map(choices), added = new Set(fresh);
+    for (const v of plan.data.candidates) if (!next.has(identity(v))) { next.set(identity(v), first); if (mark) added.add(identity(v)); }
+    setAdopted({ data: plan.data, all }); setChoices(next); setFresh(added);
   }
   const [busy, setBusy] = useState(false);
   const hostName = (id: string) => hosts.find((h) => h.id === id)?.name ?? id;
