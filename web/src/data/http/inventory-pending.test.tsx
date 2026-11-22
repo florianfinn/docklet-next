@@ -6,7 +6,7 @@
 
 import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 import { catalogs } from "@/app/i18n/catalog";
 import { copyInventoryRecovery, inventoryHostsPending, inventoryRecovery, inventoryStructuralSharing } from "@/data/inventory-recovery";
 import { useContainers, useImages, useStacks, useVolumes } from "@/data/queries";
@@ -35,13 +35,15 @@ type Answer = "rows" | "empty" | "failure";
  * Reads of the second host wait while `held`; a release answers every waiting read. A read started while
  * `rename` is set returns renamed (obsolete) rows; the catalogue read can be made to fail transiently.
  */
-function heldSecond() {
+function heldSecond(user = false) {
   const f = resourceFixture(), original = f.fetcher.getMockImplementation()!;
   const state = { held: true, rename: false, catalogueDown: false };
   const waiting: ((answer: Answer) => void)[] = [];
   f.fetcher.mockImplementation(async (input) => {
     const url = new URL(String(input), "https://hub.example.com");
     if (url.pathname.endsWith("/backups/storage")) return new Response(null, { status: 401 });
+    // A simple user with stacks on both hosts reads through the assigned-stack reader.
+    if (user && url.pathname === "/api/auth/me") return new Response(JSON.stringify({ success: true, data: { id: "viewer", username: "viewer", isAdmin: false, requiresPasswordChange: false, assignments: ["first", "second"].map((environmentId) => ({ environmentId, projectId: "project", level: "restricted" })) } }), { headers: { "content-type": "application/json" } });
     if (state.catalogueDown && url.pathname === "/api/environments") return new Response(JSON.stringify({ success: false, error: { code: "http.error" } }), { status: 503, headers: { "content-type": "application/json" } });
     if (!url.pathname.includes("/environments/second/")) return original(input);
     const rename = state.rename;
@@ -103,6 +105,43 @@ for (const [name, Page, empty, hook] of pages) {
   });
 }
 
+const [, Stacks, stacksEmpty, stacksHook] = pages[3]!;
+const StacksProbe = probe(stacksHook);
+// The finished read is the barrier for settled assertions.
+function StacksFetch() { return <output data-testid="fetch">{useStacks().fetchStatus}</output>; }
+const finished = async () => { await waitFor(() => expect(screen.getByTestId("fetch").textContent).toBe("idle")); await settle(); };
+for (const answer of ["rows", "empty", "failure"] as const) {
+  it(`stacks for a simple user: the total waits for the held host, then settles (${answer})`, async () => {
+    const { f, release } = heldSecond(true);
+    expect((await f.adapter.getCurrentUser())?.isAdmin).toBe(false);
+    renderWithApp(<><Stacks /><StacksProbe /><StacksFetch /></>, f.adapter);
+    await published();
+    expect(probeText().endsWith(":true:false")).toBe(true);
+    expect(total() ?? "–").toBe("–");
+    await act(async () => { release(answer); });
+    await finished();
+    expect(probeText().split(":")[1]).toBe("false");
+    const first = Number(probeText().split(":")[0]);
+    expect(total()).toBe(String(answer === "rows" ? loadedRows() : first));
+    expect(answer === "rows" ? loadedRows() > first : true).toBe(true);
+  });
+}
+
+it("stacks for a simple user with only the second host selected settle on an empty answer", async () => {
+  preferencesStore.set((p) => ({ ...p, hostSelection: ["second"] }));
+  const { f, release } = heldSecond(true);
+  await f.adapter.getCurrentUser();
+  renderWithApp(<><Stacks /><StacksProbe /><StacksFetch /></>, f.adapter);
+  await published();
+  expect(probeText().endsWith(":true:false")).toBe(true);
+  expect(screen.queryByText(stacksEmpty) === null).toBe(true);
+  await act(async () => { release("empty"); });
+  await finished();
+  expect(probeText().split(":")[1]).toBe("false");
+  expect(total()).toBe("0");
+  expect(screen.queryByText(stacksEmpty) !== null).toBe(true);
+});
+
 const [, Containers, , containersHook] = pages[0]!;
 const ContainersProbe = probe(containersHook);
 
@@ -119,7 +158,7 @@ it("a stale host catalogue keeps the answered hosts through the owner's copy", a
   // The page's own host list fails too (no known host, so nothing counts as pending there); the cached result
   // itself must still name the answered hosts, checked against the fixed scope of both hosts.
   let cached: unknown;
-  function CacheProbe() { const q = useContainers(); cached = q.data; return <output data-testid="probe">{`${q.data?.filter((c) => c.hostId === "first").length ?? 0}:-:-`}</output>; }
+  function CacheProbe() { const q = useContainers(); useEffect(() => { cached = q.data; }); return <output data-testid="probe">{`${q.data?.filter((c) => c.hostId === "first").length ?? 0}:-:-`}</output>; }
   renderWithApp(<CacheProbe />, x.f.adapter);
   await published();
   await settle();

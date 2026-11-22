@@ -81,7 +81,7 @@ export const enSettings = {
   title: "Hub settings",
   description: (import.meta.env.DEV ? "Apply to the whole hub, regardless of the host filter. Saving affects this tab''s demo data." : "Applies to the whole hub, regardless of the host filter."),
   personalTitle: "Personal settings",
-  personalDescription: "Your personal settings; other users are not affected.",
+  personalDescription: "Stored per account; other accounts keep their own.",
   navLabel: "Hub settings sections",
   groups: { hub: "Hub", operations: "Operations", system: "System" },
   sections: {

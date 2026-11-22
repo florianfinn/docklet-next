@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original assigned-stack reads without host-wide container inventory. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows.
+// Deviations: Original assigned-stack reads without host-wide container inventory. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M35 #556: results name the hosts that answered.
 
 import { inventoryRecovery } from "../inventory-recovery";
 import { inventoryReadBudget } from "./host-read-deadline";
@@ -35,7 +35,9 @@ export function createUserInventory(baseUrl: string, fetcher: typeof fetch, host
           parent?.throwIfAborted(); if (isMaintenanceError(error)) throw error; recovery.failed(host, error);
           onState(host.id, inventoryFailure(host.id, error));
         }
-        batches.push(rows); onPartial?.(batches.flat()); return rows;
+        // Rows or a failure both answer this host, as in the administrator reader.
+        recovery.answered(host.id);
+        batches.push(rows); onPartial?.(recovery.partial(batches.flat())); return rows;
       }));
       return recovery.result(result.flat());
     },
