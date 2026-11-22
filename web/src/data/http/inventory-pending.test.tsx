@@ -2,23 +2,24 @@
 // Revision: 9967b32a4dd337d1765a96b5bb27027a1161190b
 // Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Original M35 #556 tests: lists never report empty while a host in scope has not answered.
+// Deviations: Original M35 #556 tests: lists never report empty while a host in scope has not answered (stacks since the candidate run).
 
 import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { ComponentType } from "react";
 import { catalogs } from "@/app/i18n/catalog";
 import { copyInventoryRecovery, inventoryHostsPending, inventoryRecovery, inventoryStructuralSharing } from "@/data/inventory-recovery";
-import { useContainers, useImages, useVolumes } from "@/data/queries";
+import { useContainers, useImages, useStacks, useVolumes } from "@/data/queries";
 import ContainersPage from "@/features/containers/ContainersPage";
 import ImagesPage from "@/features/images/ImagesPage";
+import StacksPage from "@/features/stacks/overview/StacksPage";
 import VolumesPage from "@/features/volumes/VolumesPage";
 import { useHostsPending } from "@/shared/hooks/use-host-scope";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderWithApp } from "@/test/render";
 import { resourceFixture } from "./resources.test-support";
 
-beforeEach(() => { preferencesStore.set((p) => ({ ...p, containersLayout: "table", imagesLayout: "table", volumesLayout: "table" })); });
+beforeEach(() => { preferencesStore.set((p) => ({ ...p, containersLayout: "table", stacksLayout: "table", imagesLayout: "table", volumesLayout: "table" })); });
 afterEach(() => { preferencesStore.reset(); localStorage.clear(); });
 
 type Hook = () => { data?: readonly { hostId: string; name?: string }[]; refetch: () => Promise<unknown> };
@@ -26,6 +27,7 @@ const pages: [string, ComponentType, string, Hook][] = [
   ["containers", ContainersPage, catalogs.de.containers.emptyAll.title, useContainers as unknown as Hook],
   ["images", ImagesPage, catalogs.de.images.emptyAll.title, useImages as unknown as Hook],
   ["volumes", VolumesPage, catalogs.de.volumes.emptyAll.title, useVolumes as unknown as Hook],
+  ["stacks", StacksPage, catalogs.de.stacks.emptyAll.title, useStacks as unknown as Hook],
 ];
 type Answer = "rows" | "empty" | "failure";
 
@@ -46,7 +48,7 @@ function heldSecond() {
     const how = state.held ? await new Promise<Answer>((resolve) => waiting.push(resolve)) : "rows";
     if (how === "failure") return new Response(JSON.stringify({ success: false, error: { code: "docker.error", message: "raw diagnostic" } }), { status: 500, headers: { "content-type": "application/json" } });
     const response = await original(input);
-    if (!/\/(containers|images|volumes)$/.test(url.pathname)) return response;
+    if (!/\/(containers|images|volumes|projects)$/.test(url.pathname)) return response;
     const body = await response.json() as { data: object[] };
     const data = how === "empty" ? [] : rename ? body.data.map((row) => ({ ...row, name: "obsolete", names: ["/obsolete"] })) : body.data;
     return new Response(JSON.stringify({ ...body, data, pagination: { totalItems: data.length } }), { status: response.status, headers: response.headers });

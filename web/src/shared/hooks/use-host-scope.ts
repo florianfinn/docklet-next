@@ -33,7 +33,8 @@ export function useVisibleStacks() {
   const stacks = useStacks();
   const selection = useHostSelection();
   const visible = useMemo(() => filterByHosts(stacks.data ?? [], selection), [stacks.data, selection]);
-  return { ...stacks, visible };
+  const hostsPending = useHostsPending(stacks.data);
+  return { ...stacks, visible, hostsPending };
 }
 
 export function useVisibleContainers() {

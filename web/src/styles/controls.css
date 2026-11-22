@@ -382,4 +382,8 @@
     overflow-x: auto;
     scrollbar-width: none;
   }
+  /* Segments keep their text width and the row scrolls; shrinking them made long labels overlap. */
+  [data-list-toolbar] .seg[data-wrap] .seg-item {
+    flex-shrink: 0;
+  }
 }
