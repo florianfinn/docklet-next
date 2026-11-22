@@ -1,0 +1,162 @@
+{
+  "activity": {
+    "createdAt": "2026-11-22T10:00:00Z",
+    "durationMs": 0,
+    "endedAt": "2026-11-22T10:00:00Z",
+    "environmentId": "env-7",
+    "id": "check-run",
+    "latestMessage": "Backup repository checked",
+    "messageCode": "activity.success",
+    "metadata": {
+      "action": "check_volume_backup_repository",
+      "backupTargetCheck": {
+        "activityId": "check-run",
+        "at": "2026-11-22T10:00:00Z",
+        "configVersion": 2,
+        "earlierSettings": false,
+        "hostId": "env-7",
+        "ok": true,
+        "setVersion": 2,
+        "snapshotCount": 2
+      },
+      "backupTargetId": "archive",
+      "targetId": "archive"
+    },
+    "progress": 100,
+    "resourceId": "archive",
+    "resourceName": "archive",
+    "resourceType": "backup_target",
+    "sourceEnvironmentId": "env-7",
+    "sourceEnvironmentName": "Agent",
+    "startedAt": "2026-11-22T10:00:00Z",
+    "startedBy": {
+      "username": "System"
+    },
+    "status": "success",
+    "step": "check",
+    "type": "resource_action",
+    "updatedAt": "2026-11-22T10:00:00Z"
+  },
+  "messages": [
+    {
+      "activityId": "check-run",
+      "code": "activity.message",
+      "createdAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m1",
+      "level": "info",
+      "message": "Mounting the repository",
+      "step": "connect"
+    },
+    {
+      "activityId": "check-run",
+      "code": "activity.message",
+      "createdAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m2",
+      "level": "info",
+      "message": "Testing write access",
+      "step": "save"
+    },
+    {
+      "activityId": "check-run",
+      "code": "activity.message",
+      "createdAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m3",
+      "level": "info",
+      "message": "Opening the repository with the stored key",
+      "step": "open"
+    },
+    {
+      "activityId": "check-run",
+      "code": "activity.message",
+      "createdAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m4",
+      "level": "info",
+      "message": "Checking repository integrity",
+      "step": "check"
+    },
+    {
+      "activityId": "check-run",
+      "code": "activity.message",
+      "createdAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m5",
+      "level": "success",
+      "message": "Repository holds 2 snapshots",
+      "step": "check"
+    },
+    {
+      "activityId": "check-run",
+      "code": "activity.success",
+      "createdAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m6",
+      "level": "success",
+      "message": "Backup repository checked"
+    }
+  ],
+  "output": [
+    {
+      "step": "connect",
+      "stream": "note",
+      "text": "Mounting the repository",
+      "timestamp": "2026-11-22T10:00:00Z"
+    },
+    {
+      "step": "save",
+      "stream": "note",
+      "text": "Testing write access",
+      "timestamp": "2026-11-22T10:00:00Z"
+    },
+    {
+      "step": "open",
+      "stream": "note",
+      "text": "Opening the repository with the stored key",
+      "timestamp": "2026-11-22T10:00:00Z"
+    },
+    {
+      "step": "check",
+      "stream": "note",
+      "text": "Checking repository integrity",
+      "timestamp": "2026-11-22T10:00:00Z"
+    },
+    {
+      "step": "check",
+      "stream": "note",
+      "text": "Repository holds 2 snapshots",
+      "timestamp": "2026-11-22T10:00:00Z"
+    }
+  ],
+  "outputTruncated": false,
+  "stepTrace": [
+    {
+      "code": "activity.message",
+      "endedAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m1",
+      "name": "connect",
+      "startedAt": "2026-11-22T10:00:00Z",
+      "status": "success"
+    },
+    {
+      "code": "activity.message",
+      "endedAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m2",
+      "name": "save",
+      "startedAt": "2026-11-22T10:00:00Z",
+      "status": "success"
+    },
+    {
+      "code": "activity.message",
+      "endedAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m3",
+      "name": "open",
+      "startedAt": "2026-11-22T10:00:00Z",
+      "status": "success"
+    },
+    {
+      "code": "activity.message",
+      "endedAt": "2026-11-22T10:00:00Z",
+      "id": "stored-m4",
+      "name": "check",
+      "startedAt": "2026-11-22T10:00:00Z",
+      "status": "success"
+    }
+  ]
+}
