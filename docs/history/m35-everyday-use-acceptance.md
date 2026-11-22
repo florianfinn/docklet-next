@@ -70,7 +70,7 @@ The sandbox had the hub-local host H, one Direct agent D and one Edge agent E.
 | X-A7 | State-dependent stack controls recover after a run ends and after a stream reconnect, on H and E |
 | X-B1 | Deleting a proxy route takes one named confirmation (E) |
 | X-B3-D, X-B3-E | Actions on another stack succeed with an unreadable stack present |
-| X-B4 | 108 stack rows: zero stack-scoped reads before the first menu gesture, one read per opened menu, and a truthful list on cold starts |
+| X-B4 | 108 stack rows: zero stack-scoped reads before the first menu gesture, one read per distinct opened stack, and a truthful list on cold starts |
 | X-C-en, X-C-de | Copy subchecks: personal settings header, notification picker hint, named stack link, local host, restore hints and consent, one terminal status, easy-mode hint, Appearance order |
 | X-C6-H, X-C6-D, X-C6-E | Run output, copy and download without the `{"log": …}` frame, for runs from before and after the update |
 | X-D1 | Phone lists at 390×844: first row at or above 450 CSS px, no horizontal page scroll, no label overlap or clipping |
@@ -102,8 +102,8 @@ backups before running any cell. No product code was involved.
 - No cell was excluded.
 - Chromium only.
 - If a host's inventory read exceeds the 30-second read budget, that host settles
-  as failed and the inventory notice names it. No acceptance attempt reached that
-  budget.
+  as failed and the inventory notice names it. The three delta 1 cold-read
+  attempts completed before that budget.
 - Agents older than M35 report env drift without revisions. Hub and web show the
   status, but they offer no restore consent until the agent is updated.
 - One web test (B10 hub update hint) failed once in a combined local run and
