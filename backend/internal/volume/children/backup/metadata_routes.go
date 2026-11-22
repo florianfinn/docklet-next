@@ -2,7 +2,7 @@
 // Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original host-scoped overview, read-only engine metadata and asynchronous repository check routes.
+// Deviations: Original host-scoped overview, read-only engine metadata and asynchronous repository check routes.; M36 #570 scoped baseline, storage naming or address guidance.
 
 package backup
 
@@ -72,6 +72,12 @@ func (h *Handler) Repository(ctx context.Context, in *HostBackupInput) (*handler
 	// Metadata inspection mirrors the configured /backups mount without ensuring
 	// a volume, pulling an image, mounting storage or starting any helper.
 	storage := h.service.resolveBackupStorageMountInternal(ctx, cli, "/repository", true)
+	if storage.requiresEnsure && h.service.deps.CurrentBackupVolume != nil {
+		result.Name, err = h.service.deps.CurrentBackupVolume(ctx)
+		if err != nil {
+			return nil, neutralBackupError(err, "volume.backup.engine-unavailable")
+		}
+	}
 	if storage.mode == backupStorageModeArcaneMount {
 		result.Mode = "mount"
 		result.Name = storage.mount.Source

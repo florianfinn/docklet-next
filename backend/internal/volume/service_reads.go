@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads, hide dedicated agent and hub volumes and fail on missing consumer reads.; M12 target hiding, destination admission and transactional restore-history rename; M16 bind mounts and backup completion.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads, hide dedicated agent and hub volumes and fail on missing consumer reads.; M12 target hiding, destination admission and transactional restore-history rename; M16 bind mounts and backup completion.; M36 #570 scoped baseline, storage naming or address guidance.
 
 package volume
 
@@ -216,7 +216,7 @@ func (s *VolumeService) isInternalVolumeInternal(v volumetypes.Volume) bool {
 	if inventory.IsSystem(v.Labels) {
 		return true
 	}
-	if strings.EqualFold(strings.TrimSpace(v.Name), strings.TrimSpace(s.backupVolumeName)) {
+	if s.isBackupVolumeName(context.Background(), v.Name) {
 		return true
 	}
 
@@ -392,7 +392,7 @@ func (s *VolumeService) RenameVolume(ctx context.Context, oldName, newName strin
 	if oldName == "" || newName == "" || oldName == newName {
 		return nil, common.ErrVolumeRenameInvalid
 	}
-	if strings.EqualFold(oldName, s.backupVolumeName) || strings.EqualFold(newName, s.backupVolumeName) {
+	if s.isBackupVolumeName(ctx, oldName) || s.isBackupVolumeName(ctx, newName) {
 		return nil, common.ErrVolumeRenameProtected
 	}
 

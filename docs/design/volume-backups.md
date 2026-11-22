@@ -3,7 +3,7 @@ Source: docklet-next/issues/283
 Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 Retrieved: 2026-10-28
 License: Apache-2.0
-Deviations: Original lifecycle, target and portable recovery rationale; M16 bind-mount and hub-copy links.
+Deviations: Original lifecycle, target and portable recovery rationale; M16 bind-mount and hub-copy links.; M36 #570 scoped baseline, storage naming or address guidance.
 -->
 
 # Volume backups and recovery
@@ -19,7 +19,16 @@ plus any snapshot pinned by an outstanding failed restore.
 ## Repository identity and keys
 
 The built-in `local` destination preserves the existing `/backups` mount or
-`ARCANE_BACKUP_VOLUME_NAME` fallback. Its repository password is a stored recovery
+named-volume fallback. `DOCKLET_BACKUP_VOLUME_NAME` overrides the choice;
+`ARCANE_BACKUP_VOLUME_NAME` remains a deprecated alias for one release (the new
+name wins when both are set). Without an override, the host retains its persisted
+`backupVolumeNameResolved` setting. On first use, an existing `arcane-backups`
+volume wins; Docker NotFound selects `docklet-backups`. Other inspect errors and
+persistence errors fail the operation without memoising a choice. The choice is
+persisted only at the first named-volume fallback use, then memoised for that
+process. Settings and repository metadata inspect without creating storage or
+persisting a choice. Each hub and agent makes its own local choice. A `/backups`
+mount always takes precedence. Its repository password is a stored recovery
 key when present, otherwise the existing derivation from the host encryption key.
 A derived password changes with that encryption key; a stored password stays the
 same, but decrypting its database record requires the original encryption key.

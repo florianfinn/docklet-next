@@ -8,7 +8,8 @@ import { useTranslations } from "use-intl";
 
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
 import { useAdapter } from "@/data/use-adapter";
-import { discoveryAppUrl } from "@/domain/hub-discovery";
+import { hubAddressPortWarning } from "./hub-address-guidance";
+import { discoveryAppUrl, hubAddressCandidates, type HubDiscovery } from "@/domain/hub-discovery";
 import { hubAddress, ipFromLegacyUrl, normalizeDomainUrl } from "@/domain/validation";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 
@@ -36,9 +37,11 @@ interface GeneralFieldsProps {
   appUrl?: string;
   preserveAddress?: boolean;
   domainPending?: boolean;
+  discovery?: HubDiscovery;
+  savedAddress?: string;
 }
 
-export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "gen", showLanguage = true, appUrl, preserveAddress = false, domainPending = false }: GeneralFieldsProps) {
+export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "gen", showLanguage = true, appUrl, preserveAddress = false, domainPending = false, discovery, savedAddress }: GeneralFieldsProps) {
   // The hub reports TZ beside an override; without that value the effective zone equals TZ
   // only while no override is saved. The draft never decides it.
   const savedZone = saved ?? { timeZone: value.timeZone };
@@ -52,6 +55,8 @@ export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "
   const movedDomain = normalizeDomainUrl(value.hubAddress, appUrl);
   const move = (domainUrl: string) => onChange({ hubAddress: "", domainUrl });
   const links = notificationBaseUrl({ ...value, domainUrl: normalizeDomainUrl(value.domainUrl, appUrl) ?? value.domainUrl });
+  const missingPort = hubAddressPortWarning(savedAddress ?? value.hubAddress, discovery);
+  const candidates = discovery ? hubAddressCandidates(discovery).filter((c) => c.addressKind === "ip") : [];
   const hasDomain = !!value.domainUrl.trim() && !e.domainUrl;
   return (
     <FieldGroup>
@@ -64,9 +69,13 @@ export function GeneralFields({ value, saved, onChange, showErrors, idPrefix = "
         onChange={(hubAddress) => onChange({ hubAddress })}
         description={t("hubAddressHint")}
         error={showErrors ? e.hubAddress : undefined}
-        placeholder="192.0.2.10:8080"
+        placeholder="192.0.2.10:3552"
         mono
       />
+      {missingPort !== undefined && <p role="status" className="text-sm text-warning">{t("hubAddressPortWarning", { port: missingPort })}</p>}
+      {candidates.length > 0 && <div aria-label={t("hubAddressCandidates")} className="flex flex-wrap gap-2">
+        {candidates.map((candidate) => <Button key={candidate.id} type="button" variant="outline" size="sm" onClick={() => onChange({ hubAddress: candidate.address })}>{candidate.address}</Button>)}
+      </div>}
       {legacy && strippedIp && <div className="flex flex-col items-start gap-2 text-sm">
         <p>{t("legacyIpUrl")}</p>
         <Button type="button" variant="outline" onClick={() => onChange({ hubAddress: strippedIp })}>{t("stripScheme", { address: strippedIp })}</Button>
@@ -160,7 +169,7 @@ export function GeneralSection({ settings }: { settings: Pick<HubSettings, "gene
         if (addressRevision.current === submittedRevision) setAddressEdited(false);
       }}
     >
-      <GeneralFields value={draft} saved={settings.general} onChange={(p) => { if (p.hubAddress !== undefined) { addressRevision.current++; setAddressEdited(true); } patch(p); }} showErrors={dirty} showLanguage={!connected} appUrl={appUrl} domainPending={discovery.isPending} preserveAddress={preserveAddress} />
+      <GeneralFields value={draft} saved={settings.general} onChange={(p) => { if (p.hubAddress !== undefined) { addressRevision.current++; setAddressEdited(true); } patch(p); }} showErrors={dirty} showLanguage={!connected} appUrl={appUrl} domainPending={discovery.isPending} preserveAddress={preserveAddress} discovery={discovery.data} savedAddress={settings.general.hubAddress} />
       <FieldGroup><Field data-disabled={!saveCapability.available}>
         <FieldLabel htmlFor="stack-stop-mode">{stop("title")}</FieldLabel>
         <Select value={draft.stackStopMode ?? "down"} disabled={!saveCapability.available} onValueChange={(value) => patch({ stackStopMode: value as "down" | "stop" })}>

@@ -176,8 +176,8 @@ export const enLab = {
     apply: "Apply",
     names: {
       docklet: "Docklet (default)",
-      arcanePlus: "Arcane+",
-      arcane: "Arcane reference",
+      arcanePlus: "Classic+",
+      arcane: "Classic",
       compact: "Compact ideas",
       calm: "Calm",
       vivid: "Vivid",

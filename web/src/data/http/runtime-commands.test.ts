@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 #349 unreachable agent refusal before admission.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 #349 unreachable agent refusal before admission.; M36 #568 scoped baseline, storage naming or address guidance.
 
 import { afterEach, expect, it, vi } from "vitest";
 import { COMMAND_RETRY_MS } from "./runtime-commands";
@@ -137,4 +137,14 @@ it("an agent unreachable before admission refuses with its code and no ambiguous
   await expect(f.helper.runStackCommand("direct~target", "start")).rejects.toMatchObject({ outcome: { kind: "error", code: "agent.unavailable", status: 503 } });
   await expect(f.helper.runStackCommand("direct~target", "start")).rejects.toMatchObject({ outcome: { code: "agent.unavailable" } });
   expect(f.published).toEqual([]); expect(f.commands()).toHaveLength(2);
+});
+
+it.each(["0", "direct", "edge"])("baseline recording on %s sends pull never on the existing deploy admission", async (host) => {
+  const f = runtimeFixture();
+  f.state.run = snapshot(host, { resourceType: "project", type: "project_deploy" });
+  expect(await f.adapter.runStackCommand(`${host}~baseline-stack`, "start", { pullPolicy: "never" })).toBe(RUN_ID);
+  expect(f.commands()).toHaveLength(1);
+  const request = f.commands()[0]!;
+  expect(request.url.pathname).toBe(`/api/environments/${host}/projects/baseline-stack/up`);
+  expect(JSON.parse(String(request.init.body))).toEqual({ pullPolicy: "never" });
 });

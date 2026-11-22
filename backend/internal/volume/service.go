@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.; M36 #570 scoped baseline, storage naming or address guidance.
 
 package volume
 
@@ -31,7 +31,6 @@ import (
 	"go.getarcane.app/docker"
 	"golang.org/x/sync/singleflight"
 	"log/slog"
-	"strings"
 	"sync"
 )
 
@@ -43,6 +42,7 @@ type VolumeService struct {
 	settingsService  *settings.SettingsService
 	imageService     *image.ImageService
 	backupVolumeName string
+	backupVolume     *BackupVolumeResolver
 	workspaceLocks   utils.KeyedMutex
 	helperMu         sync.Mutex
 	helperByVolume   map[string]*volumeHelper
@@ -83,9 +83,6 @@ func NewVolumeService(
 		workspaceMaxEntries = cfg.VolumeWorkspaceMaxEntries
 		workspaceMaxFileSizeMB = cfg.VolumeWorkspaceMaxFileSizeMB
 	}
-	if strings.TrimSpace(backupVolumeName) == "" {
-		backupVolumeName = "arcane-backups"
-	}
 	service := &VolumeService{
 		db:               db,
 		dockerService:    dockerService,
@@ -95,22 +92,25 @@ func NewVolumeService(
 		backupVolumeName: backupVolumeName,
 		helperByVolume:   make(map[string]*volumeHelper),
 	}
+	service.backupVolume = service.newBackupVolumeResolver(backupVolumeName)
 	backupDeps := volumebackup.Dependencies{
-		Store:            service.backupStoreInternal(),
-		DB:               db,
-		Docker:           dockerService,
-		Events:           eventService,
-		Activity:         activityService,
-		Engine:           engine,
-		RecoveryKeys:     recoveryKeys,
-		Locks:            &service.workspaceLocks,
-		AlreadyRunning:   ErrVolumeBackupAlreadyRunning,
-		HelperImage:      service.getVolumeHelperImageInternal,
-		AcquireHelper:    service.acquireVolumeHelperInternal,
-		Exec:             service.execInContainerInternal,
-		BackupVolumeName: backupVolumeName,
-		EncryptionKey:    encryptionKey,
-		ZoneProvider:     cfg,
+		Store:               service.backupStoreInternal(),
+		DB:                  db,
+		Docker:              dockerService,
+		Events:              eventService,
+		Activity:            activityService,
+		Engine:              engine,
+		RecoveryKeys:        recoveryKeys,
+		Locks:               &service.workspaceLocks,
+		AlreadyRunning:      ErrVolumeBackupAlreadyRunning,
+		HelperImage:         service.getVolumeHelperImageInternal,
+		AcquireHelper:       service.acquireVolumeHelperInternal,
+		Exec:                service.execInContainerInternal,
+		BackupVolumeName:    backupVolumeName,
+		ResolveBackupVolume: service.backupVolume.Resolve,
+		CurrentBackupVolume: service.backupVolume.Current,
+		EncryptionKey:       encryptionKey,
+		ZoneProvider:        cfg,
 	}
 	if containerService != nil {
 		backupDeps.StopContainer, backupDeps.StartContainer = containerService.StopContainer, containerService.StartContainer

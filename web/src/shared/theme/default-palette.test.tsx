@@ -18,5 +18,5 @@ it("shows Purple & Cyan selected on a fresh browser", async () => {
   renderWithApp(<PaletteEditor value={DEFAULT_TOKENS.palette} onChange={() => undefined} theme={DEFAULT_TOKENS.theme} idPrefix="fresh" />);
   const nebula = await screen.findByRole("radio", { name: /Lila & Cyan/ });
   expect(nebula.getAttribute("aria-checked")).toBe("true");
-  expect(screen.getByRole("radio", { name: /Arcane Violett/ }).getAttribute("aria-checked")).toBe("false");
+  expect(screen.getByRole("radio", { name: /Violett/ }).getAttribute("aria-checked")).toBe("false");
 });

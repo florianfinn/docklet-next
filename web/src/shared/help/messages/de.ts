@@ -17,9 +17,9 @@ export const deHelp: typeof enHelp = {
       },
       hubAddress: {
         title: "IP-Adresse",
-        short: "Adresse, unter der Agents den Hub erreichen.",
-        full: "IP des Hosts im LAN oder in einem bestehenden VPN, mit optionalem Port. Edge-Agents bauen ihre Verbindung zu dieser Adresse auf; Links in Benachrichtigungen nutzen sie, wenn keine Domain gewählt ist.",
-        impact: "Eine falsche Adresse trennt Edge-Agents vom Hub.",
+        short: "Adresse, unter der Edge-Agents den Hub erreichen. Direct-Agents benötigen sie nicht.",
+        full: "LAN- oder VPN-Adresse des Hubs mit veröffentlichtem Port, z. B. 192.0.2.10:3552. Edge-Agents verbinden sich hier; Direct-Agents benötigen diese Adresse nicht. Benachrichtigungslinks verwenden sie, wenn keine Domain ausgewählt ist.",
+        impact: "Eine falsche Adresse verhindert, dass Edge-Agents den Hub erreichen.",
       },
       domainUrl: {
         title: "Domain",

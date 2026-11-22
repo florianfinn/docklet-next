@@ -59,6 +59,10 @@ export const deStacks: typeof enStacks = {
   },
   started: "{action} gestartet",
   detail: {
+    noBaseline: "Noch keine Baseline",
+    recordBaseline: "Baseline aufzeichnen",
+    recordBaselineConfirm: "Zeichnet die aktuelle Bereitstellung als Baseline auf, indem ein normaler Deploy ohne Abruf von Images ausgeführt wird. Gespeicherte, noch nicht bereitgestellte Änderungen werden angewendet; unveränderte Container werden nicht neu erstellt.",
+    recordBaselineStarted: "Baseline aufzeichnen: Deploy angenommen. Ein erfolgreicher Deploy zeichnet die Baseline auf.",
     back: "Stacks",
     notFound: "Stack nicht gefunden",
     notFoundBody: (import.meta.env.DEV ? "Der Stack existiert nicht (mehr) im Demo-Datenbestand." : "Der Stack wurde nicht gefunden."),

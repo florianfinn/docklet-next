@@ -19,7 +19,7 @@ function Form() {
   return (
     <form>
       <HelpLabel htmlFor="addr" topic="settingsGeneral.hubAddress">
-        Interne Hub-Adresse
+        Hub-Adresse für Edge-Agents
       </HelpLabel>
       <Input id="addr" />
       <HelpTarget topic="action.restart">
@@ -43,11 +43,11 @@ describe("extended explanations", () => {
   it("full mode explains title, text and impact on keyboard focus and closes with Escape", async () => {
     renderWithApp(<Form />);
     // The info button sits beside the label, so the input keeps its plain name.
-    expect(screen.getByLabelText("Interne Hub-Adresse").id).toBe("addr");
+    expect(screen.getByLabelText("Hub-Adresse für Edge-Agents").id).toBe("addr");
     await userEvent.tab();
     expect(document.activeElement === trigger()).toBe(true);
     const text = await tooltipText();
-    expect(text.includes("Edge-Agents bauen ihre Verbindung") && text.includes("Auswirkung:")).toBe(true);
+    expect(text.includes("Edge-Agents verbinden sich hier") && text.includes("Direct-Agents benötigen diese Adresse nicht.") && text.includes("192.0.2.10:3552") && text.includes("Auswirkung:")).toBe(true);
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBe(null));
     expect(document.activeElement === trigger()).toBe(true);

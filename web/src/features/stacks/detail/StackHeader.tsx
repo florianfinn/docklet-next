@@ -2,7 +2,7 @@
 // Revision: f25cf36c7495738d1c83aa44c9e20da905b50eb78fe158af11f89d4fe57c0e09
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #27 production text, source errors and capability boundaries. M10 #231: preserve progress text, scoped controls and localized timestamps. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M24 S6: observed recovery and update UI follow-ups.
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #27 production text, source errors and capability boundaries. M10 #231: preserve progress text, scoped controls and localized timestamps. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M24 S6: observed recovery and update UI follow-ups.; M36 #568 scoped baseline, storage naming or address guidance.
 
 import { useStackDefinitionHint, useStackNamePeers } from "@/shared/hooks/use-stack-definition-hint";
 import { useIsUser } from "@/data/use-principal";
@@ -28,6 +28,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
 
 import { startPresented } from "@/features/activity/run-presentation";
 
+import { RecordBaseline } from "./RecordBaseline";
 import { StackStatusBadge } from "../StackStatusBadge";
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 
@@ -126,6 +127,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
           </div>
         </div>
       </div>
+      {!user && <RecordBaseline key={stack.id} stack={stack} inline={inline} disabled={busy || !command.available || !!stack.inventory?.stale} />}
       {stack.definitionHint === "definition-invalid" && <Alert><TriangleAlert /><AlertDescription>{definitionHint}</AlertDescription></Alert>}
       {namePeers && <Alert><Copy /><AlertDescription>{namePeers}</AlertDescription></Alert>}
       {host?.status === "offline" && (

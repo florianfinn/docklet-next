@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 #349 observed same-kind runs reach durable admission.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 #349 observed same-kind runs reach durable admission.; M36 #568 scoped baseline, storage naming or address guidance.
 
 import { expect, it, vi } from "vitest";
 import type { DockletAdapter } from "./adapter";
@@ -72,4 +72,20 @@ it("a same-kind run started outside this browser reaches durable admission while
   for (const command of ["stop", "restart"]) expect(isRunBusy(await f.gate.run("runStackCommand", ["edge~parent", command]).catch((e: unknown) => e))).toBe(true);
   expect(isRunBusy(await f.gate.run("runContainerCommand", ["edge~a", "start"]).catch((e: unknown) => e))).toBe(true);
   expect(f.inner.admitRuntimeCommand).toHaveBeenCalledOnce(); expect(f.inner.runStackCommand).not.toHaveBeenCalled();
+});
+
+it("a no-pull baseline command never joins an ordinary deploy and preserves the same target exclusion", async () => {
+  const f = fixture();
+  await f.gate.run("runStackCommand", ["edge~parent", "start"]);
+  const result = await f.gate.admit({ kind: "stack", id: "edge~parent", command: "start", deployOptions: { pullPolicy: "never" } }).catch((e: unknown) => e);
+  expect(isRunBusy(result)).toBe(true);
+  expect(f.inner.runStackCommand).toHaveBeenCalledTimes(1);
+  f.gate.reset();
+});
+
+it("forwards no-pull options through generic admission, including adapters without their own admission method", async () => {
+  const f = fixture();
+  await f.gate.admit({ kind: "stack", id: "edge~parent", command: "start", deployOptions: { pullPolicy: "never" } });
+  expect(f.inner.runStackCommand).toHaveBeenCalledExactlyOnceWith("edge~parent", "start", { pullPolicy: "never" });
+  f.gate.reset();
 });

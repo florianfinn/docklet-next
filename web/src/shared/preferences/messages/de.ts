@@ -177,8 +177,8 @@ export const deLab: typeof enLab = {
     apply: "Anwenden",
     names: {
       docklet: "Docklet (Standard)",
-      arcanePlus: "Arcane+",
-      arcane: "Arcane-Referenz",
+      arcanePlus: "Klassisch+",
+      arcane: "Klassisch",
       compact: "Kompakt-Ideen",
       calm: "Ruhig",
       vivid: "Lebendig",

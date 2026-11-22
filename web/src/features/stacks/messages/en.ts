@@ -58,6 +58,10 @@ export const enStacks = {
   },
   started: "{action} started",
   detail: {
+    noBaseline: "No baseline yet",
+    recordBaseline: "Record baseline",
+    recordBaselineConfirm: "Records the current deployment as baseline by running a normal deploy without pulling images. Saved but undeployed changes are applied; unchanged containers are not recreated.",
+    recordBaselineStarted: "Record baseline: deploy admitted. A successful deploy records the baseline.",
     back: "Stacks",
     notFound: "Stack not found",
     notFoundBody: (import.meta.env.DEV ? "The stack does not exist (anymore) in the demo data." : "The stack was not found."),

@@ -6,7 +6,7 @@ export const enTheme = {
     active: "Active: {name}",
     custom: "Custom palette",
     customHint: "Differs from all presets; each role is chosen individually.",
-    names: { arcane: "Arcane Violet", midnight: "Midnight", magenta: "Magenta", glacier: "Glacier", nebula: "Purple & Cyan" },
+    names: { arcane: "Violet", midnight: "Midnight", magenta: "Magenta", glacier: "Glacier", nebula: "Purple & Cyan" },
     descriptions: {
       arcane: "Violet, lilac as the secondary color and subtly tinted surfaces.",
       midnight: "Indigo, sky blue as the secondary color and midnight-blue surfaces.",

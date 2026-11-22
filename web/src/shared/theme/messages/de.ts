@@ -7,7 +7,7 @@ export const deTheme: typeof enTheme = {
     active: "Aktiv: {name}",
     custom: "Eigene Palette",
     customHint: "Weicht von allen Vorlagen ab; jede Rolle ist einzeln gewählt.",
-    names: { arcane: "Arcane Violett", midnight: "Mitternacht", magenta: "Magenta", glacier: "Gletscher", nebula: "Lila & Cyan" },
+    names: { arcane: "Violett", midnight: "Mitternacht", magenta: "Magenta", glacier: "Gletscher", nebula: "Lila & Cyan" },
     descriptions: {
       arcane: "Violett, Flieder als Sekundärfarbe und zart getönte Flächen.",
       midnight: "Indigo, Himmelblau als Sekundärfarbe und nachtblaue Flächen.",

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Preserve start groups during privilege drop; Local module namespace; functional cut: removed standalone build workshop; SQLite-only local persistence.
+// Deviations: Preserve start groups during privilege drop; Local module namespace; functional cut: removed standalone build workshop; SQLite-only local persistence.; M36 #570 scoped baseline, storage naming or address guidance.
 
 package startup
 
@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/samber/mo"
 	kit "go.getarcane.app/kit/pkg"
@@ -186,8 +187,20 @@ func defaultRuntimeIdentityRequestInternal(dockerHost string, inContainer bool) 
 	}
 }
 
+var legacyContainerEnvWarning sync.Once
+
 func runningInContainerInternal(getenv func(string) string, stat func(string) (os.FileInfo, error)) bool {
-	if kit.ParseOrDefault(strings.TrimSpace(getenv("ARCANE_IN_CONTAINER")), false, strconv.ParseBool) {
+	legacy := strings.TrimSpace(getenv("ARCANE_IN_CONTAINER"))
+	if legacy != "" {
+		legacyContainerEnvWarning.Do(func() {
+			slog.Warn("Deprecated environment variable", "name", "ARCANE_IN_CONTAINER", "replacement", "DOCKLET_IN_CONTAINER")
+		})
+	}
+	value := strings.TrimSpace(getenv("DOCKLET_IN_CONTAINER"))
+	if value == "" {
+		value = legacy
+	}
+	if kit.ParseOrDefault(value, false, strconv.ParseBool) {
 		return true
 	}
 

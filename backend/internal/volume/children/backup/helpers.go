@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.; Remove legacy archive helpers.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.; Remove legacy archive helpers.; M36 #570 scoped baseline, storage naming or address guidance.
 
 package backup
 
@@ -102,7 +102,14 @@ func (s *Service) resolveBackupStorageMountInternal(ctx context.Context, dockerC
 func (s *Service) resolveUsableBackupStorageMountInternal(ctx context.Context, dockerClient *client.Client, target string, readOnly bool) (backupStorageMountInternal, error) {
 	backupStorage := s.resolveBackupStorageMountInternal(ctx, dockerClient, target, readOnly)
 	if backupStorage.requiresEnsure {
-		if err := s.ensureBackupVolumeInternal(ctx); err != nil {
+		if s.deps.ResolveBackupVolume != nil {
+			name, err := s.deps.ResolveBackupVolume(ctx)
+			if err != nil {
+				return backupStorageMountInternal{}, err
+			}
+			backupStorage.mount.Source = name
+		}
+		if err := s.ensureBackupVolumeInternal(ctx, backupStorage.mount.Source); err != nil {
 			return backupStorageMountInternal{}, err
 		}
 	}
@@ -154,17 +161,17 @@ func (s *Service) StorageMount(ctx context.Context, dockerClient *client.Client,
 	return storage.mount, nil
 }
 
-func (s *Service) ensureBackupVolumeInternal(ctx context.Context) error {
-	slog.DebugContext(ctx, "volume service: ensure backup volume", "backupVolume", s.deps.BackupVolumeName)
+func (s *Service) ensureBackupVolumeInternal(ctx context.Context, name string) error {
+	slog.DebugContext(ctx, "volume service: ensure backup volume", "backupVolume", name)
 	dockerClient, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
 		return err
 	}
 
-	_, err = dockerClient.VolumeInspect(ctx, s.deps.BackupVolumeName, client.VolumeInspectOptions{})
+	_, err = dockerClient.VolumeInspect(ctx, name, client.VolumeInspectOptions{})
 	if err != nil {
 		_, err = dockerClient.VolumeCreate(ctx, client.VolumeCreateOptions{
-			Name: s.deps.BackupVolumeName,
+			Name: name,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create backup volume: %w", err)

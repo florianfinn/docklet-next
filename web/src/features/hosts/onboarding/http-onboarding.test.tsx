@@ -2,7 +2,7 @@
 // Revision: 81439fab6a8ec5232161dc933fbd41bec41885fa
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original production host onboarding UI acceptance tests.
+// Deviations: Original production host onboarding UI acceptance tests.; M36 #572 scoped baseline, storage naming or address guidance.
 
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -60,9 +60,9 @@ it.each(["direct", "edge"] as const)("creates a live %s host before rendering in
   if (connection === "edge") {
     await userEvent.click(screen.getByRole("radio", { name: /Edge/ }));
     // Agents usually sit in the LAN: the reachable IP candidate is the default, the domain stays selectable.
-    expect((screen.getByLabelText("Interne Hub-Adresse für den Agent") as HTMLInputElement).value).toBe("http://192.0.2.10:3552");
+    expect((screen.getByLabelText("Hub-Adresse für den Edge-Agent") as HTMLInputElement).value).toBe("http://192.0.2.10:3552");
     await userEvent.click(screen.getByRole("button", { name: /https:\/\/hub.example.com/ }));
-    expect((screen.getByLabelText("Interne Hub-Adresse für den Agent") as HTMLInputElement).value).toBe("https://hub.example.com");
+    expect((screen.getByLabelText("Hub-Adresse für den Edge-Agent") as HTMLInputElement).value).toBe("https://hub.example.com");
   } else await userEvent.type(document.querySelector<HTMLInputElement>("#host-address")!, "agent.example.com");
   await userEvent.click(screen.getByRole("button", { name: "Weiter" }));
   await userEvent.click(await screen.findByRole("button", { name: "Host anlegen und auf Agent warten" }));
@@ -113,5 +113,5 @@ it("keeps the saved agent address ahead of an IP APP_URL", async () => {
  renderRoutes([{ path: "/hosts/new", element: <OnboardingPage /> }], ["/hosts/new"], f.adapter);
  await screen.findByLabelText("Hostname in Docklet");
  await userEvent.click(screen.getByRole("radio", { name: /Edge/ }));
- expect((screen.getByLabelText("Interne Hub-Adresse für den Agent") as HTMLInputElement).value).toBe("http://192.0.2.10:3552");
+ expect((screen.getByLabelText("Hub-Adresse für den Edge-Agent") as HTMLInputElement).value).toBe("http://192.0.2.10:3552");
 });

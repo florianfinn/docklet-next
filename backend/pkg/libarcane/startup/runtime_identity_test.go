@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed standalone build workshop; SQLite-only local persistence.
+// Deviations: functional cut: removed standalone build workshop; SQLite-only local persistence.; M36 #570 scoped baseline, storage naming or address guidance.
 
 package startup
 
@@ -484,4 +484,26 @@ func TestRuntimeIdentityPreservesStartGroups(t *testing.T) {
 		return mo.None[uint32]()
 	}, 20, 20)
 	require.Equal(t, []uint32{20}, groups)
+}
+
+func TestContainerEnvironmentAliases(t *testing.T) {
+	for _, tc := range []struct {
+		name, current, legacy string
+		want                  bool
+	}{
+		{"new", "true", "", true}, {"alias", "", "true", true}, {"new wins", "false", "true", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := runningInContainerInternal(func(key string) string {
+				switch key {
+				case "DOCKLET_IN_CONTAINER":
+					return tc.current
+				case "ARCANE_IN_CONTAINER":
+					return tc.legacy
+				}
+				return ""
+			}, func(string) (os.FileInfo, error) { return nil, os.ErrNotExist })
+			require.Equal(t, tc.want, got)
+		})
+	}
 }

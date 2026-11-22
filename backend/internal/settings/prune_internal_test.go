@@ -2,7 +2,7 @@
 // Revision: 20a03b67fbeb6bcc82c758e6f2ece937d58f037a
 // Retrieved: 2026-11-02
 // License: Apache-2.0
-// Deviations: Original regressions for startup pruning of internal backup rows (M16 candidate F05, review CFR1-1).
+// Deviations: Original regressions for startup pruning of internal backup rows (M16 candidate F05, review CFR1-1).; M36 #570 scoped baseline, storage naming or address guidance.
 
 package settings
 
@@ -85,6 +85,7 @@ func TestSettingsService_PruneUnknownSettings_KeepsHubTargetState(t *testing.T) 
 // Every backend file outside this package that touches the settings table, with its reviewed role. A new file fails
 // until it is classified here; writers must keep their keys in internalSettingKeys or internalSettingPrefixes.
 var reviewedSettingFilesInternal = map[string]string{
+	"internal/volume/backup_volume.go":                    "reads and writes backupVolumeNameResolved",
 	"cmd/schema-baseline/main.go":                         "development generator; emits the reviewed updateNotify and vulnerabilityScanSchedule baseline seeds",
 	"internal/activity/runtime_restore.go":                "reads instanceId",
 	"internal/backuptarget/delivery_state.go":             "writes backupTargetDelivery:<host>",

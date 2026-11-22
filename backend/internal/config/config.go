@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; stack import mirror configuration; #410 process zone without override, Local/Factory as UTC.
+// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; stack import mirror configuration; #410 process zone without override, Local/Factory as UTC.; M36 #570 scoped baseline, storage naming or address guidance.
 
 package config
 
@@ -98,23 +98,27 @@ type Config struct {
 	EdgeMTLSServerName            string `env:"EDGE_MTLS_SERVER_NAME" default:""`
 	EdgeMTLSAssetsDir             string `env:"EDGE_MTLS_ASSETS_DIR" default:""`
 
-	TrustedProxies    string      `env:"TRUSTED_PROXIES" default:""`
-	FilePerm          os.FileMode `env:"FILE_PERM" default:"0644"`
-	DirPerm           os.FileMode `env:"DIR_PERM" default:"0755"`
-	HTTPClientTimeout int         `env:"HTTP_CLIENT_TIMEOUT" default:"0"`
-	BackupVolumeName  string      `env:"ARCANE_BACKUP_VOLUME_NAME" default:"arcane-backups"`
-	BackupEngineImage string      `env:"DOCKLET_BACKUP_ENGINE_IMAGE" default:""`
-	BackupDir         string      `env:"DOCKLET_BACKUP_DIR" default:"/var/lib/docklet/backups"`
-	HTTPProxy         string      `env:"HTTP_PROXY" default:""`
-	HTTPSProxy        string      `env:"HTTPS_PROXY" default:""`
-	NoProxy           string      `env:"NO_PROXY" default:""`
-	Timezone          string      `env:"TZ" default:"UTC"`
+	TrustedProxies         string      `env:"TRUSTED_PROXIES" default:""`
+	FilePerm               os.FileMode `env:"FILE_PERM" default:"0644"`
+	DirPerm                os.FileMode `env:"DIR_PERM" default:"0755"`
+	HTTPClientTimeout      int         `env:"HTTP_CLIENT_TIMEOUT" default:"0"`
+	BackupVolumeName       string      `env:"DOCKLET_BACKUP_VOLUME_NAME" default:""`
+	LegacyBackupVolumeName string      `env:"ARCANE_BACKUP_VOLUME_NAME" default:"" options:"deprecated"`
+	BackupEngineImage      string      `env:"DOCKLET_BACKUP_ENGINE_IMAGE" default:""`
+	BackupDir              string      `env:"DOCKLET_BACKUP_DIR" default:"/var/lib/docklet/backups"`
+	HTTPProxy              string      `env:"HTTP_PROXY" default:""`
+	HTTPSProxy             string      `env:"HTTPS_PROXY" default:""`
+	NoProxy                string      `env:"NO_PROXY" default:""`
+	Timezone               string      `env:"TZ" default:"UTC"`
 }
 
 func Load() *Config {
 	cfg := &Config{}
 	loadFromEnv(cfg)
 	applyOptions(cfg)
+	if strings.TrimSpace(cfg.BackupVolumeName) == "" {
+		cfg.BackupVolumeName = strings.TrimSpace(cfg.LegacyBackupVolumeName)
+	}
 	applyAgentModeDefaults(cfg)
 	applyProxyDefaults(cfg)
 	applyWorkspaceDefaults(cfg)

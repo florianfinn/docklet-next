@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; optional-module foundation (#472); M29 setup completion no longer waits for an initial password change.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; optional-module foundation (#472); M29 setup completion no longer waits for an initial password change.; M36 #570 scoped baseline, storage naming or address guidance.
 
 package settings
 
@@ -146,7 +146,7 @@ func (h *SettingsHandler) appendRuntimeSettingsInternal(settingsDto []settings.P
 		settings.PublicSetting{Key: volumeWorkspaceMaxFileSizeSettingKey, Value: strconv.Itoa(volumeWorkspaceMaxFileSizeMB), Type: "number"},
 	)
 
-	backupVolumeName := "arcane-backups"
+	backupVolumeName := ""
 	if h.cfg != nil && strings.TrimSpace(h.cfg.BackupVolumeName) != "" {
 		backupVolumeName = h.cfg.BackupVolumeName
 	}
@@ -253,7 +253,19 @@ func (h *SettingsHandler) GetSettings(ctx context.Context, input *GetSettingsInp
 		return nil, huma.Error500InternalServerError("Failed to map settings")
 	}
 
-	return &GetSettingsOutput{Body: h.appendRuntimeSettingsInternal(settingsDto, true)}, nil
+	settingsDto = h.appendRuntimeSettingsInternal(settingsDto, true)
+	if h.settingsService.backupVolumeNameReader != nil {
+		name, err := h.settingsService.backupVolumeNameReader(ctx)
+		if err != nil {
+			return nil, huma.Error503ServiceUnavailable("Backup volume selection is unavailable", err)
+		}
+		for i := range settingsDto {
+			if settingsDto[i].Key == "backupVolumeName" {
+				settingsDto[i].Value = name
+			}
+		}
+	}
+	return &GetSettingsOutput{Body: settingsDto}, nil
 }
 
 // UpdateSettings updates settings for an environment.

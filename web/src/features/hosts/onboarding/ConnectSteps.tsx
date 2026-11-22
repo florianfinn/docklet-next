@@ -1,4 +1,5 @@
 import { CheckCircle2, Circle, CircleX, Eye, Layers, Loader2, Plus, Server } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -66,6 +67,13 @@ export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: H
   const cmd = useHostCommands();
   const run = useActionRun(draft.runId);
   const connected = host?.status === "online";
+  const paired = connected || host?.status === "standby" || !!host?.lastSeen || !!host?.agentReport;
+  const [waitingFor, setWaitingFor] = useState<string>();
+  useEffect(() => {
+    if (paired) return;
+    const timer = setTimeout(() => setWaitingFor(draft.hostId), 90_000);
+    return () => clearTimeout(timer);
+  }, [paired, draft.hostId]);
   const failed = run?.status === "failed";
   const running = run?.status === "running";
 
@@ -85,6 +93,10 @@ export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: H
           <Stage key={s.key} state={s.state === "done" ? "done" : s.state === "running" ? "running" : s.state === "error" ? "error" : "pending"} title={s.label} detail={s.detail} />
         ))}
       </ol>
+      {waitingFor === draft.hostId && !!draft.hostId && !paired && draft.connection === "edge" && <Alert><AlertDescription>
+        <p>{t("agentNotReported", { url: hubUrl })}</p>
+        <p>{t("proxyBypass")}</p>
+      </AlertDescription></Alert>}
       {host && <AgentReportSection host={host} />}
       {host?.status === "token-rejected" && <Alert variant="destructive"><AlertDescription>{th("tokenRejected")}</AlertDescription></Alert>}
       {host?.status === "update-required" && <Alert><AlertDescription>{t("updateRequired")}</AlertDescription></Alert>}

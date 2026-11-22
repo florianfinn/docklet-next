@@ -2,7 +2,7 @@
 // Revision: cb93d80db5b6979f6ae3f3253884563643ea35ba57ac2588a380d7ed63713312
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration. M21 #439: Compose self-update controls and capability integration. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472).
+// Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected identity and hub settings; clarify raw output retention. #27 production text, source errors and capability boundaries. M11 #262: live vulnerability reads, scan controls and security settings. M12 #284 live volume backup domain, transport, UI and regression coverage. M13 #296 notification and Auto Heal code texts. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule; M19 backend contracts and target identity integration. M21 #439: Compose self-update controls and capability integration. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472).; M36 #570 scoped baseline, storage naming or address guidance.
 
 import { usersDe, keysDe } from "./users-de";
 // German texts of hub settings and the profile page.
@@ -116,7 +116,9 @@ export const deSettings: typeof enSettings = {
     hubName: "Name des Hubs",
     hubNameHint: "Erscheint in Benachrichtigungen und im Browser-Tab.",
     hubAddress: "IP-Adresse",
-    hubAddressHint: "IP des Hosts; hier verbinden sich die Agents (LAN oder VPN).",
+    hubAddressPortWarning: "Die gespeicherte Adresse enthält keinen Port. Docker veröffentlicht den Hub auf Port {port}; diesen Port für Edge-Agents angeben.",
+    hubAddressCandidates: "Erkannte Hub-Adressen",
+    hubAddressHint: "Adresse, unter der Edge-Agents den Hub erreichen (LAN oder VPN), z. B. 192.0.2.10:3552. Direct-Agents benötigen sie nicht.",
     hubAddressInvalid: "IPv4- oder IPv6-Adresse mit optionalem Port angeben, z. B. 192.0.2.10:8080 oder [2001:db8::10]:3552",
     legacyAddress: "Keine IP-Adresse. Agents brauchen die IP des Hosts.",
     moveToDomain: "Zur Domain verschieben",

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; M19 backend contracts and target identity integration; optional-module foundation (#472).
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys; M19 backend contracts and target identity integration; optional-module foundation (#472).; M36 #570 scoped baseline, storage naming or address guidance.
 
 package settings
 
@@ -34,8 +34,9 @@ const (
 )
 
 type SettingsService struct {
-	db     *database.DB
-	config atomic.Pointer[Settings]
+	db                     *database.DB
+	backupVolumeNameReader func(context.Context) (string, error)
+	config                 atomic.Pointer[Settings]
 	// effectiveConfig is the env-override-applied snapshot, rebuilt whenever
 	// config is stored. Overrides are resolved once at startup and never
 	// change, so materializing them here turns every read (GetSettings and

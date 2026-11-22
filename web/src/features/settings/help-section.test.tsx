@@ -24,7 +24,7 @@ describe("explanation settings", () => {
     await userEvent.click(mode().getByRole("radio", { name: "Kurz" }));
     expect(screen.getByRole("status").textContent).toBe("Ungespeicherte Änderungen");
     // The live preview follows the draft; the saved mode is untouched.
-    expect(screen.getByText("Adresse, unter der Agents den Hub erreichen.") !== null && helpStore.get().mode === "full").toBe(true);
+    expect(screen.getByText("Adresse, unter der Edge-Agents den Hub erreichen. Direct-Agents benötigen sie nicht.") !== null && helpStore.get().mode === "full").toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "Verwerfen" }));
     expect(mode().getByRole("radio", { name: "Ausführlich" }).getAttribute("aria-checked")).toBe("true");
 

@@ -16,9 +16,9 @@ export const enHelp = {
       },
       hubAddress: {
         title: "IP address",
-        short: "Address at which agents reach the hub.",
-        full: "IP of the host on the LAN or in an existing VPN, with an optional port. Edge agents connect to this address; links in notifications use it when no domain is selected.",
-        impact: "A wrong address disconnects edge agents from the hub.",
+        short: "Address at which Edge agents reach the hub. Direct agents do not need it.",
+        full: "LAN or VPN address of the hub, including its published port, e.g. 192.0.2.10:3552. Edge agents connect here; Direct agents do not need this address. Notification links use it when no domain is selected.",
+        impact: "A wrong address prevents Edge agents from reaching the hub.",
       },
       domainUrl: {
         title: "Domain",

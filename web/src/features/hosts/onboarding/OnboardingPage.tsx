@@ -7,8 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAdapter } from "@/data/use-adapter";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { useConnectedSettings } from "@/data/queries";
-import { preferredIpCandidate, type HubServerCandidate } from "@/domain/hub-discovery";
-import { agentHubUrl, type GeneralSettings } from "@/domain/settings";
+import { defaultAgentHubUrl } from "./hub-address";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { PageHeader, QueryError } from "@/shared/components/page";
 import { StepRail } from "@/shared/components/step-rail";
@@ -58,7 +57,7 @@ function OnboardingFlow() {
   const taken = useMemo(() => hosts.all.filter((h) => h.id !== draft?.hostId).map((h) => h.name), [hosts.all, draft?.hostId]);
   const errors = draft ? validateStep(step, draft, taken) : {};
   const general = settings.data?.general;
-  const plan = draft && general ? planFromDraft(draft, draft.hubUrl ?? defaultAgentHubUrl(general, discovery.data?.candidates), general.timeZone) : undefined;
+  const plan = draft && general ? planFromDraft(draft, draft.hubUrl ?? defaultAgentHubUrl(general, discovery.data), general.timeZone) : undefined;
 
   if (plan && discovery.data?.agentImage) plan.image = discovery.data.agentImage;
 
@@ -185,10 +184,4 @@ function OnboardingFlow() {
       />
     </>
   );
-}
-
-/** Agents usually sit in the LAN: the saved IP address, then the first reachable IP candidate, then the domain. */
-function defaultAgentHubUrl(general: GeneralSettings, candidates: HubServerCandidate[] | undefined): string {
-  if (general.hubAddress.trim()) return agentHubUrl(general);
-  return (preferredIpCandidate(candidates) ?? candidates?.[0])?.url ?? agentHubUrl(general);
 }

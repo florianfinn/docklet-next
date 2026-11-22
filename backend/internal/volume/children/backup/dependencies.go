@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Split from service.go for M26; streamed download seams for #386. Earlier deviations: see service.go.
+// Deviations: Split from service.go for M26; streamed download seams for #386. Earlier deviations: see service.go.; M36 #570 scoped baseline, storage naming or address guidance.
 
 package backup
 
@@ -45,6 +45,8 @@ type Dependencies struct {
 	// DownloadPrepareBudget bounds repository and password resolution and the restore of a streamed download; zero means 4 min.
 	DownloadPrepareBudget time.Duration
 	BackupVolumeName      string
+	ResolveBackupVolume   func(context.Context) (string, error)
+	CurrentBackupVolume   func(context.Context) (string, error)
 	ZoneProvider          scheduleutil.ZoneProvider
 	Location              *time.Location
 	EncryptionKey         string

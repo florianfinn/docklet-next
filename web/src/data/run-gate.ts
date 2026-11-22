@@ -79,7 +79,7 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
   scanVulnerabilityCandidates: ([host, input]) => ({ key: `candidate-scan:${str(host)}:${contentHash(JSON.stringify(input))}` }),
   runScan: () => ({ key: "scan:all", freshMs: CHECK_FRESH_MS }),
   reconnectHost: ([hostId]) => ({ key: `reconnect:${str(hostId)}`, freshMs: CHECK_FRESH_MS }),
-  runStackCommand: ([stackId, command]) => ({ key: `stack:${str(stackId)}:${str(command)}`, scope: `stack:${str(stackId)}`, kind: STACK_RUN_KINDS[str(command)] }),
+  runStackCommand: ([stackId, command, deployOptions]) => ({ key: `stack:${str(stackId)}:${str(command)}${deployOptions ? `:${contentHash(JSON.stringify(deployOptions))}` : ""}`, scope: `stack:${str(stackId)}`, kind: STACK_RUN_KINDS[str(command)] }),
   installStackUpdates: ([stackId, input]) => ({ key: `stack:${str(stackId)}:update:${contentHash(JSON.stringify(input ?? null))}`, scope: `stack:${str(stackId)}` }),
   restoreRestorePoint: ([stackId, point, input]) => ({ key: `stack:${str(stackId)}:restore:${str(point)}:${contentHash(JSON.stringify(input ?? null))}`, scope: `stack:${str(stackId)}` }),
   restartService: ([stackId, service]) => ({ key: `stack:${str(stackId)}:restart:${str(service)}`, scope: `stack:${str(stackId)}` }),
@@ -295,7 +295,7 @@ export class RunGate {
 
   async admit(request: RuntimeCommandRequest, options: { quiet?: boolean } = {}): Promise<RuntimeAdmission> {
     const method = request.kind === "container" ? "runContainerCommand" : request.command === "update" ? "installStackUpdates" : "runStackCommand";
-    const args = request.command === "update" ? [request.id, request.input] : [request.id, request.command];
+    const args = request.command === "update" ? [request.id, request.input] : request.deployOptions ? [request.id, request.command, request.deployOptions] : [request.id, request.command];
     let outcome: RuntimeAdmission["outcome"] = "started";
     const send = this.inner.admitRuntimeCommand ? async () => {
       const result = await this.inner.admitRuntimeCommand!(request, options); outcome = result.outcome; return result.runId;

@@ -2,14 +2,14 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 web consumer integration. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 web consumer integration. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups.; M36 #568 scoped baseline, storage naming or address guidance.
 
 import { readStackStopMode } from "./settings-core";
 import type { components } from "@/api/generated/schema";
 import { commandUUID } from "../intent-key";
 import type { LifecycleInput } from "@/domain/stack-updates";
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
-import type { RuntimeAdmission, RuntimeCommandRequest, ContainerCommand, RecreateInput, RuntimeReleaseInput, StackCommand } from "../adapter";
+import type { RuntimeAdmission, RuntimeCommandRequest, StackDeployOptions, ContainerCommand, RecreateInput, RuntimeReleaseInput, StackCommand } from "../adapter";
 import { AdapterOutcomeError, unavailable } from "../capability";
 import type { CapabilityDescriptor, ResourceRef } from "../capability";
 import type { CodedActionRun } from "../message-code";
@@ -197,14 +197,15 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       })).then(() => { if (version === generation) schedule(); });
     }, 2_000);
   }
-  function admit(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">, verified?: { expectedManifest?: string; autoRestore?: boolean }, acknowledgedUncertainty = "", frozenSuffix?: string): Promise<RuntimeAdmission> {
+  function admit(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore" | "recreate", lifecycle?: LifecycleInput, recreate?: { edit: RecreateInput; key?: string }, service?: Pick<components["schemas"]["ActivityRuntimeOptions"], "restartServices">, verified?: { expectedManifest?: string; autoRestore?: boolean }, acknowledgedUncertainty = "", frozenSuffix?: string, deployOptions?: StackDeployOptions): Promise<RuntimeAdmission> {
+    if (deployOptions && (kind !== "stack" || command !== "start" || deployOptions.pullPolicy !== "never")) return Promise.reject(runtimeError("runtime.invalid-command"));
     let host: string, raw: string;
     try { [host, raw] = splitInventoryId(target); } catch { return Promise.reject(runtimeError("runtime.invalid-target")); }
     const imageOperation = kind === "stack" && (command === "update" || command === "restore");
     const suffix = imageOperation || command === "recreate" || (kind === "container" && (command === "update" || command === "restore")) ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
     if (!suffix) return Promise.reject(runtimeError("runtime.invalid-command"));
     let refusedSuffix: string | undefined;
- const scope = `${kind}:${target}`, key = `${scope}:${command}:${acknowledgedUncertainty}:${service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : verified ? JSON.stringify(verified) : ""}`;
+ const scope = `${kind}:${target}`, key = `${scope}:${command}:${acknowledgedUncertainty}:${deployOptions ? JSON.stringify(deployOptions) : service ? JSON.stringify(service) : recreate ? JSON.stringify(recreate) : imageOperation ? JSON.stringify(lifecycle) : verified ? JSON.stringify(verified) : ""}`;
     if (ambiguous.has(scope) && (!recreate?.key || recreateKeys.get(scope) !== recreate.key)) return Promise.reject(runtimeError("runtime.admission-unknown"));
     const existing = pending.get(key); if (existing) return existing.then((result) => ({ ...result, outcome: "joined" }));
     if (ambiguous.size + pending.size + [...runs.values()].filter(active).length >= LIMIT) return Promise.reject(runtimeError("runtime.pending-limit"));
@@ -248,8 +249,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
             const path = imageOperation ? command === "update" ? `updater/projects/${encodeURIComponent(raw)}/update` : `updater/project/${encodeURIComponent(raw)}/restore-points/${encodeURIComponent(lifecycle!.pointId!)}/restore` : `${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${commandSuffix}${service ? `?${new URLSearchParams(service.restartServices?.map((name) => ["services", name]) ?? [])}` : ""}`;
             response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/${path}`, {
               method: "POST", signal: controller.signal,
-              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation || recreate || verified || acknowledgedUncertainty ? { "Content-Type": "application/json" } : {}) },
-              ...(recreate ? { body: JSON.stringify({ edit: recreate.edit }) } : imageOperation ? { body: JSON.stringify({ ...lifecycle, ...(acknowledgedUncertainty ? { acknowledgedUncertainty } : {}) }) } : verified ? { body: JSON.stringify(verified) } : acknowledgedUncertainty ? { body: JSON.stringify({ acknowledgedUncertainty }) } : {}),
+              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(deployOptions || imageOperation || recreate || verified || acknowledgedUncertainty ? { "Content-Type": "application/json" } : {}) },
+              ...(deployOptions ? { body: JSON.stringify({ ...deployOptions, ...(acknowledgedUncertainty ? { acknowledgedUncertainty } : {}) }) } : recreate ? { body: JSON.stringify({ edit: recreate.edit }) } : imageOperation ? { body: JSON.stringify({ ...lifecycle, ...(acknowledgedUncertainty ? { acknowledgedUncertainty } : {}) }) } : verified ? { body: JSON.stringify(verified) } : acknowledgedUncertainty ? { body: JSON.stringify({ acknowledgedUncertainty }) } : {}),
             });
           } catch (error) {
             check(version);
@@ -314,7 +315,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       try { confirmed = await confirmRuntimePeers(blocker, host, controller.signal); check(version); }
       finally { controllers.delete(controller); }
       if (!confirmed || !blocker.confirmable || !blocker.uncertainty) throw new CancelledError();
-      return admit(kind, target, command, lifecycle, recreate, service, verified, blocker.uncertainty.digest, refusedSuffix);
+      return admit(kind, target, command, lifecycle, recreate, service, verified, blocker.uncertainty.digest, refusedSuffix, deployOptions);
     });
   }
   const command = (...args: Parameters<typeof admit>) => admit(...args).then((result) => result.runId);
@@ -336,13 +337,13 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     return runs.get(id) ?? run;
   }
   return {
-    admitRuntimeCommand: (request: RuntimeCommandRequest) => admit(request.kind, request.id, request.command, request.input),
+    admitRuntimeCommand: (request: RuntimeCommandRequest) => admit(request.kind, request.id, request.command, request.input, undefined, undefined, undefined, "", undefined, request.deployOptions),
     installContainerUpdate: (id: string, input?: { expectedManifest?: string; autoRestore?: boolean }) => command("container", id, "update", undefined, undefined, undefined, input),
     restoreContainerImage: (id: string) => command("container", id, "restore"),
     installStackUpdates: (id: string, input?: LifecycleInput) => command("stack", id, "update", input),
     restoreRestorePoint: (id: string, point: string, input?: LifecycleInput) => command("stack", id, "restore", input ? { ...input, pointId: point } : undefined),
     restartService: (id: string, name: string) => command("stack", id, "restart", undefined, undefined, { restartServices: [name] }),
-    runStackCommand: (id: string, action: StackCommand) => command("stack", id, action),
+    runStackCommand: (id: string, action: StackCommand, deployOptions?: StackDeployOptions) => command("stack", id, action, undefined, undefined, undefined, undefined, "", undefined, deployOptions),
     recreateContainer: (id: string, edit: RecreateInput, key?: string) => command("container", id, "recreate", undefined, { edit, key }),
     runContainerCommand: (id: string, action: ContainerCommand) => command("container", id, action),
     getRuntimeRun: (host: string, id: string) => { explicitFollows.add(id); attempts.delete(id); return detail(host, id, true); },
