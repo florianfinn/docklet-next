@@ -33,11 +33,16 @@ export function tailnetRouteReason(status: TailnetStatus | undefined): "mtls" | 
   return undefined;
 }
 
-/** Unknown downstream links are never presented as failures; poll standby is a healthy tunnel. */
+/** Hosts whose tunnel failed in backend tailnet.FailingLink (`error` is mapped to offline); pending and update-required are not. */
+export function tailnetHostDown(host: Host): boolean {
+  return host.status === "offline" || host.status === "token-rejected";
+}
+
+/** Mirrors backend tailnet.FailingLink: an unobserved peer is no failure; later links after a failure are not checkable. */
 export function tailnetChain(host: Host, status?: TailnetStatus): { link: ChainLink; state: ChainState }[] {
   const links: ChainLink[] = ["hub", "peer", "tunnel"];
   const reported = host.tailnet?.failingLink;
-  const first = status ? (status.connection.state !== "connected" ? "hub" : host.tailnet?.state !== "online" ? "peer" : !["online", "standby"].includes(host.status) ? "tunnel" : "none") : reported;
+  const first = status ? (status.connection.state !== "connected" ? "hub" : host.tailnet?.state === "offline" ? "peer" : tailnetHostDown(host) ? "tunnel" : "none") : reported;
   const failed = links.indexOf(first as ChainLink);
   return links.map((link, index) => ({ link, state: first === undefined ? "unknown" : failed === -1 || index < failed ? "ok" : index === failed ? "failed" : "unknown" }));
 }

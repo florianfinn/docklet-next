@@ -85,6 +85,13 @@ it.each([
   ["peer", "connected", "offline", "offline", ["ok", "failed", "unknown"]],
   ["tunnel", "connected", "online", "offline", ["ok", "ok", "failed"]],
   ["standby", "connected", "online", "standby", ["ok", "ok", "ok"]],
+  // Parity with backend tailnet.FailingLink: an unknown peer is no failure; only offline/error/token-rejected hosts fail the tunnel.
+  ["unknown peer, offline host", "connected", "unknown", "offline", ["ok", "ok", "failed"]],
+  ["unknown peer, pending host", "connected", "unknown", "pending", ["ok", "ok", "ok"]],
+  ["update required", "connected", "online", "update-required", ["ok", "ok", "ok"]],
+  ["token rejected", "connected", "online", "token-rejected", ["ok", "ok", "failed"]],
+  ["error host", "connected", "online", "error", ["ok", "ok", "failed"]],
+  ["hub before unknown peer", "joining", "unknown", "pending", ["failed", "unknown", "unknown"]],
 ] as const)("orders the offline chain for %s", (_name, connection, peer, tunnel, states) => {
   expect(tailnetChain(mapHost({ ...peerHost, status: tunnel, tailnet: { ...peerHost.tailnet!, state: peer } }), { ...connectedStatus(), connection: { state: connection } }).map((row) => row.state)).toEqual(states);
 });
@@ -131,4 +138,37 @@ it("reseeds the admin observation when the actual SSE source reopens after a hub
   expect(f.adapter.tailnet!.current()?.connection.state).toBe("off");
   expect(f.adapter.tailnet!.current()?.generation).toBe(1);
   stop();
+});
+
+it("keeps a connected run truthful after a same-mode credential save and keeps streaming hosts", async () => {
+  const f = tailnetFixture(); renderWithApp(<Hosts />, f.adapter);
+  await screen.findByRole("link", { name: /Tailscale: Connected · 1 host/ });
+  await act(async () => { await f.adapter.tailnet!.save({ enabled: true, mode: "oauth", clientId: "example-client", clientSecret: "test-only" }); });
+  expect(f.adapter.tailnet!.current()?.connection.state).toBe("connected");
+  expect(f.adapter.tailnet!.current()?.generation).toBe(1);
+  const rows = [{ ...peerHost, status: "offline", tailnet: { ...peerHost.tailnet!, state: "offline" as const, failingLink: "peer" } }];
+  await act(async () => f.send(connectedStatus(), rows));
+  await screen.findByRole("button", { name: "Show cause" });
+  expect(screen.getByRole("link", { name: /Tailscale: Connected/ }) !== null).toBe(true);
+});
+
+it("applies the host rows of an envelope whose hub status is stale", async () => {
+  const f = tailnetFixture({ ...connectedStatus(), generation: 3 }); renderWithApp(<Hosts />, f.adapter);
+  await screen.findByRole("link", { name: /Tailscale: Connected · 1 host/ });
+  const rows = [{ ...peerHost, status: "offline", tailnet: { ...peerHost.tailnet!, state: "offline" as const, failingLink: "peer" } }];
+  await act(async () => f.send({ ...connectedStatus(), generation: 2, connection: { state: "joining" } }, rows));
+  await screen.findByRole("button", { name: "Show cause" });
+  expect(f.adapter.tailnet!.current()?.generation).toBe(3);
+});
+
+it("shows no cause for a new tailnet host that waits for its agent", async () => {
+  const f = tailnetFixture(); const notify = vi.spyOn(toast, "warning");
+  renderWithApp(<Hosts />, f.adapter);
+  await screen.findByText("Example agent");
+  const waiting = { ...peerHost, status: "pending", tailnet: { ...peerHost.tailnet!, state: "unknown" as const, failingLink: "none" } };
+  await act(async () => f.send(connectedStatus(), [waiting]));
+  await act(async () => f.send(connectedStatus(), [{ ...waiting, tailnet: { ...waiting.tailnet, state: "online" as const } }]));
+  await waitFor(() => expect(f.requests.filter((path) => path === "/api/environments").length >= 3).toBe(true));
+  expect(screen.queryByRole("button", { name: "Show cause" }) === null).toBe(true);
+  expect(notify).not.toHaveBeenCalled();
 });

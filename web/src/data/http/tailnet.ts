@@ -18,6 +18,8 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
   let current: TailnetStatus | undefined;
   let revision = 0;
   let streamEpoch = 0, observedEpoch = 0;
+  // While a credential write settles, same-epoch stream statuses up to the pre-write generation are the replaced lifecycle.
+  let write: { floor: number; epoch: number } | undefined;
   let lifetime = new AbortController();
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
@@ -48,13 +50,14 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
     status,
     settings: () => request<TailnetSettings>("/settings/connections/tailnet"),
     async save(input) {
-      const before = current?.generation ?? 0, epoch = streamEpoch;
-      ++revision;
-      const saved = await request<TailnetSettings>("/settings/connections/tailnet", "PUT", input);
-      // The write response has no generation. Fence the old lifecycle before reading its replacement.
-      if (epoch === streamEpoch && current && current.generation <= before) observe({ ...current, generation: before + 1, enabled: input.enabled, connection: { state: input.enabled ? "joining" : "off" }, routeAvailable: false });
-      await status();
-      return saved;
+      // The hub keeps the generation when a same-mode credential replaces a connected run, so the post-write read decides.
+      const owned = { floor: current?.generation ?? -1, epoch: streamEpoch };
+      ++revision; write = owned;
+      try {
+        const saved = await request<TailnetSettings>("/settings/connections/tailnet", "PUT", input);
+        observe(await request<TailnetStatus>("/tailnet/status"));
+        return saved;
+      } finally { if (write === owned) write = undefined; }
     },
     async reset() { ++revision; observe(await request<TailnetStatus>("/tailnet/reset", "POST")); },
   };
@@ -71,5 +74,9 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
     ++streamEpoch; ++revision; peers.clear();
     if (current) await status();
   }
-  return { api, observe, observeHosts, project, reconnect, clear: () => { ++revision; peers.clear(); lifetime.abort(); lifetime = new AbortController(); current = undefined; notify(); } };
+  function observeStream(next: TailnetStatus): boolean {
+    if (write && write.epoch === streamEpoch && next.generation <= write.floor) return false;
+    return observe(next);
+  }
+  return { api, observe: observeStream, observeHosts, project, reconnect, clear: () => { ++revision; peers.clear(); lifetime.abort(); lifetime = new AbortController(); current = undefined; notify(); } };
 }

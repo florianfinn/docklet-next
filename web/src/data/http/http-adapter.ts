@@ -617,7 +617,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
     if (envelope.channel === "environments") {
       const status = envelope.environment?.tailnet;
-      if (status && !tailnet.observe(status)) return;
+      // A stale hub status is skipped on its own; the envelope's host rows still apply.
+      if (status) tailnet.observe(status);
       if (!status && tailnet.api.current()?.enabled) void tailnet.api.status().catch(() => {});
       const rows = envelope.environment?.environments;
       // The read policy sees the new catalogue before any invalidation dispatches a read.

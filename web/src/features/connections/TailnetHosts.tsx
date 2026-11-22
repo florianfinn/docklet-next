@@ -9,7 +9,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 import { useTailnet } from "@/data/use-tailnet";
-import { tailnetChain } from "@/domain/tailnet";
+import { tailnetChain, tailnetHostDown } from "@/domain/tailnet";
 import type { Host } from "@/domain/model";
 import { formatRelative } from "@/domain/format";
 import { ToneBadge } from "@/shared/components/tone";
@@ -51,7 +51,7 @@ export function TailnetChain({ host, compact = false }: { host: Host; compact?: 
 
 export function TailnetStatusTooltip({ host, children }: { host: Host; children: ReactNode }) {
   const t = useTranslations("connections");
-  if (host.networkRoute !== "tailnet" || ["online", "standby"].includes(host.status)) return children;
+  if (host.networkRoute !== "tailnet" || !tailnetHostDown(host)) return children;
   return <Tooltip><TooltipTrigger asChild><span tabIndex={0} className="inline-flex">{children}</span></TooltipTrigger><TooltipContent className="max-w-[min(24rem,calc(100vw-2rem))]"><p className="mb-2 font-semibold break-words">{t("chainTitle", { name: host.name })}</p><TailnetChain host={host} compact /></TooltipContent></Tooltip>;
 }
 
@@ -61,7 +61,7 @@ export function TailnetHostCause({ host }: { host: Host }) {
   const [open, setOpen] = useState(false);
   if (host.networkRoute !== "tailnet") return null;
   const first = tailnetChain(host, status).find((row) => row.state === "failed");
-  const offline = !["online", "standby"].includes(host.status);
+  const offline = tailnetHostDown(host);
   return <>
     {host.tailnet?.tagged === false && <p role="status" className="text-sm text-warning">{t("tagMissing")}</p>}
     {offline && <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/20 p-3">

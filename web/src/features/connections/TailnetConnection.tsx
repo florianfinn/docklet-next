@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Network } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
+import { useHosts } from "@/data/queries";
 import { useTailnet } from "@/data/use-tailnet";
 import { useCommandError } from "@/data/use-command-error";
 import type { TailnetSettings } from "@/domain/tailnet";
@@ -41,6 +42,8 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
   const [reset, setReset] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
+  // Status counts hosts only while enabled; the reset dialog counts tailnet-route hosts from the shared catalogue.
+  const routeHosts = useHosts().data?.filter((host) => host.networkRoute === "tailnet").length;
   if (!api || !status) return null;
   const mtls = status.routeCode === "tailnet.mtls-unsupported";
   const rejected = status.provisioning.state === "rejected" || status.connection.code === "tailnet.credential-rejected";
@@ -48,7 +51,7 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
   const expanded = setup || open || rejected || !connected;
   const sameMode = mode === settings.mode;
   const ready = mode === "oauth" ? !!clientId.trim() && (!!secret || sameMode && settings.secretConfigured) : !!secret || sameMode && settings.secretConfigured;
-  const response = status.connection.state === "control-unreachable" || status.connection.state === "joining" && status.connection.code === "tailnet.coordination-unreachable" ? "unreachable" : status.connection.state;
+  const response = status.connection.state === "control-unreachable" || status.connection.state === "joining" && status.connection.code === "tailnet.coordination-unreachable" ? "unreachable" : status.connection.state === "connected" && !status.routeAvailable ? "connectedNoRoute" : status.connection.state;
   async function save(enabled: boolean) {
     if (!api) return;
     setBusy(true); setFeedback("");
@@ -99,6 +102,6 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
       {!setup && status.enabled && <Button variant="outline" className="min-h-10" disabled={busy} onClick={() => void save(false)}>{t("disable")}</Button>}
       {!setup && <Button variant="ghost" className="ml-auto min-h-10 text-destructive" disabled={busy} onClick={() => setReset(true)}>{t("reset")}</Button>}
     </footer>
-    <ConfirmDialog contentClassName="[&_button]:min-h-10" open={reset} onOpenChange={setReset} title={t("resetTitle")} description={<p className="break-words">{t("resetBody", { count: status.hostCount, hostname: settings.hostname })}</p>} confirmLabel={t("resetConfirm")} destructive onConfirm={async () => { await api.reset(); await client.invalidateQueries({ queryKey: ["tailnet-settings"] }); }} />
+    <ConfirmDialog contentClassName="[&_button]:min-h-10" open={reset} onOpenChange={setReset} title={t("resetTitle")} description={<p className="break-words">{t("resetBody", { count: routeHosts ?? status.hostCount, hostname: settings.hostname })}</p>} confirmLabel={t("resetConfirm")} destructive onConfirm={async () => { await api.reset(); await client.invalidateQueries({ queryKey: ["tailnet-settings"] }); }} />
   </section>;
 }

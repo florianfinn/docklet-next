@@ -13,7 +13,7 @@ import SettingsPage from "@/features/settings/SettingsPage";
 import SetupPage from "@/features/setup/SetupPage";
 import { restartSetup, patchSetup } from "@/features/setup/setup-draft";
 import { TailnetConnection } from "./TailnetConnection";
-import { connectedStatus, tailnetFixture } from "./tailnet.test-support";
+import { connectedStatus, peerHost, tailnetFixture } from "./tailnet.test-support";
 
 beforeEach(() => setAppLocale("en-US"));
 afterEach(() => { setAppLocale("de"); restartSetup(); vi.restoreAllMocks(); });
@@ -35,12 +35,15 @@ it("never prefills read secrets and clears the credential after save", async () 
 });
 
 it("requires a reset confirmation naming the host count and local-only effect; disable needs none", async () => {
-  const f = tailnetFixture({ ...connectedStatus(), hostCount: 3 });
+  // Status counts hosts only while enabled; the dialog counts tailnet-route hosts from the catalogue.
+  const f = tailnetFixture({ ...connectedStatus(), hostCount: 0 });
+  f.state.rows = ["a", "b", "c"].map((id) => ({ ...peerHost, id: `example-agent-${id}`, name: `Example agent ${id}` }));
   renderWithApp(<TailnetConnection />, f.adapter);
+  await waitFor(() => expect(f.requests.includes("/api/environments")).toBe(true));
   await userEvent.click(await screen.findByRole("button", { name: "Reset…" }));
   expect(f.writes).toHaveLength(0);
   const dialog = await screen.findByRole("alertdialog");
-  expect(dialog.textContent).toContain("3 hosts use this route");
+  expect(dialog.textContent).toContain("3 hosts use this route and must be re-added afterwards");
   expect(dialog.textContent).toContain("docklet-hub stays in the tailnet admin console");
   expect(dialog.textContent).toContain("saved credential is kept");
   await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -56,7 +59,8 @@ it("requires a reset confirmation naming the host count and local-only effect; d
 it("shows provisioning rejection separately from the retained connection", async () => {
   const f = tailnetFixture({ ...connectedStatus(), provisioning: { state: "rejected", providerStatus: 403 }, routeAvailable: false });
   renderWithApp(<TailnetConnection />, f.adapter);
-  await screen.findByText("Connected to example.com. Edge hosts can use this private route.");
+  // A rejected credential keeps the connection but must not promise the route to new hosts.
+  await screen.findByText("Connected to example.com. New hosts cannot use this route until the problem below is solved.");
   expect(screen.getByText(/invalid or revoked/).textContent).toContain("Existing connected hosts keep working");
   expect(screen.getByText("Control server response: HTTP 403.") !== null).toBe(true);
   expect(screen.getByLabelText("Client secret") !== null).toBe(true);

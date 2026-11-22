@@ -12,7 +12,7 @@ import { queryKeys } from "@/data/query-keys";
 import { useTailnet } from "@/data/use-tailnet";
 import { useAdapter } from "@/data/use-adapter";
 import { identityLifetime } from "@/data/identity-lifetime";
-import { tailnetChain } from "@/domain/tailnet";
+import { tailnetChain, tailnetHostDown } from "@/domain/tailnet";
 
 /** Notify observed interruptions, with the same first failing link as the host dialog. */
 export function TailnetNotifications() {
@@ -32,7 +32,7 @@ export function TailnetNotifications() {
     const next = new Map<string, string>();
     for (const host of hosts.data) {
       if (host.networkRoute !== "tailnet") continue;
-      const first = !["online", "standby"].includes(host.status) ? tailnetChain(host, status).find((row) => row.state === "failed")?.link : undefined;
+      const first = tailnetHostDown(host) ? tailnetChain(host, status).find((row) => row.state === "failed")?.link : undefined;
       const value = first ?? "none";
       const before = previous.current.get(host.id);
       if (first && before !== undefined && value !== before) notices.current.add(toast.warning(t("offlineNotice", { name: host.name, link: t(`links.${first}`) })));

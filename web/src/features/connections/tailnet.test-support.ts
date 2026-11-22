@@ -46,8 +46,10 @@ export function tailnetFixture(initial: TailnetStatus = connectedStatus(), admin
       const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {};
       writes.push({ path, body });
       if (path === "/api/settings/connections/tailnet") {
+        // tailnet.Manager.updateCredential: a same-mode credential for a connected, enabled run keeps its generation and connection.
+        const kept = body.enabled === true && state.status.enabled && (body.mode ?? state.settings.mode) === state.settings.mode && state.status.connection.state === "connected";
         state.settings = { ...state.settings, enabled: body.enabled === true, ...(body.mode ? { mode: String(body.mode) } : {}), secretConfigured: true };
-        state.status = { ...state.status, generation: state.status.generation + 1, enabled: body.enabled === true, connection: { state: body.enabled ? "joining" : "off" }, routeAvailable: false };
+        if (!kept) state.status = { ...state.status, generation: state.status.generation + 1, enabled: body.enabled === true, connection: { state: body.enabled ? "joining" : "off" }, routeAvailable: false };
         return json(state.settings);
       }
       if (path === "/api/tailnet/reset") { state.status = { ...state.status, generation: state.status.generation + 1, enabled: false, connection: { state: "off" }, routeAvailable: false }; return json(state.status); }
