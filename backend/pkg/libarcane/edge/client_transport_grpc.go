@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; #573 manager dialer for the gRPC tunnel.
 
 package edge
 
@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -66,6 +67,14 @@ func (c *TunnelClient) connectAndServeGRPC(ctx context.Context) error {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	if c.cfg != nil && c.cfg.ManagerDialer != nil {
+		dial := c.cfg.ManagerDialer
+		dialOpts = append(dialOpts, grpc.WithNoProxy(), grpc.WithContextDialer(func(ctx context.Context, address string) (net.Conn, error) {
+			return dial(ctx, "tcp", address)
+		}))
+		managerAddr = "passthrough:///" + managerAddr
 	}
 
 	slog.DebugContext(ctx, "Dialing manager for gRPC edge tunnel", "addr", managerAddr)

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; M15 simple-user rights and identity contracts.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; M15 simple-user rights and identity contracts; #573 tailnet status on the environment snapshot stream.
 
 package environment
 
@@ -20,6 +20,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/environment"
+	tailnettypes "github.com/florianfinn/docklet-next/types/tailnet"
 	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/streams/agg"
 	"log/slog"
@@ -71,6 +72,9 @@ type EnvironmentWithApiKey struct {
 	environment.Environment
 
 	ApiKey *string `json:"apiKey,omitempty" doc:"API key for pairing (only shown once during creation)"`
+
+	TailnetAuthKey    *string `json:"tailnetAuthKey,omitempty" doc:"One-use Tailscale key for the installer (tailnet route, shown once)"`
+	TailnetManagerURL *string `json:"tailnetManagerUrl,omitempty" doc:"Hub URL over the tailnet for the installer"`
 }
 
 type GetEnvironmentInput struct {
@@ -240,7 +244,11 @@ func (h *EnvironmentHandler) RunStreamProducer(ctx context.Context, ps *authz.Pe
 
 	h.streamHub.Subscribe(ctx, environmentStreamHubKeyInternal, h.runEnvironmentStreamListerInternal, func(all []environment.Environment) bool {
 		envs := visibleEnvironmentsForInternal(all, ps)
-		fingerprint := kit.Fingerprint(envs)
+		hub := h.tailnetStreamStatusInternal(all, ps)
+		fingerprint := kit.Fingerprint(struct {
+			Envs    []environment.Environment
+			Tailnet *tailnettypes.Status
+		}{envs, hub})
 		// Re-send unchanged state on a floor so relative timestamps in the UI
 		// ("last seen 2 minutes ago") keep advancing.
 		if haveFingerprint && fingerprint == lastFingerprint && time.Since(lastSentAt) < environmentStreamRefreshFloor {
@@ -253,9 +261,33 @@ func (h *EnvironmentHandler) RunStreamProducer(ctx context.Context, ps *authz.Pe
 		return agg.Send(ctx, events, environment.StreamEvent{
 			Type:         "snapshot",
 			Environments: envs,
+			Tailnet:      hub,
 			Timestamp:    time.Now(),
 		})
 	})
+}
+
+// tailnetStreamStatusInternal is the hub tailnet status for administrators while the route is enabled,
+// with host counts taken from the same projected snapshot.
+func (h *EnvironmentHandler) tailnetStreamStatusInternal(all []environment.Environment, ps *authz.PermissionSet) *tailnettypes.Status {
+	route := h.environmentService.tailnetRoute()
+	if route == nil || ps == nil || !ps.IsGlobalAdmin() {
+		return nil
+	}
+	status := route.Status()
+	if !status.Enabled {
+		return nil
+	}
+	for i := range all {
+		if all[i].NetworkRoute == nil || *all[i].NetworkRoute != tailnettypes.RouteTailnet {
+			continue
+		}
+		status.HostCount++
+		if all[i].Status == string(EnvironmentStatusOnline) || all[i].Status == string(EnvironmentStatusStandby) {
+			status.OnlineHosts++
+		}
+	}
+	return &status
 }
 
 func (h *EnvironmentHandler) runEnvironmentStreamListerInternal(ctx context.Context, publish func([]environment.Environment)) {

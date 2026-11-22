@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals.
+// Deviations: Local module namespace; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals. #573 manager dialer for manager HTTP clients.
 
 package edge
 
@@ -108,7 +108,7 @@ func NewManagerHTTPClient(cfg *Config, timeout time.Duration) (*http.Client, err
 	if !ok {
 		return nil, errors.New("http.DefaultTransport is not *http.Transport")
 	}
-	transport := baseTransport.Clone()
+	transport := applyManagerDialerInternal(cfg, baseTransport.Clone())
 	tlsConfig, err := buildManagerClientTLSConfigInternal(cfg)
 	if err != nil {
 		return nil, err

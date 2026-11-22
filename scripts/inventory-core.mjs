@@ -20,6 +20,8 @@ if (check) {
 } else {
   const source = read("docs/provenance/arcane-modules.json");
   const original = read("docs/provenance/arcane-binary.json");
+  // Modules added or upgraded after the adoption baseline carry their own evidence (scripts/inventory-added-modules.mjs).
+  const added = read("docs/provenance/core-added-modules.json");
   const namespace = (name) => name.replace(/^github\.com\/florianfinn\/docklet-next\/(backend|types|cli)(?=\/|$)/, "github.com/getarcaneapp/arcane/$1/v2");
   const records = new Map();
   const targets = [];
@@ -38,12 +40,14 @@ if (check) {
         ["./third_party/francis", "../third_party/francis"].includes(replacement);
       const local = name !== upstream || name.startsWith("go.getarcane.app/") || localFrancis;
       const selected = local ? source.packages.find((p) => p.name === upstream && (p.sourceTree || p.version === source.revision || (localFrancis && p.version === declared))) :
-        original.packages.find((p) => p.name === name && p.version === (version || declared));
+        original.packages.find((p) => p.name === name && p.version === (version || declared)) ??
+        added.packages.find((p) => p.name === name && p.version === (version || declared));
       if (!selected) throw new Error(`unassessed-core-module: ${name}`);
+      const evidence = original.packages.includes(selected) || local ? "arcane-modules.json" : "core-added-modules.json";
       const record = records.get(name) ?? { name, version: local ? selected.sourceRevision : version || declared,
         localPath: local ? (localFrancis ? "third_party/francis" : name !== upstream ? name.split("/").at(-1) : "third_party/arcane/" + name.slice("go.getarcane.app/".length)) : null,
         upstream: selected.name, upstreamVersion: selected.version,
-        license: name === "github.com/italypaleale/francis" ? "MIT AND Apache-2.0" : ["go.getarcane.app/builds", "go.getarcane.app/kit"].includes(name) ? "BSD-3-Clause AND Apache-2.0" : selected.license, evidence: "arcane-modules.json", targets: [],
+        license: name === "github.com/italypaleale/francis" ? "MIT AND Apache-2.0" : ["go.getarcane.app/builds", "go.getarcane.app/kit"].includes(name) ? "BSD-3-Clause AND Apache-2.0" : selected.license, evidence, targets: [],
         correspondingSource:selected.correspondingSource,
         legalFiles:[...(selected.licenseFiles??[]),...(selected.nestedLicenseEvidence??[]),...(selected.compiledLicenseNotices??[]),...(!local?(selected.copyrightSources??[]):[])].map(f=>({path:f.path,sha256:f.sha256})),
         modifications: localFrancis ? "SQLite provider and memory provider subset; exact file deviations in source headers and scripts/provenance.json." :

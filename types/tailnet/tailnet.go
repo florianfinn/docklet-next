@@ -1,0 +1,103 @@
+// Source: docklet-next/issues/573
+// Revision: b4807f4912bc07f3e51abaf552a69f2223cabd27
+// Retrieved: 2026-11-22
+// License: Apache-2.0
+// Deviations: Original embedded Tailscale route contract for Edge hosts (hub-side DTOs only).
+
+// Package tailnet holds the hub-side wire vocabulary of the optional Tailscale route.
+package tailnet
+
+import "time"
+
+const (
+	CodeCredentialRejected      = "tailnet.credential-rejected"
+	CodeCoordinationUnreachable = "tailnet.coordination-unreachable"
+	CodeNotConnected            = "tailnet.not-connected"
+	CodeKeyMintFailed           = "tailnet.key-mint-failed"
+	CodeMTLSUnsupported         = "tailnet.mtls-unsupported"
+)
+
+const (
+	RouteLAN     = "lan"
+	RouteDomain  = "domain"
+	RouteTailnet = "tailnet"
+)
+
+const (
+	ModeOAuth  = "oauth"
+	ModeManual = "manual"
+)
+
+// Problem is a typed refusal of a tailnet operation.
+type Problem struct {
+	Code   string `json:"code" enum:"tailnet.credential-rejected,tailnet.coordination-unreachable,tailnet.not-connected,tailnet.key-mint-failed,tailnet.mtls-unsupported"`
+	Status int    `json:"status"`
+	// ProviderStatus is the HTTP status the Tailscale API answered with, when one was received.
+	ProviderStatus int `json:"providerStatus,omitempty"`
+}
+
+func (p *Problem) Error() string             { return p.Code }
+func (p *Problem) GetStatus() int            { return p.Status }
+func (p *Problem) ContentType(string) string { return "application/problem+json" }
+
+// Connection is the hub node's observed tailnet membership; link 1 of the host chain uses only this.
+type Connection struct {
+	State string `json:"state" enum:"off,joining,connected,control-unreachable,error"`
+	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.coordination-unreachable,tailnet.not-connected,tailnet.mtls-unsupported"`
+}
+
+// Provisioning is the credential's ability to admit new hosts, independent of the connection.
+type Provisioning struct {
+	State string `json:"state" enum:"not-configured,not-applicable,checking,ok,rejected"`
+	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected"`
+	// ProviderStatus is the last rejecting HTTP status from the Tailscale API.
+	ProviderStatus int `json:"providerStatus,omitempty"`
+}
+
+// Status is the redacted hub tailnet status; it never carries keys or peer endpoints.
+type Status struct {
+	Enabled      bool         `json:"enabled"`
+	Mode         string       `json:"mode,omitempty" doc:"oauth or manual"`
+	Connection   Connection   `json:"connection"`
+	Provisioning Provisioning `json:"provisioning"`
+	TailnetName  string       `json:"tailnetName,omitempty"`
+	HubAddress   string       `json:"hubAddress,omitempty" doc:"The hub's tailnet IPv4 address"`
+	HostCount    int          `json:"hostCount"`
+	OnlineHosts  int          `json:"onlineHosts"`
+	// RouteAvailable reports whether onboarding may offer the tailnet route for new hosts.
+	RouteAvailable bool `json:"routeAvailable"`
+	// RouteCode explains why the route is unavailable.
+	RouteCode  string `json:"routeCode,omitempty" doc:"tailnet.* refusal code"`
+	Generation int64  `json:"generation"`
+}
+
+// HostPeer is the hub's view of one tailnet-route host.
+type HostPeer struct {
+	State      string     `json:"state" enum:"online,offline,unknown"`
+	LastSeen   *time.Time `json:"lastSeen,omitempty"`
+	Path       string     `json:"path" doc:"direct, relay, idle or unknown"`
+	Tagged     *bool      `json:"tagged,omitempty" doc:"Whether the observed node carries tag:docklet-agent"`
+	ObservedAt *time.Time `json:"observedAt,omitempty"`
+	// FailingLink is the first failing link of the hub → peer → tunnel chain, or none.
+	FailingLink string `json:"failingLink" doc:"hub, peer, tunnel or none"`
+}
+
+// Settings is the write-only credential read model of Settings → Connections.
+type Settings struct {
+	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode,omitempty" doc:"oauth or manual"`
+	ClientID         string `json:"clientId,omitempty"`
+	SecretConfigured bool   `json:"secretConfigured"`
+	Hostname         string `json:"hostname"`
+	CustomControl    bool   `json:"customControl" doc:"TAILSCALE_CONTROL_URL is set"`
+	PolicySnippet    string `json:"policySnippet"`
+}
+
+// SettingsUpdate replaces the hub credential; an empty secret keeps the stored one for the same mode.
+type SettingsUpdate struct {
+	Enabled      bool   `json:"enabled"`
+	Mode         string `json:"mode,omitempty" enum:"oauth,manual"`
+	ClientID     string `json:"clientId,omitempty" maxLength:"256"`
+	ClientSecret string `json:"clientSecret,omitempty" maxLength:"512"`
+	AuthKey      string `json:"authKey,omitempty" maxLength:"512"`
+}

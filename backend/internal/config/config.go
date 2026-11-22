@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; stack import mirror configuration; #410 process zone without override, Local/Factory as UTC.; M36 #570: Docklet backup volume and runtime names.
+// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins; M15 simple-user rights and identity contracts; M18 live scheduling, policy and contract foundation; stack import mirror configuration; #410 process zone without override, Local/Factory as UTC.; M36 #570: Docklet backup volume and runtime names. M36 #573: tailnet route variables and manager dialer.
 
 package config
 
@@ -97,6 +97,13 @@ type Config struct {
 	EdgeMTLSKeyFile               string `env:"EDGE_MTLS_KEY_FILE" default:""`
 	EdgeMTLSServerName            string `env:"EDGE_MTLS_SERVER_NAME" default:""`
 	EdgeMTLSAssetsDir             string `env:"EDGE_MTLS_ASSETS_DIR" default:""`
+	// Tailnet route: the agent joins when TAILSCALE_AUTH_KEY is set; the hub uses the other three.
+	TailscaleAuthKey    string `env:"TAILSCALE_AUTH_KEY" default:"" options:"file"`
+	TailscaleHostname   string `env:"TAILSCALE_HOSTNAME" default:""`
+	TailscaleStateDir   string `env:"TAILSCALE_STATE_DIR" default:"data/tailscale"`
+	TailscaleControlURL string `env:"TAILSCALE_CONTROL_URL" default:""`
+	// ManagerDialer is set at agent start on the tailnet route; every hub request family dials through it.
+	ManagerDialer func(ctx context.Context, network, address string) (net.Conn, error)
 
 	TrustedProxies         string      `env:"TRUSTED_PROXIES" default:""`
 	FilePerm               os.FileMode `env:"FILE_PERM" default:"0644"`

@@ -1,3 +1,4 @@
+import { deTailnetContract } from "@/data/messages/tailnet-de";
 import { deProxyContract } from "@/data/messages/proxy-de";
 import { deRegistries } from "@/features/registries/messages/de";
 // German interface texts follow the English base. Feature files own their texts.
@@ -47,6 +48,7 @@ export const messages: typeof enMessages = {
   visual: deVisual,
   dashboard: deDashboard,
   proxyContract: deProxyContract,
+  tailnetContract: deTailnetContract,
   runMessages: deRunMessages,
   stacks: deStacks,
   editor: deEditor,

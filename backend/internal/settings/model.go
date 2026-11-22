@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; optional-module foundation (#472); M29 stored sign-in policy keys.
+// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete helper image setting; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; optional-module foundation (#472); M29 stored sign-in policy keys. #573 internal tailnet route settings.
 
 package settings
 
@@ -188,6 +188,9 @@ type Settings struct {
 	AuthProxyHeader    SettingVariable `key:"authProxyHeader,internal"`
 	AuthTrustedProxies SettingVariable `key:"authTrustedProxies,internal"`
 	SetupIdentity      SettingVariable `key:"setupIdentity,internal"`
+	// Tailnet route (Settings → Connections); the credential is encrypted JSON and never read back.
+	TailnetEnabled    SettingVariable `key:"tailnetEnabled,internal"`
+	TailnetCredential SettingVariable `key:"tailnetCredential,internal,sensitive"`
 
 	// Users category (admin management page - no actual settings)
 	UsersCategoryPlaceholder SettingVariable `key:"usersCategory,internal" meta:"label=Users;type=internal;keywords=users,accounts,management,admin,access,permissions,roles;category=users;description=Manage user accounts and permissions" catmeta:"id=users;title=Users;icon=user;url=/settings/users;description=Manage user accounts and access control"`

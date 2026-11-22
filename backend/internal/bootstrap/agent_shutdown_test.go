@@ -2,7 +2,7 @@
 // Revision: a37d77d05c92bde3a4eab0cf6fa47ab36411e011
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original regressions for agent requests failing during shutdown (M16 acceptance DV1 D; review ACC-R1-01/02 probes adopted).
+// Deviations: Original regressions for agent requests failing during shutdown (M16 acceptance DV1 D; review ACC-R1-01/02 probes adopted). #573 tunnel start hook takes the agent tailnet route.
 
 package bootstrap
 
@@ -205,7 +205,7 @@ func TestAgentShutdownEdgeTunnelNeverDeliversCancelledFailure(t *testing.T) {
 				cfg := &config.Config{AgentMode: true, EdgeAgent: true, Listen: "127.0.0.1", Port: "0", EdgeMTLSMode: "disabled", EdgeTransport: transport, ManagerApiUrl: "http://" + hubServer.Addr, AgentToken: "example"}
 				agentServer, err := NewHTTPServer(lc, HTTPServerParams{AppCtx: appCtx, Config: cfg, Router: router, Shutdown: signal})
 				require.NoError(t, err)
-				startEdgeTunnelClient(appCtx, lc, cfg, router, agentServer, signal)
+				startEdgeTunnelClient(appCtx, lc, cfg, router, agentServer, signal, nil)
 				lc.RequireStart()
 				var tunnel *edge.AgentTunnel
 				require.Eventually(t, func() bool {
@@ -290,7 +290,7 @@ func TestAgentShutdownEdgeCancellationSourcesNeverDeliverFailure(t *testing.T) {
 				cfg := &config.Config{AgentMode: true, EdgeAgent: true, Listen: "127.0.0.1", Port: "0", EdgeMTLSMode: "disabled", EdgeTransport: transport, ManagerApiUrl: "http://" + hubServer.Addr, AgentToken: "example"}
 				agentServer, err := NewHTTPServer(lc, HTTPServerParams{AppCtx: lifetime.ctx, Config: cfg, Router: router, Shutdown: signal})
 				require.NoError(t, err)
-				startEdgeTunnelClient(lifetime.ctx, lc, cfg, router, agentServer, signal)
+				startEdgeTunnelClient(lifetime.ctx, lc, cfg, router, agentServer, signal, nil)
 				lc.RequireStart()
 				stopped := make(chan error, 1)
 				go func() {

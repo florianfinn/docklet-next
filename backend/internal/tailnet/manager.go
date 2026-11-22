@@ -1,0 +1,377 @@
+// Source: docklet-next/issues/573
+// Revision: b4807f4912bc07f3e51abaf552a69f2223cabd27
+// Retrieved: 2026-11-22
+// License: Apache-2.0
+// Deviations: Original generation-fenced lifecycle of the hub's embedded tailnet node.
+
+package tailnet
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"tailscale.com/ipn/ipnstate"
+
+	tailnettypes "github.com/florianfinn/docklet-next/types/tailnet"
+)
+
+// Credential is the decrypted hub credential; it never leaves the hub process.
+type Credential struct {
+	Mode         string `json:"mode"`
+	ClientID     string `json:"clientId,omitempty"`
+	ClientSecret string `json:"clientSecret,omitempty"`
+	AuthKey      string `json:"authKey,omitempty"`
+}
+
+func (c Credential) configured() bool {
+	switch c.Mode {
+	case tailnettypes.ModeOAuth:
+		return strings.TrimSpace(c.ClientSecret) != ""
+	case tailnettypes.ModeManual:
+		return strings.TrimSpace(c.AuthKey) != ""
+	}
+	return false
+}
+
+// ManagerConfig holds process configuration; zero durations take the documented defaults.
+type ManagerConfig struct {
+	StateDir        string
+	Hostname        string
+	ControlURL      string
+	MTLSDisabled    bool
+	Factory         NodeFactory
+	Provisioner     *Provisioner
+	Now             func() time.Time
+	JoinTimeout     time.Duration // 60 s per join attempt
+	RetryMin        time.Duration // 5 s
+	RetryMax        time.Duration // 60 s
+	RefreshInterval time.Duration // at most one Status refresh per 5 s
+	ControlGrace    time.Duration // Self offline longer than 60 s means control unreachable
+}
+
+func (c *ManagerConfig) defaults() {
+	if c.Factory == nil {
+		c.Factory = NewTSNetNode
+	}
+	if c.Now == nil {
+		c.Now = time.Now
+	}
+	if strings.TrimSpace(c.Hostname) == "" {
+		c.Hostname = "docklet-hub"
+	}
+	for _, d := range []struct {
+		v   *time.Duration
+		def time.Duration
+	}{{&c.JoinTimeout, 60 * time.Second}, {&c.RetryMin, 5 * time.Second}, {&c.RetryMax, 60 * time.Second}, {&c.RefreshInterval, 5 * time.Second}, {&c.ControlGrace, 60 * time.Second}} {
+		if *d.v <= 0 {
+			*d.v = d.def
+		}
+	}
+}
+
+// Manager owns the hub's single tailnet node. Every Apply or Reset starts a new
+// generation; results of older generations are dropped.
+type Manager struct {
+	cfg ManagerConfig
+
+	mu           sync.Mutex
+	gen          int64
+	enabled      bool
+	cred         Credential
+	run          *run
+	handler      http.Handler
+	conn         tailnettypes.Connection
+	prov         tailnettypes.Provisioning
+	status       *ipnstate.Status
+	offlineSince time.Time
+	listeners    map[int]func()
+	nextListener int
+}
+
+type run struct {
+	gen      int64
+	cancel   context.CancelFunc
+	done     chan struct{}
+	node     Node
+	listener net.Listener
+	ingress  *ingressServer
+}
+
+// NewManager returns a stopped manager.
+func NewManager(cfg ManagerConfig) *Manager {
+	cfg.defaults()
+	return &Manager{
+		cfg:       cfg,
+		conn:      tailnettypes.Connection{State: "off"},
+		prov:      tailnettypes.Provisioning{State: "not-configured"},
+		listeners: map[int]func(){},
+	}
+}
+
+// Subscribe registers a change callback; callbacks run without the manager lock.
+func (m *Manager) Subscribe(fn func()) func() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id := m.nextListener
+	m.nextListener++
+	m.listeners[id] = fn
+	return func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		delete(m.listeners, id)
+	}
+}
+
+func (m *Manager) notifyLocked() []func() {
+	out := make([]func(), 0, len(m.listeners))
+	for _, fn := range m.listeners {
+		out = append(out, fn)
+	}
+	return out
+}
+
+func fire(fns []func()) {
+	for _, fn := range fns {
+		fn()
+	}
+}
+
+// SetIngressHandler installs the shared handler behind the allowlist; a running node starts serving it.
+func (m *Manager) SetIngressHandler(handler http.Handler) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.handler = handler
+	if r := m.run; r != nil && r.listener != nil && r.ingress == nil && handler != nil {
+		r.ingress = startIngress(r.listener, handler)
+	}
+}
+
+// Apply replaces the desired state. The old node, listener and watcher are closed before a new run starts.
+func (m *Manager) Apply(ctx context.Context, enabled bool, cred Credential) {
+	m.mu.Lock()
+	m.gen++
+	gen := m.gen
+	old := m.run
+	m.run = nil
+	m.enabled = enabled
+	m.cred = cred
+	m.status = nil
+	m.offlineSince = time.Time{}
+	m.prov = initialProvisioning(enabled, cred)
+	if enabled && cred.configured() {
+		m.conn = tailnettypes.Connection{State: "joining"}
+	} else {
+		m.conn = tailnettypes.Connection{State: "off"}
+	}
+	fns := m.notifyLocked()
+	m.mu.Unlock()
+
+	stopRun(ctx, old)
+	fire(fns)
+	if !enabled || !cred.configured() {
+		return
+	}
+	if !m.cfg.MTLSDisabled {
+		m.setConnection(gen, tailnettypes.Connection{State: "error", Code: tailnettypes.CodeMTLSUnsupported})
+		return
+	}
+	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	r := &run{gen: gen, cancel: cancel, done: make(chan struct{})}
+	m.mu.Lock()
+	if m.gen != gen {
+		m.mu.Unlock()
+		cancel()
+		return
+	}
+	m.run = r
+	m.mu.Unlock()
+	go func() {
+		defer close(r.done)
+		m.runNode(runCtx, r, cred)
+	}()
+	if cred.Mode == tailnettypes.ModeOAuth {
+		go m.checkCredential(runCtx, gen, cred)
+	}
+}
+
+func initialProvisioning(enabled bool, cred Credential) tailnettypes.Provisioning {
+	switch {
+	case cred.Mode == tailnettypes.ModeManual:
+		return tailnettypes.Provisioning{State: "not-applicable"}
+	case !cred.configured():
+		return tailnettypes.Provisioning{State: "not-configured"}
+	case enabled:
+		return tailnettypes.Provisioning{State: "checking"}
+	}
+	return tailnettypes.Provisioning{State: "not-configured"}
+}
+
+func stopRun(ctx context.Context, r *run) {
+	if r == nil {
+		return
+	}
+	r.cancel()
+	r.ingress.stop(ctx)
+	if r.listener != nil {
+		_ = r.listener.Close()
+	}
+	<-r.done
+}
+
+// Reset disables the route and deletes only the hub's local node state; the device stays in the tailnet admin.
+func (m *Manager) Reset(ctx context.Context) error {
+	m.mu.Lock()
+	cred := m.cred
+	m.mu.Unlock()
+	m.Apply(ctx, false, cred)
+	return os.RemoveAll(m.cfg.StateDir)
+}
+
+// Close stops the node at process shutdown and keeps its state.
+func (m *Manager) Close(ctx context.Context) {
+	m.mu.Lock()
+	m.gen++
+	old := m.run
+	m.run = nil
+	m.mu.Unlock()
+	stopRun(ctx, old)
+}
+
+func (m *Manager) setConnection(gen int64, conn tailnettypes.Connection) {
+	m.mu.Lock()
+	if m.gen != gen {
+		m.mu.Unlock()
+		return
+	}
+	m.conn = conn
+	fns := m.notifyLocked()
+	m.mu.Unlock()
+	fire(fns)
+}
+
+func (m *Manager) setProvisioning(gen int64, prov tailnettypes.Provisioning) {
+	m.mu.Lock()
+	if m.gen != gen {
+		m.mu.Unlock()
+		return
+	}
+	m.prov = prov
+	fns := m.notifyLocked()
+	m.mu.Unlock()
+	fire(fns)
+}
+
+func (m *Manager) checkCredential(ctx context.Context, gen int64, cred Credential) {
+	checkCtx, cancel := context.WithTimeout(ctx, providerTimeout)
+	defer cancel()
+	_, err := m.cfg.Provisioner.AccessToken(checkCtx, cred.ClientID, cred.ClientSecret)
+	m.recordProvisioning(gen, err)
+}
+
+// recordProvisioning maps a provider result: only a credential refusal marks provisioning rejected.
+func (m *Manager) recordProvisioning(gen int64, err error) {
+	var problem *tailnettypes.Problem
+	switch {
+	case err == nil:
+		m.setProvisioning(gen, tailnettypes.Provisioning{State: "ok"})
+	case errors.As(err, &problem) && problem.Code == tailnettypes.CodeCredentialRejected:
+		m.setProvisioning(gen, tailnettypes.Provisioning{State: "rejected", Code: problem.Code, ProviderStatus: problem.ProviderStatus})
+	default:
+		slog.Debug("Tailnet credential check failed without a refusal", "error", Redact(err.Error()))
+	}
+}
+
+func (m *Manager) runNode(ctx context.Context, r *run, cred Credential) {
+	delay := m.cfg.RetryMin
+	var tags []string
+	if cred.Mode == tailnettypes.ModeOAuth {
+		tags = []string{HubTag}
+	}
+	for {
+		node, err := m.cfg.Factory(NodeConfig{
+			Dir:           m.cfg.StateDir,
+			Hostname:      m.cfg.Hostname,
+			ControlURL:    m.cfg.ControlURL,
+			AuthKey:       HubAuthKey(cred.Mode, cred.ClientSecret, cred.AuthKey),
+			AdvertiseTags: tags,
+		})
+		if err == nil {
+			upCtx, cancel := context.WithTimeout(ctx, m.cfg.JoinTimeout)
+			err = node.Up(upCtx)
+			cancel()
+			if err == nil {
+				m.serve(ctx, r, node)
+				_ = node.Close()
+				return
+			}
+			_ = node.Close()
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if joinRejected(err) {
+			slog.Warn("Tailnet credential rejected", "error", redactSecret(err.Error(), cred.ClientSecret))
+			m.setConnection(r.gen, tailnettypes.Connection{State: "error", Code: tailnettypes.CodeCredentialRejected})
+			if cred.Mode == tailnettypes.ModeOAuth {
+				m.setProvisioning(r.gen, tailnettypes.Provisioning{State: "rejected", Code: tailnettypes.CodeCredentialRejected})
+			}
+			return
+		}
+		slog.Info("Tailnet join failed; retrying", "error", redactSecret(err.Error(), cred.ClientSecret), "retryIn", delay)
+		m.setConnection(r.gen, tailnettypes.Connection{State: "joining", Code: tailnettypes.CodeCoordinationUnreachable})
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		delay = min(delay*2, m.cfg.RetryMax)
+	}
+}
+
+// joinRejected recognises control refusing the key (backend error) or the OAuth exchange refusing the secret.
+func joinRejected(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "backend:") {
+		return true
+	}
+	if strings.Contains(msg, "resolving auth key") {
+		for _, marker := range []string{"401", "403", "400", "unauthorized", "invalid", "forbidden"} {
+			if strings.Contains(msg, marker) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (m *Manager) serve(ctx context.Context, r *run, node Node) {
+	listener, err := node.Listen("tcp", ":"+IngressPort)
+	if err != nil {
+		slog.Warn("Tailnet ingress listener failed", "error", err)
+		m.setConnection(r.gen, tailnettypes.Connection{State: "error", Code: tailnettypes.CodeNotConnected})
+		return
+	}
+	m.mu.Lock()
+	if m.gen != r.gen {
+		m.mu.Unlock()
+		_ = listener.Close()
+		return
+	}
+	r.node = node
+	r.listener = listener
+	if m.handler != nil {
+		r.ingress = startIngress(listener, m.handler)
+	}
+	m.mu.Unlock()
+	m.watch(ctx, r.gen, node)
+}

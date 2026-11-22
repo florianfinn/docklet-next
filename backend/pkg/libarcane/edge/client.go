@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Edge protocol marker (#362).
+// Deviations: Local module namespace; Edge protocol marker (#362). #573 manager dialer for the WebSocket tunnel.
 
 package edge
 
@@ -602,7 +602,7 @@ func (c *TunnelClient) connectAndServeWebSocketInternal(ctx context.Context) err
 	if managerWSURL == "" {
 		return errors.New("manager WebSocket URL is empty")
 	}
-	transport := &http.Transport{Proxy: http.ProxyFromEnvironment}
+	transport := applyManagerDialerInternal(c.cfg, &http.Transport{Proxy: http.ProxyFromEnvironment})
 	if strings.HasPrefix(strings.ToLower(managerWSURL), "wss://") {
 		tlsConfig, err := buildManagerClientTLSConfigInternal(c.cfg)
 		if err != nil {

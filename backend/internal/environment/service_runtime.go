@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; application-heartbeat liveness and observer clock projection; polling agents below the minimum protocol keep update-required, also across startup reconcile.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; application-heartbeat liveness and observer clock projection; polling agents below the minimum protocol keep update-required, also across startup reconcile. #573 tailnet projection in the runtime overlay.
 
 package environment
 
@@ -176,6 +176,7 @@ func (s *EnvironmentService) ApplyHostRuntimeStateAt(ctx context.Context, env *e
 		tokenHash = edge.AgentTokenHash(*row.AccessToken)
 	}
 	applyEnvironmentRuntimeStateAt(env, now, keyID, tokenHash)
+	s.applyTailnetProjectionInternal(env, row)
 	s.agentRuntime.mu.Lock()
 	report, ok := s.agentRuntime.reports[env.ID]
 	s.agentRuntime.mu.Unlock()

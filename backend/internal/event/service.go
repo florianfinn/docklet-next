@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials; stable event codes; extracted retention and actor normalization; injectable event signal boundary.
+// Deviations: Local module namespace; functional cut: removed federated credentials; stable event codes; extracted retention and actor normalization; injectable event signal boundary. #573 tailnet manager dialer for the HTTP fallback.
 
 package event
 
@@ -241,7 +241,7 @@ func (s *EventService) forwardEventToManagerHTTP(ctx context.Context, eventModel
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(middleware.HeaderAgentToken, s.cfg.AgentToken)
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.managerHTTPClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send event to manager: %w", err)
 	}

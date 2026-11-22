@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization; exits on actor-host loss; agents withhold server failures caused by their shutdown; M29 first administrator from setup and post-claim key reconciliation.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization; exits on actor-host loss; agents withhold server failures caused by their shutdown; M29 first administrator from setup and post-claim key reconciliation. #573 agent joins the tailnet before pairing and the tunnel.
 
 package bootstrap
 
@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	httpxtypes "github.com/florianfinn/docklet-next/types/httpx"
@@ -40,6 +41,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/tailnet"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
@@ -165,7 +167,7 @@ func actorHostFailure(cancel context.CancelCauseFunc) di.AppFailure {
 
 func applicationOptions(appCtx context.Context, cfg *config.Config, db *database.DB, cancelApp context.CancelFunc, failApp di.AppFailure) fx.Option {
 	return fx.Options(
-		fx.Supply(cfg, db, cancelApp, failApp),
+		fx.Supply(cfg, db, cancelApp, failApp, newAgentTailnetRouteInternal(cfg)),
 		fx.Provide(
 			func() context.Context { return appCtx },
 			newConfiguredHTTPClientInternal,
@@ -349,7 +351,8 @@ func initializeStartupState(p initializeStartupStateParams) error {
 	// only path to the manager). Direct mode is passive — the manager dials the agent's
 	// HTTP server on TCP 3553, and the manager-side health-check promotes the env to
 	// Online once reachability is confirmed.
-	if cfg.AgentMode && cfg.EdgeAgent && cfg.AgentToken != "" && cfg.ManagerApiUrl != "" {
+	// On the tailnet route the agent pairs from the tunnel start hook, after joining the tailnet.
+	if cfg.AgentMode && cfg.EdgeAgent && cfg.AgentToken != "" && cfg.ManagerApiUrl != "" && cfg.ManagerDialer == nil {
 		if err := handleAgentBootstrapPairing(appCtx, cfg, httpClient); err != nil {
 			slog.WarnContext(appCtx, "Failed to auto-pair agent with manager", "error", err)
 		}
@@ -379,24 +382,74 @@ func runRoleStartupTasks(ctx context.Context, roleService *role.RoleService, api
 	}
 }
 
-func startEdgeTunnelClient(appCtx context.Context, lc fx.Lifecycle, cfg *config.Config, router *echo.Echo, _ *http.Server, shutdown *ShutdownSignal) {
+// newAgentTailnetRouteInternal installs the late-bound manager dialer before any service starts.
+func newAgentTailnetRouteInternal(cfg *config.Config) *tailnet.AgentRoute {
+	route := tailnet.NewAgentRoute(tailnet.AgentConfig{
+		AuthKey:    cfg.TailscaleAuthKey,
+		Hostname:   cmp.Or(strings.TrimSpace(cfg.TailscaleHostname), "docklet-agent"),
+		StateDir:   cfg.TailscaleStateDir,
+		ControlURL: strings.TrimSpace(cfg.TailscaleControlURL),
+	})
+	if cfg.AgentMode && cfg.EdgeAgent && route.Enabled() {
+		cfg.ManagerDialer = route.Dial
+		return route
+	}
+	return tailnet.NewAgentRoute(tailnet.AgentConfig{})
+}
+
+func startEdgeTunnelClient(appCtx context.Context, lc fx.Lifecycle, cfg *config.Config, router *echo.Echo, _ *http.Server, shutdown *ShutdownSignal, route *tailnet.AgentRoute) {
+	var mu sync.Mutex
 	var stop func(context.Context) error
+	cancelJoin := context.CancelFunc(func() {})
+	joined := make(chan struct{})
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
-			var startErr error
-			stop, startErr = startEdgeTunnelClientIfConfigured(appCtx, cfg, agentShutdownInternal(shutdown, router))
-			if startErr != nil {
-				slog.ErrorContext(appCtx, "Failed to start edge tunnel client", "error", startErr)
+			handler := agentShutdownInternal(shutdown, router)
+			if !route.Enabled() || cfg.ManagerDialer == nil {
+				close(joined)
+				var startErr error
+				stop, startErr = startEdgeTunnelClientIfConfigured(appCtx, cfg, handler)
+				if startErr != nil {
+					slog.ErrorContext(appCtx, "Failed to start edge tunnel client", "error", startErr)
+				}
+				return nil
 			}
+			// Tailnet route: join (retrying indefinitely), then pair and start the tunnel without blocking startup.
+			var joinCtx context.Context
+			joinCtx, cancelJoin = context.WithCancel(appCtx)
+			go func() {
+				defer close(joined)
+				if err := route.Join(joinCtx); err != nil {
+					return
+				}
+				if cfg.AgentToken != "" && cfg.ManagerApiUrl != "" {
+					if err := handleAgentBootstrapPairing(joinCtx, cfg, http.DefaultClient); err != nil {
+						slog.WarnContext(joinCtx, "Failed to auto-pair agent with manager", "error", err)
+					}
+				}
+				started, startErr := startEdgeTunnelClientIfConfigured(joinCtx, cfg, handler)
+				if startErr != nil {
+					slog.ErrorContext(joinCtx, "Failed to start edge tunnel client", "error", startErr)
+				}
+				mu.Lock()
+				stop = started
+				mu.Unlock()
+			}()
 			return nil
 		},
 		// Appended after the HTTP server, so this hook stops first: the signal precedes the tunnel session's cancellation.
 		OnStop: func(ctx context.Context) error {
 			shutdown.Begin()
-			if stop == nil {
-				return nil
+			cancelJoin()
+			<-joined
+			mu.Lock()
+			current := stop
+			mu.Unlock()
+			var err error
+			if current != nil {
+				err = current(ctx)
 			}
-			return stop(ctx)
+			return errors.Join(err, route.Close())
 		},
 	})
 }
@@ -431,6 +484,7 @@ func startEdgeTunnelClientIfConfigured(appCtx context.Context, cfg *config.Confi
 		AgentToken:            cfg.AgentToken,
 		Port:                  cfg.Port,
 		Listen:                cfg.Listen,
+		ManagerDialer:         cfg.ManagerDialer,
 	}
 
 	slog.InfoContext(appCtx, "Starting edge agent session client", edge.StartupLogAttrs(edgeCfg)...)
@@ -467,6 +521,7 @@ func handleAgentBootstrapPairing(ctx context.Context, cfg *config.Config, httpCl
 			EdgeMTLSKeyFile:    cfg.EdgeMTLSKeyFile,
 			EdgeMTLSServerName: cfg.EdgeMTLSServerName,
 			EdgeMTLSAssetsDir:  cfg.EdgeMTLSAssetsDir,
+			ManagerDialer:      cfg.ManagerDialer,
 		}, 10*time.Second)
 		if edgeErr != nil {
 			return fmt.Errorf("failed to configure edge pairing client: %w", edgeErr)

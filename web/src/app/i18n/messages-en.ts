@@ -1,3 +1,4 @@
+import { enTailnetContract } from "@/data/messages/tailnet-en";
 import { enProxyContract } from "@/data/messages/proxy-en";
 import { enRegistries } from "@/features/registries/messages/en";
 // American English interface texts define the catalogue shape for every locale.
@@ -45,6 +46,7 @@ export const enMessages = {
   visual: enVisual,
   dashboard: enDashboard,
   proxyContract: enProxyContract,
+  tailnetContract: enTailnetContract,
   runMessages: enRunMessages,
   stacks: enStacks,
   editor: enEditor,

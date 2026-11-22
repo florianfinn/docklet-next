@@ -11,6 +11,11 @@ const laterOperations = new Map([
   ["POST /setup/identity", "claim-setup-identity"],
   ["GET /auth/sign-in", "get-sign-in"],
   ["PUT /auth/sign-in", "update-sign-in"],
+  // Hub-only tailnet route administration (#573).
+  ["GET /tailnet/status", "get-tailnet-status"],
+  ["POST /tailnet/reset", "reset-tailnet"],
+  ["GET /settings/connections/tailnet", "get-tailnet-settings"],
+  ["PUT /settings/connections/tailnet", "update-tailnet-settings"],
   // M27 proxy contract foundation (#473/#474).
   ["POST /environments/{id}/modules/proxy/apply", "apply-proxy-operation"],
   ["GET /environments/{id}/modules/proxy/discover", "discover-proxy-containers"],

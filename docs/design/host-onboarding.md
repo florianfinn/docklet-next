@@ -111,6 +111,35 @@ authenticating proxy or gives agents an internal hub address that bypasses it.
 Onboarding states this next to the hub address. Source: **new** text; the
 machine routes already keep their own contract ([identity](identity.md)).
 
+### Network route (#573)
+
+An Edge host records how its agent reaches the hub in `environments.network_route`:
+`lan` (a LAN or VPN address), `domain` (the public hub domain) or `tailnet` (the
+embedded Tailscale route). Hosts created before migration 007 keep `NULL` and stay
+unclassified; nothing guesses a route from their URL. Direct hosts have no route.
+
+Create requests send `route` with `useApiKey=true` and `isEdge=true`. The tailnet
+route is available only while the hub node is connected, Edge mTLS is
+`disabled` and, in OAuth mode, the credential is not rejected; otherwise the
+request fails with the matching `tailnet.*` code before a host row exists. In OAuth
+mode the hub mints a one-use host key; in manual mode the request carries the
+pasted one-use key (`tailnetAuthKey`), which is passed through and never stored.
+The create response returns the key once as `tailnetAuthKey` together with
+`tailnetManagerUrl` (`http://<hub tailnet IPv4>:3552`). The installer writes
+`MANAGER_API_URL` from it and adds `TAILSCALE_AUTH_KEY`, `TAILSCALE_HOSTNAME`
+(`docklet-<host name>`), `TAILSCALE_STATE_DIR=/app/data/tailscale` and, for a
+self-hosted control server, `TAILSCALE_CONTROL_URL` to the mode-600 `.env`.
+
+An agent with `TAILSCALE_AUTH_KEY` joins the tailnet before any hub request,
+retrying every 5 s up to every 60 s without limit, then pairs and starts the
+tunnel. Pairing, mTLS enrolment, poll, WebSocket, gRPC, event fallback and
+notification dispatch all dial through the tailnet node and ignore proxy
+variables; registry, Docker, mail and local agent traffic keep normal routing.
+Retained node state lets later starts join without a key. Host reads add
+`networkRoute` and, for tailnet hosts, `tailnet` with the observed peer state,
+path and the first failing link of hub → peer → tunnel. Security boundaries are in
+the [threat review](edge-threat-review.md#tailnet-route-for-edge-hosts-573).
+
 ## Token lifecycle
 
 | Stage | Behaviour | Source |

@@ -23,6 +23,18 @@ local lockfile hashes and licence mapping are in docs/provenance/core-import.jso
 The archived pre-cut evidence remains in docs/provenance/arcane-binary.json,
 arcane-license-packages.json and arcane-modules.json.
 
+Embedded Tailscale route (#573), 2026-11-22
+
+Hub and agent compile tailscale.com v1.104.7 (BSD-3-Clause; Copyright (c) 2020
+Tailscale Inc & contributors), its userspace WireGuard fork
+github.com/tailscale/wireguard-go (MIT; Copyright (C) 2017-2023 WireGuard LLC)
+and the gVisor network stack gvisor.dev/gvisor (Apache-2.0; The gVisor Authors),
+plus their dependencies. Versions, licence files with hashes, copyright
+statements and corresponding-source links of every module added or upgraded
+after the adoption baseline are in docs/provenance/core-added-modules.json;
+image packaging copies each listed legal text. No product endorsement by
+Tailscale Inc. is implied.
+
 MPL-2.0 covered source
 Retain all covered-file notices and the MPL-2.0 text. When distributing binaries,
 make the corresponding covered source, including modifications, available to

@@ -54,9 +54,10 @@ test("historical removed Go requirements match the functional-cut manifests", ()
 test("current requirements retain the functional cut except the approved SQLite restoration", () => {
   const current = new Set(manifest.comparedManifests.flatMap((path) =>
     [...requirements(readFileSync(new URL(`../${path}`, import.meta.url), "utf8")).keys()]));
+  // The embedded Tailscale route (#573) needs cbor/float16 as indirect requirements of tailscale.com.
   assert.deepEqual(manifest.removedModulePaths.filter((name) => current.has(name)), [
-    "github.com/dustin/go-humanize", "github.com/libtnb/sqlite",
-    "github.com/ncruces/go-strftime", "github.com/remyoudompheng/bigfft",
+    "github.com/dustin/go-humanize", "github.com/fxamacker/cbor/v2", "github.com/libtnb/sqlite",
+    "github.com/ncruces/go-strftime", "github.com/remyoudompheng/bigfft", "github.com/x448/float16",
     "modernc.org/libc", "modernc.org/mathutil", "modernc.org/memory",
   ]);
 });

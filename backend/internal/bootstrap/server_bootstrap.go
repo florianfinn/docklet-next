@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Edge agent mode excludes the manager tunnel listener; agents withhold server failures caused by their shutdown; environment paths never enter tunnel gRPC dispatch.
+// Deviations: Local module namespace; Edge agent mode excludes the manager tunnel listener; agents withhold server failures caused by their shutdown; environment paths never enter tunnel gRPC dispatch; #573 allowlisted tailnet ingress over the shared dispatcher.
 
 package bootstrap
 
@@ -27,6 +27,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/tailnet"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 	tunnelpb "github.com/florianfinn/docklet-next/backend/proto/tunnel/v1"
@@ -49,7 +50,8 @@ type HTTPServerParams struct {
 	TunnelServer *edge.TunnelServer
 	System       *system.SystemService
 	Scheduler    schedulertypes.JobScheduler
-	Shutdown     *ShutdownSignal `optional:"true"`
+	Shutdown     *ShutdownSignal  `optional:"true"`
+	Tailnet      *tailnet.Service `optional:"true"`
 }
 
 // NewHTTPServer builds the shared HTTP/gRPC server and registers its lifecycle.
@@ -68,6 +70,11 @@ func NewHTTPServer(lc fx.Lifecycle, p HTTPServerParams) (*http.Server, error) {
 		maintenance = p.System.BackupMaintenanceGate()
 	}
 	httpHandler, grpcServer := configureTunnelServerInternal(p.AppCtx, p.Config, p.Router, p.TunnelServer, maintenance, listenAddr)
+	if manager := p.Tailnet.Manager(); manager != nil && grpcServer != nil {
+		// The tailnet ingress is plaintext HTTP/1 + h2c and admits only the agent surface before this dispatcher.
+		ingress, _ := configureHTTPProtocolsInternal(false, httpHandler)
+		manager.SetIngressHandler(tailnet.IngressHandler(ingress, p.Config.AuthProxyHeader))
+	}
 	httpHandler, protocols := configureHTTPProtocolsInternal(useTLS, httpHandler)
 
 	// Request contexts deliberately do not inherit the app lifecycle marker.
@@ -269,6 +276,7 @@ func buildEdgeRuntimeConfigInternal(cfg *config.Config) *edge.Config {
 		AgentToken:            cfg.AgentToken,
 		Port:                  cfg.Port,
 		Listen:                cfg.Listen,
+		ManagerDialer:         cfg.ManagerDialer,
 	}
 }
 

@@ -2,11 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Added process-local agent reports to host read responses; M14 container and host operation contracts; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion.
+// Deviations: Added process-local agent reports to host read responses; M14 container and host operation contracts; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion. #573 network route and tailnet fields.
 
 package environment
 
 import (
+	"github.com/florianfinn/docklet-next/types/tailnet"
 	"github.com/florianfinn/docklet-next/types/version"
 	"time"
 )
@@ -42,6 +43,16 @@ type Create struct {
 	//
 	// Required: false
 	IsEdge *bool `json:"isEdge,omitempty"`
+
+	// Route records how an Edge agent reaches the hub; tailnet asks the hub for a one-use Tailscale key.
+	//
+	// Required: false
+	Route *string `json:"route,omitempty" enum:"lan,domain,tailnet"`
+
+	// TailnetAuthKey is the pasted one-use Tailscale key for the tailnet route in manual mode; it is never stored.
+	//
+	// Required: false
+	TailnetAuthKey *string `json:"tailnetAuthKey,omitempty" maxLength:"512"`
 }
 
 type Update struct {
@@ -230,6 +241,16 @@ type Environment struct {
 	//
 	// Required: false
 	ApiKey *string `json:"apiKey,omitempty"`
+
+	// NetworkRoute is how this Edge host reaches the hub; absent for legacy and Direct hosts.
+	//
+	// Required: false
+	NetworkRoute *string `json:"networkRoute,omitempty" enum:"lan,domain,tailnet"`
+
+	// Tailnet is the hub's peer observation for a tailnet-route host.
+	//
+	// Required: false
+	Tailnet *tailnet.HostPeer `json:"tailnet,omitempty"`
 }
 
 // StreamEvent is one line of the environment stream. A "snapshot" event carries
@@ -247,6 +268,11 @@ type StreamEvent struct {
 	//
 	// Required: false
 	Environments []Environment `json:"environments,omitempty"`
+
+	// Tailnet is the hub's tailnet status for administrators while the route is enabled.
+	//
+	// Required: false
+	Tailnet *tailnet.Status `json:"tailnet,omitempty"`
 
 	// Timestamp is when the event was produced.
 	//

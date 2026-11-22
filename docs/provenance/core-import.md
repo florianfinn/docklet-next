@@ -163,6 +163,19 @@ the complete third-party licence bundle. The SQLite decision replaces the former
 assessment and packaged notices.
 
 
+## Modules added after the adoption baseline, 2026-11-22
+
+The embedded Tailscale route (#573) adds tailscale.com v1.104.7 and its compiled
+dependencies and raises seven `golang.org/x` modules by one minor version. These
+versions are outside the archived Arcane evidence, so
+`scripts/inventory-added-modules.mjs` assesses each compiled module version absent
+from `arcane-binary.json` with the same legal-file, blocked-licence and copyright
+rules and writes `core-added-modules.json`. `inventory-core.mjs` takes such modules
+from that file and marks their evidence accordingly. Tailscale's generated
+dependency lists under `licenses/` are reviewed as non-code listings in
+`scripts/arcane-license-reviews.json`. Module expressions include nested licence
+files conservatively; the compiled-notice inspection found no new copyleft notices.
+
 ## SQLite source selection, 2026-10-16
 
 The CGO-free Linux/amd64 hub and agent graphs each contain 273 modules and 1,487

@@ -467,3 +467,67 @@ behavior where a Docker read error after streaming starts truncates the file;
 the download does not certify that Docker reached the end of its retained logs.
 The cap bounds the assembled Edge body, while command channels, delivery overflow
 and transport buffers consume additional memory.
+
+## Tailnet route for Edge hosts (#573)
+
+An Edge host may reach the hub over an embedded Tailscale node instead of a LAN
+address or public domain. The hub stays off the public internet: the agent dials
+`http://<hub tailnet IPv4>:3552` through its own tsnet node, and the hub accepts
+on its tsnet listener. Code lives in `internal/tailnet`.
+
+**Boundaries.** Two boundaries are added. The coordination server (Tailscale or a
+self-hosted one set by the advanced `TAILSCALE_CONTROL_URL`) decides tailnet
+membership, tags and the ACL policy; it is trusted for reachability only. The
+tailnet itself carries WireGuard-encrypted traffic between hub and agent nodes.
+Neither replaces Docklet authentication: pair, connect, poll, events and
+notification dispatch still require the agent token exactly as on the LAN route
+(T3, T4 unchanged). The route is offered only with `EDGE_MTLS_MODE=disabled`;
+with `optional` or `required` the hub refuses it with `tailnet.mtls-unsupported`,
+also when the mode changes before a restart, so no mTLS guarantee is downgraded.
+
+**Ingress allowlist.** The tailnet listener serves a separate `http.Server` whose
+handler admits only exact method and raw-path pairs before the shared HTTP/gRPC
+dispatcher: `POST /api/environments/pair`, `GET /api/tunnel/connect`, the gRPC
+tunnel method on `POST /api/tunnel/connect`, `POST /api/tunnel/poll`,
+`POST /api/tunnel/mtls/enroll`, `POST /api/events` and
+`POST /api/notifications/dispatch`. Everything else, including the UI, settings
+APIs, encoded aliases, double slashes and other gRPC methods, is a 404 before any
+router or gRPC code runs (`ingress.go`). Forwarded-for, real-IP and the
+configured auth proxy header are removed, so rate limits and logs key on the
+direct tailnet peer address even when `TRUSTED_PROXIES` covers it.
+
+**Credentials.** The hub credential is either an OAuth client (ID and secret,
+scope auth keys, tags `tag:docklet-hub` and `tag:docklet-agent`) or, in manual
+mode, a hub auth key. It is stored encrypted with the hub encryption key in the
+internal `tailnetCredential` setting, reported only as configured, never returned,
+streamed or logged; tsnet log text passes through key redaction and log upload is
+disabled. The hub joins with the OAuth secret as `?ephemeral=false&preauthorized=true`
+and advertises `tag:docklet-hub`; with a pasted key it relies on the key's tags.
+Per host, OAuth mode mints a one-use, pre-authorised, non-ephemeral key tagged
+`tag:docklet-agent` that expires after one day; manual mode accepts a pasted
+one-use key. The key is returned once in the create response and written only to
+the installer `.env` (mode 600) as `TAILSCALE_AUTH_KEY`. The OAuth secret never
+reaches an agent; the installer refuses `tskey-client-` values. A key minted for a
+creation that then fails is never stored and expires unused.
+
+**Node observation.** After a request on the tailnet ingress authenticates, the
+hub looks up the peer with WhoIs and records the stable node ID, whether it
+carries `tag:docklet-agent`, and the time in `environments.tailnet_node_id`,
+`tailnet_tagged` and `tailnet_observed_at`. The write is guarded by the host's
+`credential_revision`, so a lookup that outlives a token rotation or host removal
+is discarded. The observation is diagnostic: a different node presenting a valid
+token updates it, as any holder of the token is accepted today. A missing tag is
+shown, not enforced.
+
+**Reset and identity.** Disabling keeps the node state; reset deletes only the
+hub's local state directory and keeps the stored credential. The device stays in
+the tailnet admin until the operator removes it there. Agents keep their state in
+`/app/data/tailscale`; after state loss the consumed key cannot join again and a
+new host key is needed. Restart reuses retained state without a key.
+
+**Residual risks.** A compromised coordination server or tailnet admin can add
+nodes or change the policy, which grants network reach only; an attacker still
+needs a host token for any agent surface (T4). The policy snippet Docklet shows
+grants only `tag:docklet-agent` to `tag:docklet-hub:3552`. Peer path, online state
+and failing-link projection are hub-side observations without endpoint addresses
+in DTOs or notifications.

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.; hub-owned one-shot restart wiring.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.; hub-owned one-shot restart wiring; #573 typed tailnet refusals on host creation.
 
 // Package environment owns environment persistence, remote runtime state, pairing,
 // synchronization, and its HTTP and stream surfaces.
@@ -16,6 +16,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/tailnet"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
@@ -97,6 +98,7 @@ func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
 		Security:    handlerutil.DefaultOperationSecurity(),
 		Middlewares: middleware.RequireGlobalAdmin(api),
 	}, h.CreateEnvironment)
+	tailnet.ProblemResponses(api, api.OpenAPI().Paths["/environments"].Post)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "getEnvironment",

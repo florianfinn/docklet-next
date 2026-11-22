@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296.
+// Deviations: Local module namespace; notification and Auto Heal contracts and delivery for #296; #573 tailnet node observation after Edge authentication.
 
 package bootstrap
 
@@ -44,7 +44,12 @@ func registerEdgeTunnelRoutes(
 ) *edge.TunnelServer {
 	// Resolver that validates API key and returns the environment ID
 	resolver := func(ctx context.Context, token string) (string, error) {
-		return environmentService.ResolveEdgeEnvironmentByToken(ctx, token)
+		envID, err := environmentService.ResolveEdgeEnvironmentByToken(ctx, token)
+		if err == nil {
+			// Diagnostic only: records the tailnet node behind an authenticated request from the tailnet ingress.
+			environmentService.ObserveTailnetPeer(ctx, envID)
+		}
+		return envID, err
 	}
 
 	// Status callback to update environment status when agent connects/disconnects

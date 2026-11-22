@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; M14 container and host operation contracts; M16 bind mounts and backup completion; M25 status check revision for the host verdict rule.
+// Deviations: Local module namespace; functional cut: removed Swarm; M14 container and host operation contracts; M16 bind mounts and backup completion; M25 status check revision for the host verdict rule; #573 network route and tailnet observation.
 
 package environment
 
@@ -29,6 +29,12 @@ type Environment struct {
 	// StatusCheckRevision rises with every compatibility result; migration 004 lets a
 	// verdict leave update-required only with a higher credential or check revision.
 	StatusCheckRevision int64 `json:"-" gorm:"column:status_check_revision;not null;default:0"`
+	// NetworkRoute is lan, domain or tailnet; NULL keeps legacy rows unclassified (migration 007).
+	NetworkRoute *string `json:"networkRoute" gorm:"column:network_route"`
+	// Tailnet observation is diagnostic only; it never authenticates (token and mTLS do).
+	TailnetNodeID     *string    `json:"-" gorm:"column:tailnet_node_id"`
+	TailnetTagged     *bool      `json:"-" gorm:"column:tailnet_tagged"`
+	TailnetObservedAt *time.Time `json:"-" gorm:"column:tailnet_observed_at"`
 }
 
 func (Environment) TableName() string { return "environments" }

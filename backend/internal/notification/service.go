@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M19 backend contracts and target identity integration.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; notification and Auto Heal contracts and delivery for #296; M17 runtime history and personal preferences; M19 backend contracts and target identity integration. #573 tailnet manager dialer for agent dispatch.
 
 package notification
 
@@ -201,7 +201,7 @@ func (s *NotificationService) dispatchNotificationToManagerInternal(ctx context.
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(middleware.HeaderApiKey, s.config.AgentToken)
 
-	resp, err := s.httpClient.Do(req)
+	resp, err := s.managerHTTPClient().Do(req)
 	if err != nil {
 		// HTTP unreachable does not mean the manager is: an agent configured for
 		// HTTP may still hold a healthy edge tunnel, so ride that before giving up.

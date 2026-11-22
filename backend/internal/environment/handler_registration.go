@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; typed host edit validation; pairing confirms without a status write.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; typed host edit validation; pairing confirms without a status write; #573 tailnet route at creation and node observation at pairing.
 
 package environment
 
@@ -52,7 +52,18 @@ func (h *EnvironmentHandler) CreateEnvironment(ctx context.Context, input *Creat
 	useApiKey := input.Body.UseApiKey != nil && *input.Body.UseApiKey
 
 	if useApiKey {
-		return h.createEnvironmentWithApiKeyInternal(ctx, env, user)
+		grant, err := h.prepareNetworkRouteInternal(ctx, env, input.Body)
+		if err != nil {
+			return nil, err
+		}
+		out, err := h.createEnvironmentWithApiKeyInternal(ctx, env, user)
+		if err == nil && grant != nil {
+			out.Body.Data.TailnetAuthKey, out.Body.Data.TailnetManagerURL = &grant.key, &grant.managerURL
+		}
+		return out, err
+	}
+	if input.Body.Route != nil {
+		return nil, huma.Error400BadRequest("A network route applies to Edge hosts with API key registration")
 	}
 
 	return h.createEnvironmentLegacyInternal(ctx, env, user, input.Body)
@@ -467,6 +478,8 @@ func (h *EnvironmentHandler) PairEnvironment(ctx context.Context, input *PairEnv
 		slog.ErrorContext(ctx, "Failed to get environment", "environmentId", *envID, "error", err.Error())
 		return nil, huma.Error404NotFound("Environment not found")
 	}
+
+	h.environmentService.ObserveTailnetPeer(ctx, *envID)
 
 	if env.Status != string(EnvironmentStatusPending) {
 		return nil, huma.Error400BadRequest("Environment is not in pending status")

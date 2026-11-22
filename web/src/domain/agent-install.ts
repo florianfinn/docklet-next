@@ -23,6 +23,20 @@ export interface AgentInstallPlan {
   image?: string;
   token: string;
   timeZone: string;
+  /** Edge tailnet route: the one-use host key from the hub; hubUrl is then http://<hub tailnet IPv4>:3552. */
+  tailnet?: AgentTailnetPlan;
+}
+
+export interface AgentTailnetPlan {
+  authKey: string;
+  hostname: string;
+  controlUrl?: string;
+}
+
+/** Tailnet node name for a host: docklet-<host name>, reduced to a DNS label. */
+export function tailnetHostname(hostName: string): string {
+  const label = hostName.toLowerCase().normalize("NFKD").replace(/\p{M}+/gu, "").replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+  return `docklet-${label || "agent"}`.slice(0, 63).replace(/-+$/, "");
 }
 
 export interface InstallArtifacts {
@@ -43,6 +57,7 @@ function validatePlan(plan: AgentInstallPlan): void {
   if (!/^[A-Za-z0-9._-]+$/.test(plan.token)) throw new Error("agent-install.invalid-token");
   if (!/^https?:\/\//.test(plan.hubUrl) || new URL(plan.hubUrl).username || new URL(plan.hubUrl).password) throw new Error("agent-install.invalid-hub-url");
   if (!Number.isInteger(plan.port) || plan.port < 1 || plan.port > 65535) throw new Error("agent-install.invalid-port");
+  if (plan.tailnet) validateTailnet(plan);
   for (const id of [plan.fileOwner?.uid, plan.fileOwner?.gid, plan.socketGid]) {
     if (id !== undefined && (!Number.isInteger(id) || id < 0 || id > 65534)) throw new Error("agent-install.invalid-id");
   }
@@ -50,6 +65,15 @@ function validatePlan(plan: AgentInstallPlan): void {
   // only keeps the value inert inside Compose and shell text.
   const image = plan.image ?? AGENT_IMAGE;
   if (image.length > 512 || !/^(?:\[[0-9A-Fa-f:.]+\](?::\d{1,5})?\/)?[A-Za-z0-9][A-Za-z0-9._/:-]*(?:@sha256:[a-f0-9]{64})?$/.test(image)) throw new Error("agent-install.invalid-image");
+}
+
+// An OAuth client secret is a hub credential and must never reach an agent .env.
+function validateTailnet(plan: AgentInstallPlan): void {
+  const t = plan.tailnet!;
+  if (plan.connection !== "edge" || !plan.hubUrl.startsWith("http://")) throw new Error("agent-install.invalid-tailnet");
+  if (!/^[A-Za-z0-9._~:-]{1,512}$/.test(t.authKey) || t.authKey.startsWith("tskey-client-")) throw new Error("agent-install.invalid-tailnet-key");
+  if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(t.hostname)) throw new Error("agent-install.invalid-tailnet");
+  if (t.controlUrl !== undefined && (!/^https?:\/\/[^\s'"\\]+$/.test(t.controlUrl) || new URL(t.controlUrl).username || new URL(t.controlUrl).password)) throw new Error("agent-install.invalid-tailnet");
 }
 
 export function agentCompose(plan: AgentInstallPlan): string {
@@ -88,6 +112,12 @@ export function agentEnv(plan: AgentInstallPlan): string {
     `PUID=${plan.fileOwner?.uid ?? ""}`,
     `PGID=${plan.fileOwner?.gid ?? ""}`,
     `TZ=${dotenv(plan.timeZone)}`,
+    ...(plan.tailnet ? [
+      `TAILSCALE_AUTH_KEY=${dotenv(plan.tailnet.authKey)}`,
+      `TAILSCALE_HOSTNAME=${dotenv(plan.tailnet.hostname)}`,
+      "TAILSCALE_STATE_DIR=/app/data/tailscale",
+      ...(plan.tailnet.controlUrl ? [`TAILSCALE_CONTROL_URL=${dotenv(plan.tailnet.controlUrl)}`] : []),
+    ] : []),
     "",
   ].join("\n");
 }
@@ -176,7 +206,9 @@ export function agentReadme(plan: AgentInstallPlan): string {
     "The token is only in .env (0600). Keep the extracted directory private and DELETE THE ARCHIVE after installation.",
     "Copyable commands contain the .env heredoc: the token may remain in shell history. Prefer the downloaded package.",
     "The image can be overridden with DOCKLET_AGENT_IMAGE (use a pinned version or a locally built image).",
-    "HTTP requires a trusted network. Restrict direct published ports to the hub. No VPN is configured.",
+    plan.tailnet
+      ? "The agent joins your tailnet with the one-use Tailscale key in .env and reaches the hub only over it. Its node state lives in data/tailscale; keep it, a used key cannot join again."
+      : "HTTP requires a trusted network. Restrict direct published ports to the hub. No VPN is configured.",
     "Agents must reach /api/environments/pair and /api/tunnel/* without browser sign-in; use an internal hub URL if needed.",
     "After an agent update, update-required clears on the next successful hub health run (default: 2 minutes).",
     "",

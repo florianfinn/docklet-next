@@ -507,5 +507,55 @@
       "GPL"
     ],
     "reason": "Reviewed glibc-derived type layouts and constants, with LGPL-2.1-or-later notices. LGPL-2.1 section 5 permits object code using only numerical parameters, data-structure layouts/accessors and small macros/inline functions from headers without restriction. This assessment is limited to these exact header-derived files, not a general libc licence exemption. Keep source notices. Both targets reach them only through SQLite; #7 must prove modernc.org/libc and modernc.org/sqlite absent from both binary graphs. The same generated file also preserves the GCC stddef.h GPL-3.0-or-later notice with explicit GCC Runtime Library Exception 3.1. It supplies basic C type definitions, not a linked GCC implementation. This exact-file pre-cut assessment preserves that notice and requires removal before product release; it does not approve importing or shipping libc."
+  },
+  {
+    "module": "tailscale.com",
+    "version": "v1.104.7",
+    "path": "licenses/README.md",
+    "sha256": "33f2d6e158876e2d606333bef6995bf8884d85002de98954ec8b9c02449e67cd",
+    "classification": "dependency-licence-listing",
+    "scope": "non-code",
+    "reason": "Generated lists of the dependencies of Tailscale's own client apps and their licences; they grant nothing for the Go packages Docklet compiles, whose licences are assessed per module.",
+    "allowedMarkers": []
+  },
+  {
+    "module": "tailscale.com",
+    "version": "v1.104.7",
+    "path": "licenses/android.md",
+    "sha256": "d7a13170630838eba8d661bbc85293cd1bd739454fb3fec0b6082837c2acaed8",
+    "classification": "dependency-licence-listing",
+    "scope": "non-code",
+    "reason": "Generated lists of the dependencies of Tailscale's own client apps and their licences; they grant nothing for the Go packages Docklet compiles, whose licences are assessed per module.",
+    "allowedMarkers": []
+  },
+  {
+    "module": "tailscale.com",
+    "version": "v1.104.7",
+    "path": "licenses/apple.md",
+    "sha256": "43b6132f40aa9fc8bb1e034db2ad481fb237fefc4f1f3779884b9621af85f0bc",
+    "classification": "dependency-licence-listing",
+    "scope": "non-code",
+    "reason": "Generated lists of the dependencies of Tailscale's own client apps and their licences; they grant nothing for the Go packages Docklet compiles, whose licences are assessed per module.",
+    "allowedMarkers": []
+  },
+  {
+    "module": "tailscale.com",
+    "version": "v1.104.7",
+    "path": "licenses/tailscale.md",
+    "sha256": "fe5729149b37198fad6c6227f2923760f3fa1540ad99a7b8d1981cebb80d65d1",
+    "classification": "dependency-licence-listing",
+    "scope": "non-code",
+    "reason": "Generated lists of the dependencies of Tailscale's own client apps and their licences; they grant nothing for the Go packages Docklet compiles, whose licences are assessed per module.",
+    "allowedMarkers": []
+  },
+  {
+    "module": "tailscale.com",
+    "version": "v1.104.7",
+    "path": "licenses/windows.md",
+    "sha256": "6c8fb037cefa72cdf4712023c4d4f04a0d072708c23e419b82a64dde66d6b0f9",
+    "classification": "dependency-licence-listing",
+    "scope": "non-code",
+    "reason": "Generated lists of the dependencies of Tailscale's own client apps and their licences; they grant nothing for the Go packages Docklet compiles, whose licences are assessed per module.",
+    "allowedMarkers": []
   }
 ]

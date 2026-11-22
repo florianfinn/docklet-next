@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: f24c02c54f72ab56e564a827211b30aacdc46d860d9ac198b3e00a338875222b
+// Revision: 1246cdd61a8d0be8d9c1363fc9ae92e1cdfdcf1e928eab2fb9409b1416d1ac82
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -5267,6 +5267,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings/connections/tailnet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tailnet route settings */
+        get: operations["get-tailnet-settings"];
+        /** Replace the tailnet credential */
+        put: operations["update-tailnet-settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/setup/identity": {
         parameters: {
             query?: never;
@@ -5338,6 +5356,40 @@ export interface paths {
          * @description Fetch the release list again before the next update check (at most every 30 seconds)
          */
         post: operations["refresh-releases"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tailnet/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete the hub's local tailnet identity */
+        post: operations["reset-tailnet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tailnet/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Hub tailnet status */
+        get: operations["get-tailnet-status"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7867,6 +7919,30 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseTailnetSettings: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseTailnetSettings.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["TailnetSettings"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseTailnetStatus: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseTailnetStatus.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["TailnetStatus"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseUpdaterAutoUpdatePolicy: {
             /**
              * Format: uri
@@ -10211,6 +10287,9 @@ export interface components {
             enabled?: boolean;
             isEdge?: boolean;
             name?: string;
+            /** @enum {string} */
+            route?: "lan" | "domain" | "tailnet";
+            tailnetAuthKey?: string;
             useApiKey?: boolean;
         };
         EnvironmentEdgeMTLSCertificate: {
@@ -10247,9 +10326,12 @@ export interface components {
             /** Format: date-time */
             lastSeen?: string;
             name?: string;
+            /** @enum {string} */
+            networkRoute?: "lan" | "domain" | "tailnet";
             /** Format: int64 */
             registrationRevision: number;
             status: string;
+            tailnet?: components["schemas"]["TailnetHostPeer"];
         };
         EnvironmentHostProblem: {
             /** @enum {string} */
@@ -10299,6 +10381,7 @@ export interface components {
         };
         EnvironmentStreamEvent: {
             environments?: components["schemas"]["EnvironmentEnvironment"][] | null;
+            tailnet?: components["schemas"]["TailnetStatus"];
             /** Format: date-time */
             timestamp: string;
             type: string;
@@ -10356,9 +10439,16 @@ export interface components {
             /** Format: date-time */
             lastSeen?: string;
             name?: string;
+            /** @enum {string} */
+            networkRoute?: "lan" | "domain" | "tailnet";
             /** Format: int64 */
             registrationRevision: number;
             status: string;
+            tailnet?: components["schemas"]["TailnetHostPeer"];
+            /** @description One-use Tailscale key for the installer (tailnet route, shown once) */
+            tailnetAuthKey?: string;
+            /** @description Hub URL over the tailnet for the installer */
+            tailnetManagerUrl?: string;
         };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
@@ -13378,6 +13468,86 @@ export interface components {
             /** @enum {string} */
             phase: "reserved" | "helper-started" | "settled";
             runId?: string;
+        };
+        TailnetConnection: {
+            /** @enum {string} */
+            code?: "tailnet.credential-rejected" | "tailnet.coordination-unreachable" | "tailnet.not-connected" | "tailnet.mtls-unsupported";
+            /** @enum {string} */
+            state: "off" | "joining" | "connected" | "control-unreachable" | "error";
+        };
+        TailnetHostPeer: {
+            /** @description hub, peer, tunnel or none */
+            failingLink: string;
+            /** Format: date-time */
+            lastSeen?: string;
+            /** Format: date-time */
+            observedAt?: string;
+            /** @description direct, relay, idle or unknown */
+            path: string;
+            /** @enum {string} */
+            state: "online" | "offline" | "unknown";
+            /** @description Whether the observed node carries tag:docklet-agent */
+            tagged?: boolean;
+        };
+        TailnetProblem: {
+            /** @enum {string} */
+            code: "tailnet.credential-rejected" | "tailnet.coordination-unreachable" | "tailnet.not-connected" | "tailnet.key-mint-failed" | "tailnet.mtls-unsupported";
+            /** Format: int64 */
+            providerStatus?: number;
+            /** Format: int64 */
+            status: number;
+        };
+        TailnetProvisioning: {
+            /** @enum {string} */
+            code?: "tailnet.credential-rejected";
+            /** Format: int64 */
+            providerStatus?: number;
+            /** @enum {string} */
+            state: "not-configured" | "not-applicable" | "checking" | "ok" | "rejected";
+        };
+        TailnetSettings: {
+            clientId?: string;
+            /** @description TAILSCALE_CONTROL_URL is set */
+            customControl: boolean;
+            enabled: boolean;
+            hostname: string;
+            /** @description oauth or manual */
+            mode?: string;
+            policySnippet: string;
+            secretConfigured: boolean;
+        };
+        TailnetSettingsUpdate: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/TailnetSettingsUpdate.json
+             */
+            readonly $schema?: string;
+            authKey?: string;
+            clientId?: string;
+            clientSecret?: string;
+            enabled: boolean;
+            /** @enum {string} */
+            mode?: "oauth" | "manual";
+        };
+        TailnetStatus: {
+            connection: components["schemas"]["TailnetConnection"];
+            enabled: boolean;
+            /** Format: int64 */
+            generation: number;
+            /** Format: int64 */
+            hostCount: number;
+            /** @description The hub's tailnet IPv4 address */
+            hubAddress?: string;
+            /** @description oauth or manual */
+            mode?: string;
+            /** Format: int64 */
+            onlineHosts: number;
+            provisioning: components["schemas"]["TailnetProvisioning"];
+            routeAvailable: boolean;
+            /** @description tailnet.* refusal code */
+            routeCode?: string;
+            tailnetName?: string;
         };
         UlimitsConfig: {
             /** Format: int64 */
@@ -18632,13 +18802,22 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
                 };
             };
-            /** @description Host or framework refusal */
+            /** @description Tailnet or framework refusal */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                    "application/problem+json": (components["schemas"]["TailnetProblem"] | components["schemas"]["ErrorModel"]) | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Tailnet or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["TailnetProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -39655,6 +39834,95 @@ export interface operations {
             };
         };
     };
+    "get-tailnet-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseTailnetSettings"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-tailnet-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TailnetSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseTailnetSettings"];
+                };
+            };
+            /** @description Tailnet or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["TailnetProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Tailnet or framework refusal */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["TailnetProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Tailnet or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["TailnetProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "claim-setup-identity": {
         parameters: {
             query?: never;
@@ -39849,6 +40117,64 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reset-tailnet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseTailnetStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-tailnet-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseTailnetStatus"];
+                };
             };
             /** @description Error */
             default: {
