@@ -41,6 +41,7 @@ function fixture() {
   return { f, stackReads, setHold: (p?: Promise<void>) => { hold = p; } };
 }
 const button = (name: string) => screen.getByRole("button", { name: `${more}: ${name}` });
+const posts = (f: ReturnType<typeof resourceFixture>, suffix: string) => (f.fetcher.mock.calls as unknown as [unknown, RequestInit | undefined][]).filter(([url, init]) => String(url).endsWith(suffix) && init?.method === "POST").length;
 
 it("100 stack rows read no scoped descriptor until a menu opens, then one per opened stack", async () => {
   const { f, stackReads } = fixture();
@@ -84,8 +85,56 @@ it("an entry stays disabled until its descriptor arrives, keeps focus, then runs
   await waitFor(() => expect(within(menu).getByRole("menuitem", { name: redeploy }).hasAttribute("aria-disabled")).toBe(false));
   expect(menu.isConnected).toBe(true);
   expect(document.activeElement === focused).toBe(true);
-  await userEvent.click(within(menu).getByRole("menuitem", { name: check }));
-  await waitFor(() => expect(f.fetcher.mock.calls.some(([url]) => String(url).endsWith("/projects/p0/check"))).toBe(true));
+  await userEvent.click(within(menu).getByRole("menuitem", { name: redeploy }));
+  await waitFor(() => expect(posts(f, "/projects/p0/redeploy")).toBe(1));
+});
+
+it("a pending descriptor-dependent entry sends nothing when chosen", async () => {
+  const { f, setHold } = fixture();
+  renderWithApp(<StacksPage />, f.adapter);
+  await screen.findByRole("button", { name: `${more}: stack-000` });
+  setHold(new Promise<void>(() => {}));
+  await userEvent.click(button("stack-000"));
+  const menu = await screen.findByRole("menu");
+  await userEvent.click(within(menu).getByRole("menuitem", { name: redeploy }), { pointerEventsCheck: 0 });
+  await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  expect(posts(f, "/redeploy")).toBe(0);
+});
+
+it("keyboard selection in the dropdown runs the command for its own row, also after switching rows", async () => {
+  const { f } = fixture();
+  renderWithApp(<StacksPage />, f.adapter);
+  await screen.findByRole("button", { name: `${more}: stack-001` });
+  for (const [row, id] of [["stack-001", "p1"], ["stack-002", "p2"]] as const) {
+    button(row).focus();
+    await userEvent.keyboard("{Enter}");
+    const entry = within(await screen.findByRole("menu")).getByRole("menuitem", { name: check });
+    entry.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(posts(f, `/projects/${id}/check`)).toBe(1));
+    await waitFor(() => expect(screen.queryByRole("menu") === null).toBe(true));
+  }
+  expect(posts(f, "/check")).toBe(2);
+});
+
+it("the context menu runs commands from a pointer and from the keyboard", async () => {
+  const { f } = fixture();
+  renderWithApp(<StacksPage />, f.adapter);
+  const rowOf = async (name: string) => (await screen.findByRole("button", { name: `${more}: ${name}` })).closest("tr")!;
+  // Pointer: right click, then click the entry.
+  fireEvent.contextMenu(await rowOf("stack-003"));
+  await userEvent.click(within(await screen.findByRole("menu")).getByRole("menuitem", { name: check }));
+  await waitFor(() => expect(posts(f, "/projects/p3/check")).toBe(1));
+  await waitFor(() => expect(screen.queryByRole("menu") === null).toBe(true));
+  // Keyboard: the context-menu key fires contextmenu on the focused row link; Enter selects the entry.
+  const link = within(await rowOf("stack-004")).getByRole("link", { name: /stack-004/ });
+  link.focus();
+  fireEvent.contextMenu(link);
+  const entry = within(await screen.findByRole("menu")).getByRole("menuitem", { name: check });
+  entry.focus();
+  await userEvent.keyboard("{Enter}");
+  await waitFor(() => expect(posts(f, "/projects/p4/check")).toBe(1));
+  expect(posts(f, "/check")).toBe(2);
 });
 
 it("the row's context menu shows the same entries and reads only that stack", async () => {
