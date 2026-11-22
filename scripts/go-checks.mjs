@@ -16,10 +16,12 @@ function go(args, cwd = process.cwd(), overrides = {}) {
   const env = { ...process.env, ...overrides };
   const launcher = ["run", resolve("scripts/go-command.go"), "--"];
   if (workspaceOff(cwd)) launcher.push("--work-off");
+  // Full test output exceeds spawnSync's 1 MiB default; a truncated buffer must not read as a test failure.
   const result = spawnSync("go", [...launcher, ...args], {
-    cwd, env, encoding: "utf8", stdio: ["inherit", "pipe", "inherit"],
+    cwd, env, encoding: "utf8", stdio: ["inherit", "pipe", "inherit"], maxBuffer: 1024 * 1024 * 1024,
   });
   if (result.stdout) process.stdout.write(result.stdout);
+  if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`go-${args[0]}-failed`);
   return result.stdout ?? "";
 }
