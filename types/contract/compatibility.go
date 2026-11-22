@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original compatibility boundary; optional-module foundation (#472).
+// Deviations: Original compatibility boundary; optional-module foundation (#472). M36 #568: historical v20 fingerprint.
 
 package contract
 
@@ -12,8 +12,14 @@ const AgentHubV18Fingerprint = "425ca5dd725baecb39fc5d66bebde3eb260296f9344255eb
 // AgentHubV19Fingerprint preserves baseline compatibility without new module requests.
 const AgentHubV19Fingerprint = "cd658728da4e2de1b4d1c625544b9ef2e48bad0bfba685f7d11cc1651e4d5414"
 
+// AgentHubV20Fingerprint preserves the 1.3.0 agent surface; v21 only adds the deploy.point-no-baseline reason.
+const AgentHubV20Fingerprint = "51489456b62b53b9128a6c61a7d5285c341631dcc5fbedb44c87da8d5e8f54fd"
+
 // AgentCompatible rejects older contracts and a changed schema at the same version.
 func AgentCompatible(version int, fingerprint string) bool {
+	if version == 20 {
+		return fingerprint == AgentHubV20Fingerprint
+	}
 	if version == 19 {
 		return fingerprint == AgentHubV19Fingerprint
 	}
@@ -41,5 +47,5 @@ func AgentRecoveryRoute(method, path string) bool {
 func ModuleCompatible(version int, fingerprint string) bool {
 	// Proxy module requests changed in contract 20 (M28: resolvers, certificate check,
 	// operation kind), so v19 agents get update-required for every module request.
-	return version >= 20 && fingerprint == AgentHubFingerprint
+	return (version == 20 && fingerprint == AgentHubV20Fingerprint) || (version >= 21 && fingerprint == AgentHubFingerprint)
 }

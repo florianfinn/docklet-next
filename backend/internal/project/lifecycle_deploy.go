@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original deploy-point preparation from last recorded baseline evidence. M34 #548: recorded Compose environment inputs.
+// Deviations: Original deploy-point preparation from last recorded baseline evidence. M34 #548: recorded Compose environment inputs. M36 #568: distinct no-baseline reason.
 
 package project
 
@@ -85,7 +85,8 @@ func (s *ProjectService) PrepareDeployPoint(ctx context.Context, id, run, regist
 	var row life.Baseline
 	err = s.db.WithContext(ctx).First(&row, "target_id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		unavailable("deploy.point-unavailable")
+		// No successful deploy through Docklet recorded a baseline yet; this run records it.
+		unavailable("deploy.point-no-baseline")
 		return
 	}
 	if err != nil {

@@ -41,6 +41,7 @@ export const IMAGE_ERROR_KEYS = {
   "backup.copy.mount-failed": "images.errors.backup_copy_mount-failed",
   "backup.copy.write-failed": "images.errors.backup_copy_write-failed",
   "deploy.point-unavailable": "images.errors.deploy_point-unavailable",
+  "deploy.point-no-baseline": "images.errors.deploy_point-no-baseline",
   "feature-disabled": "images.errors.feature-disabled",
   "history.invalid-range": "images.errors.history_invalid-range",
   "history.sample-invalid": "images.errors.history_sample-invalid",

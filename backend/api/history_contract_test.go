@@ -16,7 +16,7 @@ import (
 )
 
 func TestHB9AgentAndEdgeHistoryAllowlist(t *testing.T) {
-	require.Equal(t, 20, contract.AgentHubVersion)
+	require.Equal(t, 21, contract.AgentHubVersion)
 	require.Equal(t, 18, contract.MinimumAgentVersion)
 	for _, cfg := range []*config.Config{{AgentMode: true}, {EdgeAgent: true}} {
 		api := setupAPIForSpecMode(cfg)

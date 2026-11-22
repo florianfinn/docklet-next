@@ -28,6 +28,6 @@ function RecoveryOffer({ run }: { run: ActionRun }) {
   </div>;
 }
 export function DeployRecovery({ run }: { run: ActionRun }) {
-  const t = useTranslations("common.stackUpdates"), errorText = useImageError();
-  return <>{run.pointCode && <p role="status" className="text-xs text-muted-foreground"><span>{t("pointHint")}</span> {errorText(run.pointCode)}</p>}{hasDeployRecovery(run) && <RecoveryOffer key={`${run.id}:${run.restorePointId}`} run={run} />}</>;
+  const errorText = useImageError();
+  return <>{run.pointCode && <p role="status" className="text-xs text-muted-foreground">{errorText(run.pointCode)}</p>}{hasDeployRecovery(run) && <RecoveryOffer key={`${run.id}:${run.restorePointId}`} run={run} />}</>;
 }

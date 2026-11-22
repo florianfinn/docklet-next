@@ -137,7 +137,15 @@ it.each(["success", "running"] as const)("goal 6: %s deploy with point has no re
   const f = updateFixture(); const run = renderRun(mapActivitySummary({ ...f.run, type: "project_deploy", status, imageLifecycle: { runId: f.run.id, verified: false, volumeDataIncluded: false, restorePointId: point.id, pointCode: "deploy.point-unavailable" } }), "de");
   renderWithApp(<DeployRecovery run={run} />, f.adapter);
   expect(screen.queryByRole("button", { name: t.previousDeployment }) === null).toBe(true);
-  expect(screen.queryByText(t.pointHint) !== null).toBe(true);
+  expect(screen.queryByText(catalogs.de.images.errors["deploy_point-unavailable"]) !== null).toBe(true);
+});
+
+it("names the first deploy through Docklet once instead of the generic point hint", () => {
+  const f = updateFixture(); const run = renderRun(mapActivitySummary({ ...f.run, type: "project_deploy", status: "success", imageLifecycle: { runId: f.run.id, verified: true, volumeDataIncluded: false, pointCode: "deploy.point-no-baseline" } }), "de");
+  renderWithApp(<DeployRecovery run={run} />, f.adapter);
+  const hint = catalogs.de.images.errors["deploy_point-no-baseline"];
+  expect(screen.queryAllByText(hint).length).toBe(1);
+  expect(screen.queryByText(catalogs.de.images.errors["deploy_point-unavailable"]) === null).toBe(true);
 });
 
 function PointProbe({ adapter }: { adapter: ReturnType<typeof updateFixture>["adapter"] }) {

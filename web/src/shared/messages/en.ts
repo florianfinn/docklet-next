@@ -82,7 +82,6 @@ export const enCommon = {
     previousImage: "Restore previous image",
     previousImageHelp: "Recreate with the previous image. Volume and bind data are unchanged.",
     previousDeployment: "Restore previous deployment",
-    pointHint: "Deploy proceeds with a hint: no restore point was created.",
     checked: "Check status",
     applied: "Apply status",
     stale: "Retained check is stale",

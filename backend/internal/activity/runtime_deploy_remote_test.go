@@ -62,7 +62,7 @@ func (p *deployEvidenceProjects) RedeployProject(ctx context.Context, id string,
 func TestRuntimeDeployEvidenceDirectEdgeNormalAndValidation(t *testing.T) {
 	for _, isEdge := range []bool{false, true} {
 		for _, op := range []activity.RuntimeOperation{activity.RuntimeDeployProject, activity.RuntimeRedeployProject} {
-			for _, code := range []string{"", "deploy.point-unavailable", "update.image-binding-unsupported", "update.persistence-failed", "undeclared"} {
+			for _, code := range []string{"", "deploy.point-unavailable", "deploy.point-no-baseline", "update.image-binding-unsupported", "update.persistence-failed", "undeclared"} {
 				t.Run(map[bool]string{false: "direct", true: "edge"}[isEdge]+"/"+string(op)+"/"+code, func(t *testing.T) {
 					point := ""
 					if code == "" {

@@ -158,7 +158,7 @@ UI capabilities stay unavailable until their complete mappings pass. Runtime JSO
 logs reuse Echo WS outside the Huma export. The CLI treats EOF before explicit
 `done` as interruption while preserving progress and terminal errors.
 
-Lifecycle result reasons include `deploy.point-unavailable`, `update.service-coupled` and
+Lifecycle result reasons include `deploy.point-unavailable`, `deploy.point-no-baseline`, `update.service-coupled` and
 `settings.invalid-time-zone`, declared by `types/image/reason.go`.
 
 ## Stable message codes

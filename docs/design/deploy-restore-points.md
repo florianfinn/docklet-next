@@ -64,9 +64,12 @@ Extends [images and updates](images-updates.md) and the restore-point protection
    `had_effect` is set immediately before the compose deploy starts.
 4. **No point is never a refusal**. No baseline (first deploy, deploys only from outside
    Docklet), identity/registration mismatch, multi-file stack, or a point/pin persistence error →
-   the deploy proceeds; `LifecycleResult.PointCode` carries the reason (`deploy.point-unavailable`,
-   `update.image-binding-unsupported`, `update.persistence-failed`) and the run detail shows a
-   neutral note "no restore point".
+   the deploy proceeds; `LifecycleResult.PointCode` carries the reason (`deploy.point-no-baseline`
+   when no baseline was ever recorded, otherwise `deploy.point-unavailable`,
+   `update.image-binding-unsupported`, `update.persistence-failed`) and the run detail shows one
+   sentence for that reason. The no-baseline sentence says that this run records the baseline and
+   the next update creates a restore point. The reason is part of agent contract v21; agents with
+   contract 18–20 keep reporting `deploy.point-unavailable`.
 5. **Evidence, durable.** The point ID is persisted before any effect in the run's
    `image_lifecycle_runs` row (`id = run ID`, `point_id`), and `PointCode` with it (new nullable
    column `point_code`, migration 018). Every settlement of a deploy/redeploy receipt —

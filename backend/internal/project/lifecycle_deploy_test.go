@@ -86,6 +86,9 @@ func TestDeployPointNoRefusal(t *testing.T) {
 				baseline = f.establishBaseline()
 			}
 			code := "deploy.point-unavailable"
+			if name == "first-deploy" {
+				code = "deploy.point-no-baseline"
+			}
 			switch name {
 			case "identity":
 				require.NoError(t, f.db.Model(&life.Baseline{}).Where("target_id = ?", f.project.ID).Update("target_identity", "different").Error)

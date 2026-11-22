@@ -17,7 +17,7 @@ import (
 )
 
 func TestM28ProxyV20Fixture(t *testing.T) {
-	raw, err := os.ReadFile("testdata/agent-hub-v20.json")
+	raw, err := os.ReadFile("testdata/agent-hub-v21.json")
 	require.NoError(t, err)
 	sum := sha256.Sum256(raw)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(sum[:]))
@@ -30,7 +30,7 @@ func TestM28ProxyV20Fixture(t *testing.T) {
 		}
 	}
 	require.NoError(t, json.Unmarshal(raw, &manifest))
-	require.Equal(t, 20, manifest.Version)
+	require.Equal(t, 21, manifest.Version)
 	require.Equal(t, 20, manifest.Proxy.MinimumContract)
 	require.Equal(t, dto.DNSProviders(), manifest.Proxy.DNSProviders)
 	require.Contains(t, manifest.Proxy.Reasons, "source-ineligible")

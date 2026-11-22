@@ -5,7 +5,7 @@ export const deBackend: typeof enBackend = {
     "candidate": {"unavailable": "Der Kandidat konnte nicht aus der Registry geprüft werden.", "deferred": "Dieser Kandidat wurde noch nicht geprüft."},
     "agent": {"unavailable": "Der Host ist nicht erreichbar. Prüfe die Verbindung."},
     "container": {"auto-remove": "Automatische Wiederherstellung ist für einen laufenden Auto-Remove-Container nicht möglich.","origin-locked": "Docklet verwaltet keine Updates für diesen Container.", "recreate-ambiguous": "Der Ersatz-Container konnte nicht eindeutig ermittelt werden.", "recreate-recovered": "Die Container-Neuerstellung wurde wiederhergestellt."},
-    "deploy": {"point-unavailable": "Das Deployment wurde ohne Wiederherstellungspunkt abgeschlossen."},
+    "deploy": {"point-unavailable": "Für dieses Deployment wurde kein Wiederherstellungspunkt erstellt.", "point-no-baseline": "Erster Deploy über Docklet: Dieser Lauf erfasst die Konfigurationsbasis. Ab dem nächsten Update entsteht vor jedem Update ein Wiederherstellungspunkt."},
     "settings": {"invalid-time-zone": "Wähle eine gültige Zeitzone."},
     "history": {"sample-too-large": "Die Verlaufsstichprobe überschreitet die Größenbegrenzung.", "sample-invalid": "Der Host hat eine ungültige Verlaufsstichprobe geliefert.", "unavailable": "Der Verlauf ist nicht verfügbar.", "invalid-range": "Wähle einen Verlaufszeitraum von 24h, 7d oder 30d."},
     "preferences": {"no-user": "Diese Identität hat keine persönlichen Einstellungen.", "unknown-section": "Unbekannter Einstellungsbereich.", "invalid": "Einstellungen müssen ein Objekt enthalten.", "too-large": "Die Einstellungen überschreiten die Größenbegrenzung."},

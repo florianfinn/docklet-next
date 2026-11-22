@@ -37,6 +37,7 @@ export const UPDATE_REASON_KEYS = {
   "backup.copy.mount-failed": IMAGE_ERROR_KEYS["backup.copy.mount-failed"],
   "backup.copy.write-failed": IMAGE_ERROR_KEYS["backup.copy.write-failed"],
   "deploy.point-unavailable": IMAGE_ERROR_KEYS["deploy.point-unavailable"],
+  "deploy.point-no-baseline": IMAGE_ERROR_KEYS["deploy.point-no-baseline"],
   "feature-disabled": IMAGE_ERROR_KEYS["feature-disabled"],
   "history.invalid-range": IMAGE_ERROR_KEYS["history.invalid-range"],
   "history.sample-invalid": IMAGE_ERROR_KEYS["history.sample-invalid"],

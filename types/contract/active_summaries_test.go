@@ -18,7 +18,7 @@ import (
 )
 
 func TestActiveSummariesContractBoundary(t *testing.T) {
-	raw, err := os.ReadFile("testdata/agent-hub-v20.json")
+	raw, err := os.ReadFile("testdata/agent-hub-v21.json")
 	require.NoError(t, err)
 	sum := sha256.Sum256(raw)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(sum[:]))
@@ -32,7 +32,7 @@ func TestActiveSummariesContractBoundary(t *testing.T) {
 		}
 	}
 	require.NoError(t, json.Unmarshal(raw, &manifest))
-	require.Equal(t, 20, manifest.Version)
+	require.Equal(t, 21, manifest.Version)
 	require.Equal(t, 18, manifest.Minimum)
 	require.Equal(t, MinimumAgentVersion, manifest.Minimum)
 	require.False(t, AgentCompatible(17, "221ff863722bf4dab6cca4e019f5ba5a8fb66b097a7e4a150ddee1e760379450"))

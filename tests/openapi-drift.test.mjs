@@ -7,7 +7,7 @@ import { agentFixture } from "../scripts/agent-contract.mjs";
 
 test("the v9 manifest records the merged activity discovery producer", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v20.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v21.json", import.meta.url));
   assert.deepEqual(agentFixture(spec, fixture), fixture);
   const changed = JSON.parse(spec);
   const recoveryName = JSON.parse(fixture).activityDiscovery.recovery.$ref.split("/").at(-1);
@@ -40,7 +40,7 @@ test("the contract guard rejects a changed Huma operation", () => {
 
 test("v7 lifecycle manifest changes with executable DTOs and admission operations", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v20.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v21.json", import.meta.url));
   const manifest = JSON.parse(fixture);
   assert.equal(manifest.imageLifecycle.routes.length, 9);
   assert.equal(manifest.imageLifecycle.edgeRoutes.length, 6);
@@ -102,7 +102,7 @@ test("every lifecycle and policy producer reason is declared and translated", ()
 
 test("v7 policy manifest binds hub schedules, frozen revisions and notification producers", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v20.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v21.json", import.meta.url));
   const manifest = JSON.parse(fixture);
   assert.equal(manifest.imagePolicies.owner, "hub");
   assert.equal(manifest.imagePolicies.defaultMode, "check");
@@ -150,7 +150,7 @@ test("reason helper guard catches unprefixed arguments and returns", () => {
 
 test("vulnerability producers and Edge routes change the v8 fingerprint", () => {
  const spec=readFileSync(new URL("../api/openapi.json",import.meta.url));
- const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v20.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v21.json",import.meta.url));
  const original=agentFixture(spec,fixture);
  const changed=JSON.parse(spec);
  const name=Object.keys(changed.components.schemas).find(name=>name.endsWith("ScanRun") && changed.components.schemas[name].properties.status);
@@ -168,7 +168,7 @@ test("vulnerability producers and Edge routes change the v8 fingerprint", () => 
 
 test("vulnerability problem fields and shared routes are covered by the v8 fingerprint", () => {
  const spec=readFileSync(new URL("../api/openapi.json",import.meta.url));
- const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v20.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v21.json",import.meta.url));
  const original=agentFixture(spec,fixture);
  const manifest=JSON.parse(original);
  assert.ok(manifest.vulnerability.schemas.VulnerabilityProblem);
@@ -216,7 +216,7 @@ test("#254 every lifecycle and activity code field declares its vocabulary",()=>
 
 test("M24 nested recovery and manifest tuple schemas participate in v18", () => {
  const spec=JSON.parse(readFileSync(new URL("../api/openapi.json",import.meta.url)));
- const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v20.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v21.json",import.meta.url));
  const original=agentFixture(Buffer.from(JSON.stringify(spec)),fixture);
  const manifest=JSON.parse(original);
  for (const name of ["UpdaterRecoveryResult","UpdaterAppliedCandidate","UpdaterVerifiedImageRequest"]) {
@@ -229,7 +229,7 @@ test("M24 nested recovery and manifest tuple schemas participate in v18", () => 
 
 test("v20 peer confirmation fields participate in the agent fingerprint", () => {
  const spec=JSON.parse(readFileSync(new URL("../api/openapi.json",import.meta.url)));
- const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v20.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v21.json",import.meta.url));
  const original=agentFixture(Buffer.from(JSON.stringify(spec)),fixture);
  for(const [name,field] of [["ImageRuntimeIdentityBlocker","uncertainty"],["ActivityRuntimeTargetRequest","acknowledgedUncertainty"],["ActivityRuntimeOptions","acknowledgedUncertainty"],["ActivityRuntimeLifecycleAdmissionRequest","acknowledgedUncertainty"]]) {
   const changed=structuredClone(spec);delete changed.components.schemas[name].properties[field];

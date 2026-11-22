@@ -83,7 +83,6 @@ export const deCommon: typeof enCommon = {
     previousImage: "Vorheriges Image wiederherstellen",
     previousImageHelp: "Mit dem vorherigen Image neu erstellen. Volume- und Bind-Daten bleiben unverändert.",
     previousDeployment: "Vorheriges Deployment wiederherstellen",
-    pointHint: "Deploy läuft mit Hinweis: Es wurde kein Wiederherstellungspunkt erstellt.",
     checked: "Prüfstatus",
     applied: "Anwendungsstatus",
     stale: "Gespeicherte Prüfung ist veraltet",
