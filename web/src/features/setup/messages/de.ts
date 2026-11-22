@@ -39,6 +39,7 @@ export const deSetup: typeof enSetup = {
   exit: "Vorschau verlassen",
   railLabel: "Schritte der Ersteinrichtung",
   steps: {
+    tailnet: { title: "Privates Netz (Tailscale)", description: "Optional · Tailscale" },
     access: { title: "Zugang", description: "Anmeldung, Administrator" },
     hub: { title: "Hub", description: "Name, Adresse, Zeitzone" },
     projects: { title: "Projekte", description: "Verzeichnisse und Datei-IDs" },

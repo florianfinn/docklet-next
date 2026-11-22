@@ -65,14 +65,14 @@ export function createHostCommands(baseUrl: string, client: CsrfClient, requireC
       await access("registerHost");
       const isEdge = input.connection === "edge";
       const apiUrl = isEdge ? "edge://pending" : new URL(input.address.includes("://") ? input.address : `http://${input.address}`).toString().replace(/\/$/, "");
-      const row = await request<Environment>("/environments", "POST", { name: input.name, apiUrl, isEdge, useApiKey: true });
+      const row = await request<Environment & Pick<components["schemas"]["EnvironmentWithApiKey"], "tailnetAuthKey" | "tailnetManagerUrl">>("/environments", "POST", { name: input.name, apiUrl, isEdge, useApiKey: true, ...(isEdge && input.route ? { route: input.route, ...(input.route === "tailnet" && input.tailnetAuthKey ? { tailnetAuthKey: input.tailnetAuthKey } : {}) } : {}) });
       let host = mapHost(row);
       // The create contract has no colour; a failed follow-up edit leaves the palette default.
       // Identity loss is never absorbed: the token must not cross an identity change.
       if (input.color) host = await request<Environment>(`/environments/${encodeURIComponent(row.id)}`, "PUT", { name: row.name, color: input.color.toLowerCase() })
         .then(mapHost, (error: unknown) => { if (error instanceof CancelledError || owner !== generation()) throw error; return host; });
       if (owner !== generation()) throw new CancelledError();
-      const result = { host, token: token(row.apiKey) };
+      const result = { host, token: token(row.apiKey), ...(input.route === "tailnet" ? { tailnetAuthKey: row.tailnetAuthKey, tailnetManagerUrl: row.tailnetManagerUrl } : {}) };
       changed();
       return result;
     },

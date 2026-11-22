@@ -48,6 +48,8 @@ export function mapHost(row: Environment): Host {
   const report = mapReport(row);
   const checks = row.agentReport?.version.onboardingChecks;
   return {
+    ...(row.networkRoute ? { networkRoute: row.networkRoute } : {}),
+    ...(row.tailnet ? { tailnet: row.tailnet } : {}),
     id: row.id, name: row.name || row.id, color: row.color ?? defaultHostColor(row.id),
     status: row.enabled ? status : "offline",
     connection: row.isEdge ? "edge" : "direct", address: row.isEdge ? "" : row.apiUrl,

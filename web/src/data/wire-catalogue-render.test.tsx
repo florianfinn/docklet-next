@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472). M27 proxy outcome render proofs (#473/#474).
 
+import { tailnetError, tailnetState } from "@/features/connections/tailnet-render.test-support";
 import { decodeProxyOperation, proxyOutcome } from "./http/proxy-decoder";
 import { renderHook } from "@testing-library/react";
 import { IntlProvider } from "use-intl";
@@ -48,6 +49,12 @@ function proxyMessage(reason: boolean) {
   return renderMessage({ code: reason ? view.reasonKey! : view.labelKey, params: {} }, "de");
 }
 const proofs = [
+  { property: "TailnetProblem.code", member: "tailnet.key-mint-failed", key: "tailnetContract.codes.key-mint-failed", render: () => tailnetError("tailnet.key-mint-failed") },
+  { property: "TailnetConnection.code", member: "tailnet.not-connected", key: "tailnetContract.codes.not-connected", render: () => tailnetError("tailnet.not-connected") },
+  { property: "TailnetProvisioning.code", member: "tailnet.credential-rejected", key: "tailnetContract.codes.credential-rejected", render: () => tailnetError("tailnet.credential-rejected") },
+  { property: "TailnetConnection.state", member: "control-unreachable", key: "tailnetContract.connection.control-unreachable", render: () => tailnetState("connection") },
+  { property: "TailnetProvisioning.state", member: "rejected", key: "tailnetContract.provisioning.rejected", render: () => tailnetState("provisioning") },
+  { property: "TailnetHostPeer.state", member: "unknown", key: "tailnetContract.peer.unknown", render: () => tailnetState("peer") },
  {property:"ProxyOperation.state",member:"applied-unverified",key:"proxyContract.states.applied-unverified",render:()=>proxyMessage(false)},
  {property:"ProxyProblem.code",member:"logs-unavailable",key:"proxyContract.reasons.logs-unavailable",render:()=>proxyMessage(true)},
  {property:"ModulesModuleProblem.code",member:"module-on",key:"settings.modules.codes.module-on",render:()=>moduleError()},

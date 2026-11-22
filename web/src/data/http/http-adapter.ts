@@ -17,6 +17,8 @@ import { createInventoryOwner } from "./inventory-owner";
 import { freshFrom } from "../refresh-owner";
 import { vulnerabilityTransport } from "./vulnerability-transport";
 import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
+import { refFor } from "./operation-resource";
+import { createTailnet } from "./tailnet";
 import { createUpdateSettings } from "./update-settings";
 import { createStackUpdates } from "./stack-updates";
 import { createImageCommands } from "./image-commands";
@@ -208,16 +210,6 @@ export interface HttpAdapterOptions {
   uploadFactory?: () => XMLHttpRequest;
 }
 
-function refFor(operationId: string, args: readonly unknown[]): ResourceRef {
-  const id = typeof args[0] === "string" ? args[0] : "";
-  if (!id) return HUB_REF;
-  if (/Stack|Service/.test(operationId)) return { kind: "stack", id };
-  if (/Container/.test(operationId)) return { kind: "container", id };
-  if (/Volume|File|Backup/.test(operationId)) return { kind: "volume", id };
-  if (/Host|Agent/.test(operationId)) return { kind: "host", id };
-  return HUB_REF;
-}
-
 function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
   if (error instanceof AdapterOutcomeError) return error;
   const envelope = error && typeof error === "object" ? error as Record<string, unknown> : {};
@@ -270,6 +262,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let principal: CurrentUser | undefined;
   let identityGeneration = 0;
   let lifetimeGeneration = 0;
+  const tailnet = createTailnet(baseUrl, client, () => identityGeneration);
   // Aborted when another identity takes over, so a pending or retried owner write never runs as the next user.
   let ownedWrites = new AbortController();
   const identityListeners = new Set<() => void>();
@@ -329,6 +322,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function suspendIdentity(retain = false, nextActive = false) {
     if (!nextActive) hubSession.unauthorized();
     ++identityGeneration;
+    tailnet.clear();
     inventoryOwner.reset(); navState.reset();
     backups.invalidate();
     events.identityChanged(); dashboardEvents.identityChanged();
@@ -622,9 +616,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return;
     }
     if (envelope.channel === "environments") {
+      const status = envelope.environment?.tailnet;
+      if (status && !tailnet.observe(status)) return;
+      if (!status && tailnet.api.current()?.enabled) void tailnet.api.status().catch(() => {});
       const rows = envelope.environment?.environments;
       // The read policy sees the new catalogue before any invalidation dispatches a read.
-      if (Array.isArray(rows)) { hostPolicy.applyStream(rows); navState.observe(rows); }
+      if (Array.isArray(rows)) { tailnet.observeHosts(rows); hostPolicy.applyStream(rows); navState.observe(rows); }
       invalidateCapabilities();
       invalidateEnvironments();
       const next = Array.isArray(rows) ? environmentKey(rows) : undefined;
@@ -656,6 +653,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     opened.onopen = () => {
       if (source !== opened || version !== identityGeneration) return;
       sourceOpen = true;
+      if (streamOpened) void tailnet.reconnect().catch(() => {});
       lastEventId = undefined;
       refreshSubscribed(true);
       streamOpened = true;
@@ -728,7 +726,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     const rows = await environments();
     if (version !== identityGeneration) throw new CancelledError();
     try {
-      const hosts = rows.map((row) => ({ ...mapHost(principal?.isAdmin === false ? { ...row, apiUrl: "", enabled: true } : row), inventory: observations.get(row.id) }));
+      const hosts = rows.map((row) => ({ ...mapHost(tailnet.project(principal?.isAdmin === false ? { ...row, apiUrl: "", enabled: true } : row)), inventory: observations.get(row.id) }));
       // A catalogue from before a later stream frame does not replace the state that frame compared against.
       if (catalogue === catalogueVersion) { environmentState = environmentKey(rows); navState.observe(rows); }
       return hosts;
@@ -832,6 +830,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     releaseRuntimeRun: runtime.releaseRuntimeRun,
     ...authoring,
     ...createContainerOrigin({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); invalidateCapabilities(); changeListeners.forEach((listener) => listener(["containers", "stacks"])); } }),
+    tailnet: tailnet.api,
     ...createSettingsCore(baseUrl, client),
  ...createModulesApi(baseUrl, client),
     ...createUpdateSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),

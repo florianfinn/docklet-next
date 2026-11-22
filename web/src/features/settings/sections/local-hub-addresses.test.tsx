@@ -15,7 +15,7 @@ import type { Host } from "@/domain/model";
 import { agentHubUrl, notificationBaseUrl } from "@/domain/settings";
 import { existingHostPlan } from "@/features/hosts/existing-host-plan";
 import SetupPage from "@/features/setup/SetupPage";
-import { restartSetup, setupStore } from "@/features/setup/setup-draft";
+import { restartSetup, setupStore, SETUP_STEPS } from "@/features/setup/setup-draft";
 import { renderRoutes } from "@/test/render";
 
 import { GeneralSection } from "./GeneralSection";
@@ -152,6 +152,7 @@ it("B16/B17 hydrates setup without writes, separates candidate fields and shows 
   await userEvent.clear(input("Domain"));
   await userEvent.type(input("Domain"), "hub.example.com:3552");
   for (let i = 0; i < 3; i++) await userEvent.click(screen.getByRole("button", { name: "Weiter" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Überspringen" }));
   await userEvent.click(screen.getByRole("button", { name: "Einrichtung abschließen" }));
   await waitFor(() => expect(h.writes).toHaveLength(1));
   expect([h.writes[0]?.hubAddress, h.writes[0]?.domainUrl]).toEqual(["192.0.2.10:3552", "https://hub.example.com:3552"]);
@@ -189,7 +190,7 @@ it("keeps an IP edit made during an unrelated save subject to validation", async
 
 it("revalidates the IP when finishing directly from the setup review", async () => {
   const h = hub();
-  setupStore.set((d) => ({ ...d, reached: 4 }));
+  setupStore.set((d) => ({ ...d, reached: SETUP_STEPS.length - 1 }));
   renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup?step=review"], h.adapter);
   await userEvent.click(await screen.findByRole("button", { name: "Einrichtung abschließen" }));
   await screen.findByLabelText("IP-Adresse");

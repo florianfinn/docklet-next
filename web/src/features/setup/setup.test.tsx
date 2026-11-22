@@ -53,6 +53,7 @@ describe("first-run setup", () => {
     expect(screen.getByRole("switch", { name: "Proxy" }).getAttribute("aria-checked")).toBe("true");
     await next();
 
+    await userEvent.click(await screen.findByRole("button", { name: "Überspringen" }));
     await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Hub" }));
     expect((screen.getByLabelText("IP-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080");
     expect(screen.getByText(/Links zeigen auf http:\/\/192\.0\.2\.10:8080/) !== null).toBe(true);

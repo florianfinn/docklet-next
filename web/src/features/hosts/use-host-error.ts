@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original host outcome localization. M14 host maintenance and availability.
 
+import { TAILNET_CODE_KEYS } from "@/data/wire-catalogue-tailnet";
+import { wireKey } from "@/data/wire-catalogue";
 import { useTranslations } from "use-intl";
 
 import { operationReasonKey } from "@/data/operation-reason";
@@ -12,12 +14,15 @@ import { AdapterOutcomeError } from "@/data/capability";
 
 /** Technical outcomes never become user-facing host error text. */
 export function useHostError() {
+  const all = useTranslations();
   const operation = useTranslations("containers.operationReasons");
   const t = useTranslations("hosts.errors");
   const capability = useTranslations("activity.capability");
   return (error: unknown): string => {
     if (error instanceof AdapterOutcomeError) {
       const outcome = error.outcome;
+      const tailnet = wireKey(TAILNET_CODE_KEYS, outcome.kind === "not-available" ? outcome.reasonCode : outcome.code);
+      if (tailnet) return all(tailnet);
       const specific = operationReasonKey(outcome.kind === "not-available" ? outcome.reasonCode : outcome.code);
       if (specific && !["agent.unavailable", "agent.invalid-token", "agent.update-required", "agent.ui-configuration-disabled", "host.unreachable"].includes(outcome.kind === "not-available" ? outcome.reasonCode : outcome.code)) return operation(specific);
       if (outcome.kind === "not-available") return capability(outcome.reasonCode === "capability.mapping-unavailable" ? "mappingUnavailable" : "unavailable");

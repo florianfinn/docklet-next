@@ -4,7 +4,7 @@ import type { AuthSettings, GeneralSettings, HostDefaults } from "@/domain/setti
 import type { PasswordDraft } from "@/features/settings/field-rules";
 import { createStore, useStore } from "@/shared/lib/store";
 
-export const SETUP_STEPS = ["access", "hub", "projects", "modules", "review"] as const;
+export const SETUP_STEPS = ["access", "hub", "projects", "modules", "tailnet", "review"] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];
 
 /** Where the internal hub address came from; discovery never replaces a manual value. */

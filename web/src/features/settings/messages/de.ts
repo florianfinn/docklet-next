@@ -86,6 +86,7 @@ export const deSettings: typeof enSettings = {
   navLabel: "Bereiche der Hub-Einstellungen",
   groups: { hub: "Hub", operations: "Betrieb", system: "System" },
   sections: {
+    connections: "Verbindungen",
  modules: "Module",
     general: "Allgemein",
     appearance: "Darstellung",

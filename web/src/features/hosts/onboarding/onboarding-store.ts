@@ -5,6 +5,9 @@ export interface HostDraft {
   name: string;
   color: string;
   connection: HostConnection;
+  route?: import("@/domain/tailnet").NetworkRoute;
+  tailnetAuthKey?: string;
+  tailnetManagerUrl?: string;
   address: string;
   port: string;
   projectDir: string;

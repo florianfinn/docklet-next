@@ -1,3 +1,6 @@
+import { identityLifetime } from "@/data/identity-lifetime";
+import { useTailnet } from "@/data/use-tailnet";
+import { tailnetRouteReason } from "@/domain/tailnet";
 import { ArrowLeft, ArrowRight, Lock, Server, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -31,10 +34,16 @@ export default function OnboardingPage() {
 
 function OnboardingFlow() {
   const t = useTranslations("hosts.onboarding");
+  const tn = useTranslations("connections");
   const settings = useConnectedSettings();
+  const tailnet = useTailnet();
+  const tailnetSettings = useQuery({ queryKey: ["tailnet-settings"], queryFn: () => tailnet.api!.settings(), enabled: !!tailnet.api, retry: false });
   const adapter = useAdapter();
   const discovery = useQuery({ queryKey: ["hub", "discovery"], queryFn: () => adapter.discoverHub(), enabled: adapter.kind === "http" });
-  useEffect(() => () => onboardingStore.set(null), []);
+  useEffect(() => {
+    const stop = identityLifetime(adapter).listen(() => onboardingStore.set(null));
+    return () => { stop(); onboardingStore.set(null); };
+  }, [adapter]);
   const hosts = useHostScope();
   const cmd = useHostCommands();
   const draft = useOnboardingDraft();
@@ -53,18 +62,20 @@ function OnboardingFlow() {
   const index = Math.min(Math.max(0, ONBOARDING_STEPS.indexOf(requested ?? "connection")), reached);
   const step = ONBOARDING_STEPS[index] ?? "connection";
   const locked = !!draft?.hostId;
+  const missingTailnetInstaller = locked && draft?.route === "tailnet" && (!draft.tailnetAuthKey || !draft.tailnetManagerUrl);
   const registered = hosts.all.find((h) => h.id === draft?.hostId);
   const taken = useMemo(() => hosts.all.filter((h) => h.id !== draft?.hostId).map((h) => h.name), [hosts.all, draft?.hostId]);
   const errors = draft ? validateStep(step, draft, taken) : {};
   const general = settings.data?.general;
-  const plan = draft && general ? planFromDraft(draft, draft.hubUrl ?? defaultAgentHubUrl(general, discovery.data), general.timeZone) : undefined;
+  const tailnetBlocked = draft?.connection === "edge" && draft.route === "tailnet" && (!!tailnetRouteReason(tailnet.status) || !tailnetSettings.data || tailnetSettings.data.customControl || tailnet.status?.mode === "manual" && !draft.tailnetAuthKey?.trim());
+  const plan = draft && general ? planFromDraft(draft, draft.route === "tailnet" && tailnet.status?.hubAddress ? `http://${tailnet.status.hubAddress}:3552` : draft.hubUrl ?? defaultAgentHubUrl(general, discovery.data), general.timeZone) : undefined;
 
   if (plan && discovery.data?.agentImage) plan.image = discovery.data.agentImage;
 
   const go = (next: OnboardingStep) => setParams({ step: next });
 
   const onNext = async () => {
-    if (!draft || !plan) return;
+    if (!draft || !plan || !locked && tailnetBlocked) return;
     if (!locked && Object.keys(errors).length) {
       setAttempted((a) => [...new Set([...a, step])]);
       return;
@@ -75,6 +86,7 @@ function OnboardingFlow() {
         name: draft.name.trim(),
         color: draft.color,
         connection: draft.connection,
+        ...(draft.connection === "edge" ? { route: draft.route ?? "lan", ...(draft.route === "tailnet" && tailnet.status?.mode === "manual" ? { tailnetAuthKey: draft.tailnetAuthKey?.trim() } : {}) } : {}),
         address: `${draft.address.trim()}:${draft.port}`,
         projectDir: plan.projectDir,
         installDir: plan.installDir,
@@ -83,7 +95,7 @@ function OnboardingFlow() {
       });
       setBusy(false);
       if (!registration) return;
-      patchDraft({ hostId: registration.host.id, token: registration.token, hubUrl: plan.hubUrl });
+      patchDraft({ hostId: registration.host.id, token: registration.token, hubUrl: registration.tailnetManagerUrl ?? plan.hubUrl, ...(registration.tailnetAuthKey ? { tailnetAuthKey: registration.tailnetAuthKey, tailnetManagerUrl: registration.tailnetManagerUrl } : {}) });
     }
     const nextIndex = index + 1;
     patchDraft({ reached: Math.max(reached, nextIndex) });
@@ -144,7 +156,7 @@ function OnboardingFlow() {
               )}
               {step === "connection" && <ConnectionStep draft={draft} errors={errors} showErrors={attempted.includes(step)} hubUrl={plan.hubUrl} candidates={discovery.data?.candidates} locked={locked} />}
               {step === "directories" && <DirectoriesStep draft={draft} errors={errors} showErrors={attempted.includes(step)} locked={locked} />}
-              {step === "install" && <InstallStep draft={draft} plan={plan} />}
+              {step === "install" && (missingTailnetInstaller ? <Alert variant="destructive"><AlertDescription>{tn("installerUnavailable")}</AlertDescription></Alert> : <InstallStep draft={draft} plan={plan} />)}
               {step === "connect" && <ConnectStep draft={draft} host={registered} hubUrl={plan.hubUrl} />}
             </div>
             <footer className="flex flex-wrap items-center gap-2 border-t bg-muted/20 px-5 py-3">
@@ -159,7 +171,7 @@ function OnboardingFlow() {
                 </span>
               )}
               {step !== "connect" && (
-                <Button onClick={() => void onNext()} disabled={busy || (step === "install" && !draft.token)}>
+                <Button onClick={() => void onNext()} disabled={busy || !!missingTailnetInstaller || !locked && !!tailnetBlocked || (step === "install" && !draft.token)}>
                   {busy ? <Spinner data-icon="inline-start" /> : null}
                   {step === "directories" && !locked ? (busy ? t("registering") : t("register")) : t("next")}
                   {!busy && <ArrowRight data-icon="inline-end" />}

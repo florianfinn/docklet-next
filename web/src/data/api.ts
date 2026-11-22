@@ -109,6 +109,8 @@ export function errorCode(e: unknown): AdapterErrorCode | undefined {
 }
 
 export interface RegisterHostInput {
+  route?: import("@/domain/tailnet").NetworkRoute;
+  tailnetAuthKey?: string;
   name: string;
   color: string;
   connection: HostConnection;
@@ -134,7 +136,7 @@ export interface HostsApi {
   /** Restarts the host's own agent container and returns the action id. */
   restartAgent(hostId: string): Promise<string>;
   /** Registers a host that waits for its agent (status "pending"). */
-  registerHost(input: RegisterHostInput): Promise<{ host: Host; token: string }>;
+  registerHost(input: RegisterHostInput): Promise<{ host: Host; token: string; tailnetAuthKey?: string; tailnetManagerUrl?: string }>;
   /** Connects the agent and returns the connection run's action id. */
   connectHost(hostId: string): Promise<string | HostCheckResult>;
   removeHost(hostId: string): Promise<void>;

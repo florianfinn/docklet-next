@@ -33,13 +33,14 @@ interface ConfirmDialogProps {
   onDetached?: (result: unknown) => void;
   formatError?: (error: unknown) => string;
   destructive?: boolean;
+  contentClassName?: string;
   children?: ReactNode;
 }
 
 const isPromise = (v: unknown): v is Promise<unknown> => !!v && typeof (v as Promise<unknown>).then === "function";
 
 /** Confirmation for destructive or draft-discarding actions; Escape and Cancel keep everything. */
-export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm, onDetached, formatError, destructive, children }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm, onDetached, formatError, destructive, children, contentClassName }: ConfirmDialogProps) {
   const t = useTranslations("common.actions");
   const feedback = useDialogCommand(open, title, formatError);
   const [pending, setPending] = useState(false);
@@ -81,7 +82,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
 
   return (
     <AlertDialog open={open} onOpenChange={change}>
-      <AlertDialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-y-auto" onEscapeKeyDown={(e) => inFlight.current && e.preventDefault()} aria-busy={pending || undefined}>
+      <AlertDialogContent {...feedback.bindings} className={cn("max-h-[calc(100dvh-2rem)] overflow-y-auto", contentClassName)} onEscapeKeyDown={(e) => inFlight.current && e.preventDefault()} aria-busy={pending || undefined}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>

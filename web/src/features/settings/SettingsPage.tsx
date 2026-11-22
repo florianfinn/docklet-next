@@ -1,6 +1,8 @@
+import { ConnectionsSection } from "@/features/connections/ConnectionsSection";
+import { usePrincipal } from "@/data/use-principal";
 import { ModulesSection } from "./sections/ModulesSection";
 import { IDS } from "./settings-sections";
-import { Archive, BellRing, HardDrive, HeartPulse, History, Info, KeyRound, LayoutGrid, Palette, RefreshCw, Settings2, ShieldAlert } from "lucide-react";
+import { Network, Archive, BellRing, HardDrive, HeartPulse, History, Info, KeyRound, LayoutGrid, Palette, RefreshCw, Settings2, ShieldAlert } from "lucide-react";
 import { NavLink, Navigate, useNavigate, useParams } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -29,7 +31,7 @@ import { UpdatesSection } from "./sections/UpdatesSection";
 
 const GROUPS = [
   { key: "hub", items: [{ id: "modules", icon: LayoutGrid }, { id: "general", icon: Settings2 }, { id: "appearance", icon: Palette }, { id: "help", icon: Info }, { id: "auth", icon: KeyRound }] },
-  { key: "operations", items: [{ id: "hosts", icon: HardDrive }, { id: "updates", icon: RefreshCw }, { id: "backups", icon: Archive }, { id: "notifications", icon: BellRing }, { id: "autoHeal", icon: HeartPulse }, { id: "serviceWidgets", icon: LayoutGrid }] },
+  { key: "operations", items: [{ id: "hosts", icon: HardDrive }, { id: "connections", icon: Network }, { id: "updates", icon: RefreshCw }, { id: "backups", icon: Archive }, { id: "notifications", icon: BellRing }, { id: "autoHeal", icon: HeartPulse }, { id: "serviceWidgets", icon: LayoutGrid }] },
   { key: "system", items: [{ id: "security", icon: ShieldAlert }, { id: "activity", icon: History }] },
 ] as const;
 
@@ -42,6 +44,9 @@ export default function SettingsPage() {
   const t = useTranslations("settings");
   const tHub = useTranslations("common.hubUpdate");
   const adapter = useAdapter();
+  const principal = usePrincipal();
+  const admin = principal.data?.isAdmin === true;
+  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter((item) => item.id !== "connections" || admin) }));
   const hubVersion = useHubVersionHint();
   const validSection = !!section && (IDS as readonly string[]).includes(section);
   const id = validSection ? section as SectionId : "general";
@@ -50,11 +55,12 @@ export default function SettingsPage() {
   const liveScans = adapter.kind === "http" && id === "security";
   const liveBackups = id === "backups";
   // Notification targets and Auto Heal have no hub-settings draft; both adapters serve them directly.
-  const own = id === "modules" || id === "notifications" || id === "autoHeal" || id === "serviceWidgets";
+  const own = id === "connections" || id === "modules" || id === "notifications" || id === "autoHeal" || id === "serviceWidgets";
   const liveUpdates = adapter.kind === "http" && id === "updates";
   const settings = useSettings(!liveHosts && !liveScans && !liveUpdates && !liveBackups && !own && !connected && id !== "appearance" && id !== "help");
   const hub = useConnectedSettings(connected && id !== "auth");
   const s = settings.data;
+  if (id === "connections" && principal.data && !admin) return <Navigate to="/settings/general" replace />;
   if (!validSection) return <Navigate to="/settings/general" replace />;
   const personal = id === "appearance" || id === "help";
 
@@ -70,7 +76,7 @@ export default function SettingsPage() {
               <SelectTrigger aria-label={t("navLabel")} className="w-full" data-testid="settings-section-picker"><SelectValue /></SelectTrigger>
               {/* Popper keeps the full list below the trigger; item-aligned shrinks it for lower sections. */}
               <SelectContent position="popper">
-                {GROUPS.map((g) => (
+                {groups.map((g) => (
                   <SelectGroup key={g.key}>
                     <SelectLabel>{t(`groups.${g.key}`)}</SelectLabel>
                     {g.items.map(({ id: item, icon: Icon }) => (
@@ -86,7 +92,7 @@ export default function SettingsPage() {
             </Select>
           </div>
           <div className="hidden lg:flex lg:flex-col lg:gap-4" data-testid="settings-section-list">
-            {GROUPS.map((g) => (
+            {groups.map((g) => (
               <div key={g.key} className="flex flex-col items-stretch gap-1">
                 <div className="px-2.5 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{t(`groups.${g.key}`)}</div>
                 {g.items.map(({ id: item, icon: Icon }) => (
@@ -105,7 +111,7 @@ export default function SettingsPage() {
           </div>
         </nav>
         <div key={id} className="min-w-0">
-          {id === "modules" ? <ModulesSection /> : id === "appearance" ? (
+          {id === "connections" ? <ConnectionsSection /> : id === "modules" ? <ModulesSection /> : id === "appearance" ? (
             <div className="flex flex-col gap-5">
               <AppearanceSection />
               <div className="rounded-xl border bg-card p-6">

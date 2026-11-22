@@ -13,6 +13,7 @@ export function existingHostDefaults(host: Host, defaults: HostDefaults): HostDe
   return { ...defaults, projectDir: host.projectDir || defaults.projectDir, installDir: host.installDir || defaults.installDir, puid: host.fileOwner ? String(host.fileOwner.uid) : defaults.puid, pgid: host.fileOwner ? String(host.fileOwner.gid) : defaults.pgid };
 }
 export function existingHostPlan(host: Host, defaults: HostDefaults, general: GeneralSettings, token = TOKEN_PLACEHOLDER, image?: string): AgentInstallPlan {
+  if (host.networkRoute === "tailnet") throw new Error("hosts.tailnet-key-unavailable");
   let address = "", port = AGENT_PORT;
   if (host.connection === "direct") {
     const url = new URL(host.address.includes("://") ? host.address : `http://${host.address}`);

@@ -85,6 +85,7 @@ export const enSettings = {
   navLabel: "Hub settings sections",
   groups: { hub: "Hub", operations: "Operations", system: "System" },
   sections: {
+    connections: "Connections",
  modules: "Modules",
     general: "General",
     appearance: "Appearance",

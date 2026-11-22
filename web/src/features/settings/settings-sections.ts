@@ -4,4 +4,4 @@
 // License: Apache-2.0
 // Deviations: Original role-scoped command palette using existing query consumers. M19 web consumer integration; optional-module foundation (#472).
 
-export const IDS = ["modules", "general", "appearance", "help", "auth", "hosts", "updates", "backups", "notifications", "autoHeal", "serviceWidgets", "security", "activity"] as const;
+export const IDS = ["modules", "general", "appearance", "help", "auth", "hosts", "connections", "updates", "backups", "notifications", "autoHeal", "serviceWidgets", "security", "activity"] as const;

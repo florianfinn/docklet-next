@@ -52,6 +52,7 @@ function hub(opts: { settings?: Read; modules?: Read; blank?: boolean; discovery
 const page = (h: ReturnType<typeof hub>) => renderRoutes([{ path: "/setup", element: <SetupPage /> }], ["/setup"], h.adapter);
 async function finish(h: ReturnType<typeof hub>) {
   for (let i = 0; i < 3; i++) await userEvent.click(screen.getByRole("button", { name: "Weiter" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Überspringen" }));
   await userEvent.click(screen.getByRole("button", { name: "Einrichtung abschließen" }));
   await waitFor(() => expect(h.writes).toHaveLength(1));
   return h.writes[0] ?? {};

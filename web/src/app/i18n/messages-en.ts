@@ -1,3 +1,4 @@
+import { enConnections } from "@/features/connections/messages/en";
 import { enTailnetContract } from "@/data/messages/tailnet-en";
 import { enProxyContract } from "@/data/messages/proxy-en";
 import { enRegistries } from "@/features/registries/messages/en";
@@ -46,6 +47,7 @@ export const enMessages = {
   visual: enVisual,
   dashboard: enDashboard,
   proxyContract: enProxyContract,
+  connections: enConnections,
   tailnetContract: enTailnetContract,
   runMessages: enRunMessages,
   stacks: enStacks,

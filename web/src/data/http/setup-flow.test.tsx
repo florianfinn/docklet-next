@@ -61,6 +61,7 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   await next();
   expect(screen.getByRole("switch",{name:"Proxy"}).getAttribute("aria-checked")).toBe(String(target!=="/settings/general"));
   await next();
+  await userEvent.click(await screen.findByRole("button", { name: "Überspringen" }));
   await userEvent.click(await screen.findByRole("button", { name: "Einrichtung abschließen" }));
   if (fail) await waitFor(() => expect(errorToast).toHaveBeenCalledWith("Die Einrichtung konnte nicht gespeichert werden. Prüfe die Angaben und versuche es erneut."));
   else await waitFor(() => expect(settings.setupCompleted).toBe("true"));

@@ -1,3 +1,4 @@
+import { TailnetHeaderChip } from "@/features/connections/TailnetHosts";
 import { isHostAvailable } from "@/domain/hosts";
 import { Plus, Radio, Server, ServerCog, Unplug } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
@@ -35,14 +36,14 @@ export default function HostsPage() {
       <PageHeader
         title={t("title")}
         description={t("description")}
-        actions={create.available ? (
+        actions={<><TailnetHeaderChip />{create.available ? (
           <Button asChild className="group">
             <Link to="/hosts/new">
               <Plus data-icon="inline-start" className="transition-transform duration-(--dur) group-hover:rotate-90" />
               {t("add")}
             </Link>
           </Button>
-        ) : undefined}
+        ) : undefined}</>}
       />
       <StatStrip
         items={[

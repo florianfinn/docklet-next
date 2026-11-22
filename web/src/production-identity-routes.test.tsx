@@ -80,6 +80,7 @@ it("claims a pending hub, runs first setup, connected settings and profile on pr
   await userEvent.click(screen.getByRole("button", { name: "Weiter" }));
   expect((await screen.findByRole("switch",{name:"Proxy"})).getAttribute("aria-checked")).toBe("false");
   await userEvent.click(screen.getByRole("button",{name:"Weiter"}));
+  await userEvent.click(await screen.findByRole("button", { name: "Überspringen" }));
   await userEvent.click(await screen.findByRole("button", { name: "Einrichtung abschließen" }));
   await waitFor(() => expect(settings.setupCompleted).toBe("true"));
   await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"), { timeout: 5_000 });

@@ -1,3 +1,4 @@
+import { TailnetConnection } from "@/features/connections/TailnetConnection";
 import { discoveryAppUrl } from "@/domain/hub-discovery";
 import { normalizeDomainUrl } from "@/domain/validation";
 import { MODULES } from "@/domain/modules";
@@ -57,6 +58,7 @@ function ReviewBlock({ title, onEdit, rows }: { title: string; onEdit?: () => vo
  */
 export default function SetupPage() {
   const t = useTranslations("setup");
+  const tn = useTranslations("connections");
   const tr = useTranslations("setup.review");
   const tm = useTranslations("settings.modules");
   const commandError = useCommandError();
@@ -96,7 +98,7 @@ export default function SetupPage() {
   const requested = params.get("step") as SetupStep | null;
   const index = Math.min(Math.max(0, SETUP_STEPS.indexOf(requested ?? (connected ? "hub" : "access"))), reached);
   const step = SETUP_STEPS[index] ?? "hub";
-  const errorCount = { access: connected ? [] : Object.values(authErr), hub: [general.hubName, general.hubAddress, general.domainUrl], projects: Object.values(hostErr), modules: [], review: [] }[step].filter(Boolean).length;
+  const errorCount = { access: connected ? [] : Object.values(authErr), hub: [general.hubName, general.hubAddress, general.domainUrl], projects: Object.values(hostErr), modules: [], tailnet: [], review: [] }[step].filter(Boolean).length;
   const go = (s: SetupStep) => setParams({ step: s });
 
   const next = async () => {
@@ -154,7 +156,7 @@ export default function SetupPage() {
   }
 
   const show = attempted.includes(step);
-  const leads: Partial<Record<SetupStep, string>> = { access: t(connected ? "accessLeadConnected" : "authLead"), hub: t("hubLead"), projects: t("projectsLead"), modules: tm("lead"), review: t("reviewLead") };
+  const leads: Partial<Record<SetupStep, string>> = { access: t(connected ? "accessLeadConnected" : "authLead"), hub: t("hubLead"), projects: t("projectsLead"), modules: tm("lead"), tailnet: tn("optionalLead"), review: t("reviewLead") };
   const signedIn = currentUser.data;
   const accessRows: [string, string][] = connected
     ? [[tr("mode"), mode.data ? tr(`modes.${mode.data}`) : "…"], [tr("user"), signedIn?.username ?? "…"]]
@@ -199,6 +201,7 @@ export default function SetupPage() {
               <p className="text-xs text-muted-foreground">{t("projectsNote")}</p>
             </>
           )}
+          {step === "tailnet" && <TailnetConnection setup onContinue={() => void next()} onSkip={() => void next()} />}
           {step === "modules" && <ModuleChoicesFields value={draft.modules} onChange={(modules) => patchSetup({ modules })} />}
           {step === "review" && (
             <div className="flex flex-col gap-3">
@@ -251,11 +254,11 @@ export default function SetupPage() {
               {t("fixErrors", { count: errorCount })}
             </span>
           )}
-          <Button onClick={() => void next()} disabled={busy}>
+          {step !== "tailnet" && <Button onClick={() => void next()} disabled={busy}>
             {busy && <Spinner data-icon="inline-start" />}
             {step === "review" ? (busy ? t("finishing") : t("finish")) : t("next")}
             {!busy && step !== "review" && <ArrowRight data-icon="inline-end" />}
-          </Button>
+          </Button>}
         </footer>
       </Card>
     </SetupFrame>

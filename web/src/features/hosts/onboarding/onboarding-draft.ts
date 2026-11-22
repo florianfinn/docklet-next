@@ -1,4 +1,5 @@
 import type { AgentInstallPlan } from "@/domain/agent-install";
+import { tailnetHostname } from "@/domain/agent-install";
 import { AGENT_PORT } from "@/domain/agent-install";
 import type { HostDefaults } from "@/domain/settings";
 import { absolutePath, hostAddress, hostName, installDirProblem, normalizePath, optionalId, port, type InstallDirProblem, type ValidationKey } from "@/domain/validation";
@@ -79,7 +80,8 @@ export function planFromDraft(d: HostDraft, hubUrl: string, timeZone: string): A
     connection: d.connection,
     address: d.address.trim(),
     port: Number(d.port) || AGENT_PORT,
-    hubUrl,
+    hubUrl: d.route === "tailnet" ? d.tailnetManagerUrl ?? hubUrl : hubUrl,
+    ...(d.connection === "edge" && d.route === "tailnet" && d.tailnetAuthKey ? { tailnet: { authKey: d.tailnetAuthKey, hostname: tailnetHostname(d.name) } } : {}),
     projectDir: normalizePath(d.projectDir),
     installDir: normalizePath(d.installDir),
     fileOwner: draftFileOwner(d),

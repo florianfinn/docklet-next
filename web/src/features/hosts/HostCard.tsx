@@ -1,3 +1,4 @@
+import { TailnetBadge, TailnetHostCause, TailnetStatusTooltip } from "@/features/connections/TailnetHosts";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { Bot, Cable, Eye, FileArchive, Filter, PlugZap, Settings2, Trash2, Unplug } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -76,6 +77,7 @@ interface HostCardProps {
 /** One host with connection, directories, file IDs and actions; filter state stays visible. */
 export function HostCard({ host, system, stacks, containers, allIds, onFiles }: HostCardProps) {
   const t = useTranslations("hosts");
+  const tn = useTranslations("connections");
   const tc = useTranslations("common.host");
   const dt = useAdapterText();
   // The hub's own Docker (environment "0") has no agent to report or connect.
@@ -102,11 +104,12 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       <header className="flex flex-wrap items-center gap-2">
         <span className="size-3 rounded-[4px] bg-(--host)" aria-hidden />
         <h2 className="text-lg font-semibold tracking-tight">{host.name}</h2>
-        <ToneBadge tone={hostTone(host)}>
+        <TailnetStatusTooltip host={host}><ToneBadge tone={hostTone(host)}>
           <ToneDot tone={hostTone(host)} pulse={host.status !== "online"} className="size-1.5" />
           {tc(host.status)}
-        </ToneBadge>
+        </ToneBadge></TailnetStatusTooltip>
         <ToneBadge tone={host.connection === "edge" ? "info" : "accent"}>{t(`mode.${host.connection}`)}</ToneBadge>
+        {host.networkRoute === "tailnet" && <TailnetBadge />}
         {host.demoAdded && <ToneBadge tone="violet">{t("card.demoAdded")}</ToneBadge>}
         <span className="flex-1" />
         <Tooltip>
@@ -128,9 +131,9 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
         )}
       </header>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-        <Row label={t("card.connection")}>{t(local ? "mode.localLong" : `mode.${host.connection}Long`)}</Row>
+        <Row label={t("card.connection")}>{host.networkRoute === "tailnet" ? tn("tailnet") : t(local ? "mode.localLong" : `mode.${host.connection}Long`)}</Row>
         <Row label={t("card.address")} mono>
-          {dt(host.address) || t(host.connection === "edge" ? "card.addressNotRequired" : "card.addressNotConfigured")}
+          {host.networkRoute === "tailnet" ? tn("routeHint") : dt(host.address) || t(host.connection === "edge" ? "card.addressNotRequired" : "card.addressNotConfigured")}
         </Row>
         <Row label={t("card.projectDir")} mono>
           {host.projectDir || t("card.unavailable")}
@@ -147,8 +150,9 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
           {[host.agentVersion === "dev" ? t("card.development") : host.agentVersion, host.dockerVersion].filter(Boolean).join(" / ") || t("card.unavailable")}
         </Row>
         <Row label={t("card.system")}>{host.os || t("card.unavailable")}</Row>
-        <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : host.lastSeen ? formatRelative(host.lastSeen) : t("card.neverContacted")}</Row>
+        <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : host.lastSeen ? formatRelative(host.lastSeen) : t("card.neverContacted")}{host.tailnet && ["direct", "relay", "idle"].includes(host.tailnet.path) && <> · {tn(`path.${host.tailnet.path as "direct" | "relay" | "idle"}`)}</>}</Row>
       </dl>
+      <TailnetHostCause host={host} />
       {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
       {!local && <AgentReportSection host={host} />}
       {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents" resourceRef={{ kind: "host", id: host.id }}><SystemSection component={system} /></CapabilityGate>}
@@ -172,7 +176,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
           </BusyButton>
         )}
         <RotateTokenButton host={host} />
-        {onFiles && host.id !== "0" && <Button size="sm" variant="outline" onClick={() => onFiles(host)}>
+        {onFiles && host.networkRoute !== "tailnet" && host.id !== "0" && <Button size="sm" variant="outline" onClick={() => onFiles(host)}>
           <FileArchive data-icon="inline-start" />
           {t("card.files")}
         </Button>}

@@ -38,6 +38,7 @@ export const enSetup = {
   exit: "Leave preview",
   railLabel: "First-run setup steps",
   steps: {
+    tailnet: { title: "Private network (Tailscale)", description: "Optional · Tailscale" },
     access: { title: "Access", description: "Sign-in, administrator" },
     hub: { title: "Hub", description: "Name, address, time zone" },
     projects: { title: "Projects", description: "Directories and file IDs" },

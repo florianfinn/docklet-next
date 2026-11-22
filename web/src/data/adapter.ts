@@ -120,6 +120,7 @@ export interface RuntimeReleaseInput {
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
 export interface DockletAdapter extends VulnerabilityCandidatesApi, VulnerabilityAdvisoryApi, UpdatesApi, AuthApi, UsersApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi, HistoryApi, UiPreferencesApi, ServiceWidgetsApi {
+  readonly tailnet?: import("@/domain/tailnet").TailnetApi;
   readonly kind: "demo" | "http" | "disconnected";
   readonly hubUpdateSession?: import("./http/hub-update-session").HubUpdateSession;
   getHubVersionHint(signal?: AbortSignal): Promise<{ version?: string }>;

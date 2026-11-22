@@ -59,6 +59,8 @@ export interface InventoryObservation {
 }
 
 export interface Host {
+  networkRoute?: import("./tailnet").NetworkRoute;
+  tailnet?: import("./tailnet").TailnetPeer;
   inventory?: InventoryObservation;
   /** Inventory and system metadata have not been read; numeric fields are empty sentinels. */
   detailsUnavailable?: boolean;

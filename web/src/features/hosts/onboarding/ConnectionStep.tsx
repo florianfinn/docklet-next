@@ -1,3 +1,4 @@
+import { EdgeRoute } from "./EdgeRoute";
 import { ArrowDownLeft, ArrowUpRight, Check, ShieldAlert } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -49,7 +50,7 @@ export function ConnectionStep({ draft, errors, showErrors, hubUrl, candidates, 
           <ChoiceCards
             label={t("connectionLabel")}
             value={draft.connection}
-            onChange={(connection) => patchDraft({ connection })}
+            onChange={(connection) => patchDraft({ connection, route: undefined, tailnetAuthKey: undefined, tailnetManagerUrl: undefined })}
             options={[
               {
                 value: "direct",
@@ -63,12 +64,13 @@ export function ConnectionStep({ draft, errors, showErrors, hubUrl, candidates, 
           />
         </fieldset>
       </FieldSet>
+      {draft.connection === "edge" && <EdgeRoute draft={draft} locked={locked} candidates={candidates} />}
       {draft.connection === "direct" ? (
         <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
           <TextField id="host-address" label={t("address")} value={draft.address} onChange={(address) => patchDraft({ address })} placeholder={t("addressPlaceholder")} description={t("addressHint")} error={err("address")} mono disabled={locked} />
           <TextField id="host-port" label={t("port")} value={draft.port} onChange={(port) => patchDraft({ port })} error={err("port")} mono disabled={locked} />
         </div>
-      ) : (
+      ) : draft.route !== "tailnet" ? (
         <div className="rounded-xl border bg-card/40 p-3.5">
           <TextField id="host-hub-url" label={t("hubUrl")} value={hubUrl} onChange={(hubUrl) => patchDraft({ hubUrl })} error={err("hubUrl")} mono disabled={locked} />
           {candidates && <div className="mt-2 flex flex-col items-start gap-1" aria-label={t("hubCandidates")}>
@@ -83,12 +85,12 @@ export function ConnectionStep({ draft, errors, showErrors, hubUrl, candidates, 
             </Link>
           </p>
         </div>
-      )}
-      {(draft.connection === "direct" || hubUrl.startsWith("http://")) && <Alert className="border-warning/30 bg-warning/8"><ShieldAlert /><AlertDescription>{t("httpWarning")}</AlertDescription></Alert>}
-      <p className="flex items-start gap-2 text-xs text-muted-foreground">
+      ) : null}
+      {draft.route !== "tailnet" && (draft.connection === "direct" || hubUrl.startsWith("http://")) && <Alert className="border-warning/30 bg-warning/8"><ShieldAlert /><AlertDescription>{t("httpWarning")}</AlertDescription></Alert>}
+      {draft.route !== "tailnet" && <p className="flex items-start gap-2 text-xs text-muted-foreground">
         <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         {t("noWireguard")}
-      </p>
+      </p>}
     </FieldGroup>
   );
 }

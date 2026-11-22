@@ -1,3 +1,4 @@
+import { deConnections } from "@/features/connections/messages/de";
 import { deTailnetContract } from "@/data/messages/tailnet-de";
 import { deProxyContract } from "@/data/messages/proxy-de";
 import { deRegistries } from "@/features/registries/messages/de";
@@ -48,6 +49,7 @@ export const messages: typeof enMessages = {
   visual: deVisual,
   dashboard: deDashboard,
   proxyContract: deProxyContract,
+  connections: deConnections,
   tailnetContract: deTailnetContract,
   runMessages: deRunMessages,
   stacks: deStacks,

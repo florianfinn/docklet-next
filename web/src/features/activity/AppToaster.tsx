@@ -1,3 +1,4 @@
+import { TailnetNotifications } from "@/features/connections/TailnetNotifications";
 import { useTranslations } from "use-intl";
 
 import { useTokens } from "@/shared/theme/use-design-tokens";
@@ -14,7 +15,7 @@ export function AppToaster() {
   useNoticeLifetime();
   useToasterPointerFocus();
   return (
-    <Toaster
+    <><TailnetNotifications /><Toaster
       position="top-right"
       offset={TOAST_OFFSET}
       mobileOffset={TOAST_MOBILE_OFFSET}
@@ -23,6 +24,6 @@ export function AppToaster() {
       gap={10}
       customAriaLabel={t("region")}
       toastOptions={{ closeButtonAriaLabel: t("close") }}
-    />
+    /></>
   );
 }
