@@ -191,6 +191,10 @@ func (r *DeployReporter) ObservePull(image string, frame []byte) {
 	if message.Status == "Download complete" && layer.known {
 		layer.current = layer.total
 	}
+	if message.Status == "Already exists" && !layer.known {
+		// A cached layer transfers nothing; its zero bytes are known, so it cannot hide the other layers' sum.
+		layer.known, layer.current, layer.total = true, 0, 0
+	}
 	if message.Status == "Pull complete" || message.Status == "Already exists" {
 		layer.done = true
 		if layer.known {

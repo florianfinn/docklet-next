@@ -55,6 +55,20 @@ func TestDeployPullAggregation(t *testing.T) {
 	require.NotContains(t, patch["deployPull"], "bytesDone", "every observed layer must have a known total")
 }
 
+// Docker reports cached layers with "Already exists" and no detail; the download sum of the other layers stays visible.
+func TestDeployPullCachedLayerKeepsBytes(t *testing.T) {
+	var patch map[string]any
+	r := NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patch = p }, time.Now)
+	r.ObservePull("image", deployFrame("abcdef012345", "Already exists", ""))
+	r.ObservePull("image", deployFrame("abcdef012346", "Downloading", `{"current":4,"total":12}`))
+	r.Flush(true)
+	pull := patch["deployPull"].(map[string]any)
+	require.EqualValues(t, 4, pull["bytesDone"])
+	require.EqualValues(t, 12, pull["bytesTotal"])
+	require.Equal(t, 1, pull["layersDone"])
+	require.Equal(t, 2, pull["layersTotal"])
+}
+
 func TestDeployReporterBoundsAndThrottle(t *testing.T) {
 	now := time.Unix(100, 0)
 	var patches []map[string]any
