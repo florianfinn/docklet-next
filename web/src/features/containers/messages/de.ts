@@ -83,7 +83,8 @@ export const deContainers: typeof enContainers = {
   page: {
     back: "Alle Container",
     missing: "Container nicht gefunden",
-    stack: "Service {service} im Stack",
+    stack: "Service {service} im Stack {stack}",
+    stackUnnamed: "Service {service} im Stack",
     details: "Details",
     image: "Image anzeigen",
     logs: "Logs",

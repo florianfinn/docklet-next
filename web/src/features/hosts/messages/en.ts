@@ -78,6 +78,7 @@ export const enHosts = {
     edge: "Edge",
     directLong: "Direct – the hub connects to the agent",
     edgeLong: "Edge – the agent connects to the hub",
+    localLong: "Local – this hub''s own Docker",
   },
   rotation: {
     action: "Rotate token",

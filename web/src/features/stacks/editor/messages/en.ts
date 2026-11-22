@@ -24,7 +24,7 @@ export const enEditor = {
   unsaved: "Unsaved changes",
   workspace: "Compose workspace",
   wizard: "Guided draft",
-  easyNote: "Easy replaces the file workspace: a full-width form. File tree, raw editor and mounts are in Advanced; both edit the same draft.",
+  easyNote: "Easy and Advanced edit the same draft.",
   aside: {
     title: "Draft details",
     check: "Validation",

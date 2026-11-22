@@ -78,6 +78,8 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
   const t = useTranslations("hosts");
   const tc = useTranslations("common.host");
   const dt = useAdapterText();
+  // The hub's own Docker (environment "0") has no agent to report or connect.
+  const local = host.id === "0";
   const cmd = useHostCommands();
   const reconnect = useCapability("reconnectHost", { kind: "host", id: host.id });
   const connection = useCapability("connectHost", { kind: "host", id: host.id });
@@ -126,7 +128,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
         )}
       </header>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-        <Row label={t("card.connection")}>{t(`mode.${host.connection}Long`)}</Row>
+        <Row label={t("card.connection")}>{t(local ? "mode.localLong" : `mode.${host.connection}Long`)}</Row>
         <Row label={t("card.address")} mono>
           {dt(host.address) || t(host.connection === "edge" ? "card.addressNotRequired" : "card.addressNotConfigured")}
         </Row>
@@ -148,7 +150,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
         <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : host.lastSeen ? formatRelative(host.lastSeen) : t("card.neverContacted")}</Row>
       </dl>
       {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
-      <AgentReportSection host={host} />
+      {!local && <AgentReportSection host={host} />}
       {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents" resourceRef={{ kind: "host", id: host.id }}><SystemSection component={system} /></CapabilityGate>}
       <p className="text-xs text-muted-foreground">{stacks === undefined || containers === undefined ? t("card.usageUnknown") : t("card.usage", { stacks, containers })}</p>
       <footer className="flex flex-wrap gap-2 border-t pt-3">

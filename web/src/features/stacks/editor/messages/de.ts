@@ -25,7 +25,7 @@ export const deEditor: typeof enEditor = {
   unsaved: "Ungespeicherte Änderungen",
   workspace: "Compose-Arbeitsbereich",
   wizard: "Geführter Entwurf",
-  easyNote: "Easy ersetzt den Datei-Arbeitsbereich: Formular über die volle Breite. Dateibaum, Raw-Editor und Mounts gibt es in Advanced; beide bearbeiten denselben Entwurf.",
+  easyNote: "Easy und Advanced bearbeiten denselben Entwurf.",
   aside: {
     title: "Details zum Entwurf",
     check: "Prüfung",

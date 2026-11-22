@@ -83,7 +83,8 @@ export const enContainers = {
   page: {
     back: "All containers",
     missing: "Container not found",
-    stack: "Service {service} in stack",
+    stack: "Service {service} in stack {stack}",
+    stackUnnamed: "Service {service} in stack",
     details: "Details",
     image: "Show image",
     logs: "Logs",

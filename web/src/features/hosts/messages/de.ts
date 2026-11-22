@@ -79,6 +79,7 @@ export const deHosts: typeof enHosts = {
     edge: "Edge",
     directLong: "Direkt – der Hub verbindet sich zum Agent",
     edgeLong: "Edge – der Agent verbindet sich zum Hub",
+    localLong: "Lokal – der eigene Docker dieses Hubs",
   },
   rotation: {
     action: "Token rotieren",

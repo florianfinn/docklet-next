@@ -88,11 +88,6 @@ export function AppearanceSection() {
             className="self-start"
           />
         </Field>
-        <FieldSet>
-          <HelpLegend topic="settingsAppearance.palette">{ta("palette")}</HelpLegend>
-          <FieldDescription>{ta("paletteHint")}</FieldDescription>
-          <PaletteEditor value={draft.palette} onChange={(palette) => patch({ palette })} theme={draft.theme} idPrefix="ap" />
-        </FieldSet>
         <Field>
           <HelpLabel topic="settingsAppearance.density">{ta("density")}</HelpLabel>
           <SegmentedToggle value={draft.density} onChange={(density) => patch({ density })} label={ta("density")} options={(["compact", "comfortable", "spacious"] as const).map((d) => ({ value: d, label: ta(`densities.${d}`) }))} className="self-start" />
@@ -127,6 +122,11 @@ export function AppearanceSection() {
             </Field>
           ))}
         </div>
+        <FieldSet>
+          <HelpLegend topic="settingsAppearance.palette">{ta("palette")}</HelpLegend>
+          <FieldDescription>{ta("paletteHint")}</FieldDescription>
+          <PaletteEditor value={draft.palette} onChange={(palette) => patch({ palette })} theme={draft.theme} idPrefix="ap" />
+        </FieldSet>
       </FieldGroup>
     </SettingsForm>
   );

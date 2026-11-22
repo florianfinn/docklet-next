@@ -161,7 +161,7 @@ function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | un
             <HostChip host={host} />
             {c.stackId && (
               <Link to={`/stacks/${c.stackId}`} className="text-primary-text underline-offset-4 hover:underline">
-                {t("stack", { service: c.serviceName ?? c.name })}
+                {c.stackName ? t("stack", { service: c.serviceName ?? c.name, stack: c.stackName }) : t("stackUnnamed", { service: c.serviceName ?? c.name })}
               </Link>
             )}
           </span>

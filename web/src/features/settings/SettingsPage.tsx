@@ -59,7 +59,8 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader title={t("title")} description={t("description")} />
+      {/* Appearance and explanations are stored per user; every other section applies to the hub. */}
+      <PageHeader title={t("title")} description={t(id === "appearance" || id === "help" ? "personalDescription" : "description")} />
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <nav aria-label={t("navLabel")} className="min-w-0 lg:sticky lg:top-20">
           {/* Narrow screens: one grouped section picker; the sidebar list starts at lg. */}
