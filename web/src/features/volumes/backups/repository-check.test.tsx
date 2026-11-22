@@ -2,21 +2,46 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original repository check run kind, stage labels and validated result proof.
+// Deviations: Original repository check run kind, stage labels, validated result and consumer presentation proof.
 
-import { expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { IntlProvider } from "use-intl";
+import { afterEach, expect, it, vi } from "vitest";
 import { catalogs } from "@/app/i18n/catalog";
-import { setAppLocale } from "@/app/i18n/locale-store";
+import { setAppLocale, type AppLocale } from "@/app/i18n/locale-store";
+import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { mapActivityDetail } from "@/data/http/map-dto";
-import { renderRun } from "@/data/message-code";
+import produced from "@/data/http/testdata/repository-check-activity.json";
+import { renderRun, type CodedActionRun } from "@/data/message-code";
+import { RunFacts, RunStatusLine } from "@/features/activity/RunFocus";
+import { renderWithApp } from "@/test/render";
+import { BackupOperation } from "./BackupOperation";
 
 const at = "2026-11-22T10:00:00Z";
-const steps = ["connect", "save", "open", "check"].map((name, index) => ({ id: `s${index}`, name, status: "success" as const, startedAt: at, endedAt: at }));
+type Step = { id: string; name: string; status: "success" | "running" | "failed"; startedAt: string; endedAt?: string };
+const steps: Step[] = ["connect", "save", "open", "check"].map((name, index) => ({ id: `s${index}`, name, status: "success", startedAt: at, endedAt: at }));
+afterEach(() => setAppLocale("de"));
 
-function check(overrides: Record<string, unknown> = {}, activity: Record<string, unknown> = {}) {
+function freeze<T>(value: T): T {
+  if (value && typeof value === "object") { Object.values(value).forEach(freeze); Object.freeze(value); }
+  return value;
+}
+function check(overrides: Record<string, unknown> = {}, activity: Record<string, unknown> = {}, trace = steps) {
   const metadata = { action: "check_volume_backup_repository", targetId: "local", backupTargetId: "local", backupTargetCheck: { hostId: "0", setVersion: 1, configVersion: 0, activityId: "check-run", ok: true, snapshotCount: 3, at, ...overrides } };
-  const detail = { activity: { id: "check-run", type: "resource_action", environmentId: "0", status: "success", resourceType: "backup_target", resourceId: "local", resourceName: "local", startedAt: at, createdAt: at, metadata, ...activity }, messages: [], output: [], stepTrace: steps, outputTruncated: false };
-  return mapActivityDetail(Object.freeze(detail) as never);
+  const detail = { activity: { id: "check-run", type: "resource_action", environmentId: "0", status: "success", resourceType: "backup_target", resourceId: "local", resourceName: "local", startedAt: at, createdAt: at, metadata, ...activity }, messages: [], output: [], stepTrace: trace, outputTruncated: false };
+  return mapActivityDetail(freeze(detail) as never);
+}
+/** The hub relays an agent's activity under the agent's registered environment (activity handler source rewrite). */
+function relayed(shape: (typeof produced)["agent"], environmentId: string, target?: string) {
+  const activity = structuredClone(shape.activity) as Record<string, unknown> & { metadata: Record<string, unknown> };
+  activity.environmentId = environmentId;
+  activity.sourceEnvironmentId = environmentId;
+  if (target) {
+    Object.assign(activity, { resourceId: target, resourceName: target });
+    Object.assign(activity.metadata, { targetId: target, backupTargetId: target });
+  }
+  return mapActivityDetail(freeze({ ...structuredClone(shape), activity }) as never);
 }
 
 it("names a repository check by its own kind and stage labels in both locales", () => {
@@ -46,8 +71,68 @@ it("claims a snapshot count only for this run's successful check of its own targ
   }
 });
 
+it("binds the result to the run's host and a valid timestamp", () => {
+  // Producer bytes: a hub-local check and an agent check under its hub-assigned identity.
+  expect(mapActivityDetail(freeze(structuredClone(produced.hub)) as never).repositoryCheck).toEqual({ snapshotCount: 2 });
+  expect(relayed(produced.agent, "env-7").repositoryCheck).toEqual({ snapshotCount: 2 });
+  expect(relayed(produced.agent, "env-7", "archive").repositoryCheck).toEqual({ snapshotCount: 2 });
+  // An explicitly different registration never receives the count, also for a stored target.
+  expect(relayed(produced.agent, "env-8").repositoryCheck).toBeUndefined();
+  expect(relayed(produced.agent, "env-8", "archive").repositoryCheck).toBeUndefined();
+  // Before any target set arrived an agent records "0"; that fallback is valid only for its local target.
+  expect(check({}, { environmentId: "env-7" }).repositoryCheck).toEqual({ snapshotCount: 3 });
+  const stored = { resourceId: "archive", environmentId: "env-7", metadata: { action: "check_volume_backup_repository", targetId: "archive", backupTargetId: "archive", backupTargetCheck: { hostId: "0", activityId: "check-run", ok: true, snapshotCount: 3, at } } };
+  expect(check({}, stored).repositoryCheck).toBeUndefined();
+  expect(check({ hostId: "env-8" }, { environmentId: "env-7" }).repositoryCheck).toBeUndefined();
+  for (const value of [undefined, "", "yesterday", "2026-13-45T99:00:00Z", 1763805600000]) {
+    expect(check({ at: value }).repositoryCheck).toBeUndefined();
+  }
+  expect(produced.agent.activity.environmentId).toBe("0");
+});
+
 it("keeps ordinary backup runs on the backup kind", () => {
   const run = check({}, { metadata: { action: "create_volume_backup" } });
   expect(run.kind).toBe("backup");
   expect(run.repositoryCheck).toBeUndefined();
+});
+
+const running = (reached: number) => steps.slice(0, reached).map((step, index) => ({ ...step, status: index === reached - 1 ? "running" as const : "success" as const, endedAt: index === reached - 1 ? undefined : at }));
+const failing = (reached: number) => steps.slice(0, reached).map((step, index) => ({ ...step, status: index === reached - 1 ? "failed" as const : "success" as const }));
+function focus(run: CodedActionRun, locale: AppLocale) {
+  setAppLocale(locale);
+  const rendered = renderRun(run, locale);
+  const view = render(<IntlProvider locale={locale} messages={catalogs[locale]}><MemoryRouter><RunStatusLine run={rendered} /><RunFacts run={rendered} now={Date.parse(at)} /></MemoryRouter></IntlProvider>);
+  const result = { status: view.getByRole("status").textContent, progress: view.container.querySelector("[data-fact=progress] dd")?.textContent };
+  view.unmount();
+  return result;
+}
+
+it("shows the stage, failing stage or result in the run focus without a stage count", () => {
+  for (const locale of ["en-US", "de"] as const) {
+    const labels = catalogs[locale].volumes.backups.repositoryCheck.steps;
+    const failedAt = (label: string) => catalogs[locale].activity.failedAt.replace("{label}", label);
+    const result = locale === "de" ? "Repository geprüft · 3 Snapshots" : "Repository checked · 3 snapshots";
+    expect(focus(check({}, { status: "running", metadata: { action: "check_volume_backup_repository" } }, running(2)), locale)).toEqual({ status: labels.save, progress: labels.save });
+    expect(focus(check(), locale)).toEqual({ status: result, progress: result });
+    expect(focus(check({}, { status: "failed", error: "volume.backup.repository-check-failed" }, failing(4)), locale)).toEqual({ status: failedAt(labels.check), progress: failedAt(labels.check) });
+    // A success without a validated result claims nothing beyond the generic completion.
+    expect(focus(check({ hostId: "env-8" }), locale)).toEqual({ status: catalogs[locale].activity.dialog.result.succeeded, progress: "–" });
+  }
+});
+
+it("gives the operation line a stage, a failing stage or a terminal state instead of a percentage", async () => {
+  setAppLocale("de");
+  const labels = catalogs.de.volumes.backups.repositoryCheck.steps;
+  for (const [run, expected] of [
+    [check({}, { status: "running", metadata: { action: "check_volume_backup_repository" } }, running(3)), labels.open],
+    [check(), "Repository geprüft · 3 Snapshots"],
+    [check({}, { status: "failed" }, failing(2)), catalogs.de.activity.failedAt.replace("{label}", labels.save)],
+    [check({}, { status: "failed" }, []), catalogs.de.activity.status.failed],
+    [check({}, { status: "cancelled" }, []), catalogs.de.activity.status.cancelled],
+  ] as const) {
+    const adapter = { ...createDemoAdapter(), observeActionDetail: vi.fn((_host: string, _id: string, listener: (state: never) => void) => { listener({ status: "ready", run } as never); return () => {}; }) };
+    const view = renderWithApp(<BackupOperation hostId="0" activityId="check-run" />, adapter);
+    await waitFor(() => expect(screen.getByRole("status").querySelector("span")?.textContent).toBe(`${catalogs.de.volumes.backups.operation}: ${expected}`));
+    view.unmount();
+  }
 });

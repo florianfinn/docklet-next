@@ -15,6 +15,7 @@ import (
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/user"
+	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,10 +35,14 @@ func TestRepositoryCheckEngineStagesStopAtTheFailingOperation(t *testing.T) {
 		{"witnessed empty repository", true, 0, []string{"init", "open", "check"}},
 		{"wrong key on existing repository", false, 1, []string{"open"}},
 		{"empty repository init failure", true, 1, []string{"init"}},
+		{"integrity check fails after a successful open", false, -1, []string{"open", "check"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newRuntimePlan(t)
 			f.exit = tc.exit
+			if tc.exit < 0 {
+				f.exit, f.exitFor = 0, map[string]int64{"check": 1}
+			}
 			ctx := f.targetContext("local")
 			cli, err := f.service.deps.Docker.GetClient(ctx)
 			require.NoError(t, err)
@@ -67,6 +72,24 @@ func TestRepositoryCheckServiceStagesPrecedeTheirOperations(t *testing.T) {
 		_, err := f.service.checkRepository(f.targetContext("local"), "archive", stage)
 		require.Error(t, err)
 		require.Equal(t, []string{"connect", "save"}, *seen)
+	})
+	t.Run("mount witness failure already reached connect", func(t *testing.T) {
+		f := newRuntimePlan(t)
+		f.witness = "1\n1"
+		seen, stage := stageRecorder()
+		_, err := f.service.checkRepository(f.targetContext("mount"), "archive", stage)
+		require.ErrorContains(t, err, "backup.target.not-mounted")
+		require.Equal(t, []string{"connect"}, *seen)
+	})
+	t.Run("helper image failure already reached connect", func(t *testing.T) {
+		f := newRuntimePlan(t)
+		f.service.deps.HelperImage = func(context.Context, *client.Client) (string, error) {
+			return "", errors.New("synthetic helper unavailable")
+		}
+		seen, stage := stageRecorder()
+		_, err := f.service.checkRepository(f.targetContext("local"), "archive", stage)
+		require.ErrorContains(t, err, "synthetic helper unavailable")
+		require.Equal(t, []string{"connect"}, *seen)
 	})
 	t.Run("successful check reaches every stage in order", func(t *testing.T) {
 		f := newRuntimePlan(t)

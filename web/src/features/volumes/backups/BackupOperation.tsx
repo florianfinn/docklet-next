@@ -16,6 +16,7 @@ import type { AppLocale } from "@/app/i18n/locale-store";
 import { useAdapter } from "@/data/use-adapter";
 import type { ActionDetailState } from "@/data/adapter";
 import { openActionDialog } from "@/features/activity/action-dialog-store";
+import { useRepositoryCheckText } from "@/features/activity/repository-check-presentation";
 import { Button } from "@/shared/ui/button";
 
 export function BackupOperation({ hostId, activityId }: { hostId: string; activityId: string }) {
@@ -50,16 +51,15 @@ export function BackupOperation({ hostId, activityId }: { hostId: string; activi
   const reasonKey = wireKey(BACKUP_REASON_KEYS, reason), statusKey = wireKey(BACKUP_STATUS_KEYS, outcome);
   const detail = reasonKey ? ` ${all(reasonKey)}` : "";
   const status = statusKey ? all(statusKey) : undefined;
-  // A repository check names its current stage and, after success, its result instead of a percentage.
-  const current = run?.kind === "repository-check" && run.status === "running" ? [...run.steps].reverse().find((s) => s.state === "running")?.label : undefined;
-  const stage = current ? renderMessage(current, locale) : undefined;
-  const checked = run?.kind === "repository-check" && run.status === "succeeded" && run.repositoryCheck ? t("repositoryCheck.result", { count: run.repositoryCheck.snapshotCount }) : undefined;
+  // A repository check names its stage, failing stage or result; a finished check never falls back to a percentage.
+  const check = useRepositoryCheckText(run, (label) => renderMessage(label, locale));
+  const terminal = run?.kind === "repository-check" && run.status !== "running" && run.status !== "queued" ? all(`activity.status.${run.status}`) : undefined;
   return (
     <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm">
       <span>
         {t("operation")}: {code
           ? `${all(code)}${detail}`
-          : (checked ?? stage ?? status ?? (run ? `${Math.round(run.progress)}%` : t("following")))}
+          : (check ?? status ?? terminal ?? (run ? `${Math.round(run.progress)}%` : t("following")))}
       </span>
       <Button variant="outline" size="sm" onClick={() => openActionDialog(activityId)}>
         {t("openActivity")}

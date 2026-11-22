@@ -166,6 +166,8 @@ func (s *Service) checkRepository(ctx context.Context, id string, stage ...func(
 			observe(name)
 		}
 	}
+	// Connecting covers storage resolution, the mount witness and the helper image.
+	enter("connect")
 	cli, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
 		return 0, dto.NewProblem(503, "volume.backup.engine-unavailable", err)
@@ -183,7 +185,6 @@ func (s *Service) checkRepository(ctx context.Context, id string, stage ...func(
 	if err != nil {
 		return 0, err
 	}
-	enter("connect")
 	root := ""
 	for _, value := range repository.Environment {
 		if strings.HasPrefix(value, "RUSTIC_REPOSITORY=") {

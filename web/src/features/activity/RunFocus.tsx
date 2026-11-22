@@ -1,4 +1,5 @@
 import { useDeployProgress } from "./deploy-progress";
+import { useRepositoryCheckText } from "./repository-check-presentation";
 import { JobUpdateOutcomes } from "@/shared/components/updates/job-update-outcomes";
 import { summaryStepsAvailable } from "./summary-presentation";
 import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
@@ -19,7 +20,9 @@ export function RunStatusLine({ run, className }: { run: ActionRun; className?: 
   const t = useTranslations("activity");
   const { index, step } = runPhase(run);
   const state = runtimeState(run);
-  const progress = useDeployProgress(run);
+  const deploy = useDeployProgress(run), check = useRepositoryCheckText(run, String);
+  // A running repository check without a reached stage names no step count either.
+  const progress = deploy ?? check ?? (run.kind === "repository-check" && run.status === "running" ? t("status.running") : undefined);
   const text = state ? t(`runtime.${state}`) : progress ?? ( run.status === "running" && step ? t("phase", { current: index + 1, total: run.steps.length, label: step.label }) : run.status === "failed" && step?.label.trim() ? t("failedAt", { label: step.label }) : run.status === "succeeded" ? t("dialog.result.succeeded") : t(`status.${run.status}`));
   return (
     <p role="status" aria-live="polite" data-tone={RUN_TONE[run.status]} className={cn("truncate font-medium text-(--tone)", className)}>
@@ -31,8 +34,10 @@ export function RunStatusLine({ run, className }: { run: ActionRun; className?: 
 /** Key figures; target and services wrap instead of being cut off, so every affected service stays readable. */
 export function RunFacts({ run, now, className }: { run: ActionRun; now: number; className?: string }) {
   const t = useTranslations("activity.dialog");
-  const progress = useDeployProgress(run);
+  const deploy = useDeployProgress(run), check = useRepositoryCheckText(run, String);
   const done = run.steps.filter((s) => s.state === "done").length;
+  // A repository check has no fixed stage count, so its cell shows the stage or result, never a ratio.
+  const progress = deploy ?? (run.kind === "repository-check" ? check ?? "–" : undefined);
   const items = [
     ["progress", t("progress"), progress ?? (run.outcomeState === "unknown" || run.steps.length === 0 || !summaryStepsAvailable(run) ? "–" : `${done}/${run.steps.length} · ${withPercent(run.progress)}`)],
     ["elapsed", t("elapsed"), `${elapsedSeconds(run, now)} s`],

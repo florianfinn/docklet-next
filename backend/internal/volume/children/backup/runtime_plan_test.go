@@ -64,6 +64,7 @@ type runtimePlan struct {
 	stdout         string
 	stderr         string
 	exit           int64
+	exitFor        map[string]int64 // engine command (first argument) → exit code; overrides exit
 	execBudget     time.Duration
 	forgetEmpties  bool
 }
@@ -104,6 +105,19 @@ func packedTar(t testing.TB) []byte {
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 	return buffer.Bytes()
+}
+
+// exitCode applies a per-command exit when the waited worker's command is listed in exitFor.
+func (f *runtimePlan) exitCode(path string) int64 {
+	var index int
+	if _, err := fmt.Sscanf(path[strings.Index(path, "/containers/worker-"):], "/containers/worker-%d/wait", &index); err == nil && index >= 1 && index <= len(f.creates) {
+		if cmd := f.creates[index-1].Cmd; len(cmd) > 0 {
+			if code, ok := f.exitFor[cmd[0]]; ok {
+				return code
+			}
+		}
+	}
+	return f.exit
 }
 
 // effects returns copies of the recorded Docker effects for assertions while the fixture still serves.
@@ -162,7 +176,7 @@ func (f *runtimePlan) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(path, "/start"):
 		w.WriteHeader(204)
 	case strings.HasSuffix(path, "/wait"):
-		_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": f.exit})
+		_ = json.NewEncoder(w).Encode(map[string]any{"StatusCode": f.exitCode(path)})
 	case strings.HasSuffix(path, "/logs"):
 		w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
 		for index, text := range []string{f.stdout, f.stderr} {

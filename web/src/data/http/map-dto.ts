@@ -34,13 +34,19 @@ const STEP_KEYS = new Set<DeployStepKey>(["validate", "pull", "build", "create",
 const REPOSITORY_CHECK_STEPS = new Set(["connect", "save", "init", "open", "check"]);
 const REPOSITORY_CHECK_ACTION = "check_volume_backup_repository";
 
-/** Only a successful check of this run's own target names a snapshot count; anything else stays unclaimed. */
+/**
+ * Only a successful, timestamped check of this run's own target on this run's host names a snapshot count.
+ * The producer records the receiving host's hub-assigned ID (settings hubHostId) or "0" before any target set
+ * arrived; the latter is valid only for the host-local target. Anything else stays unclaimed.
+ */
 function repositoryCheckResult(run: Activity): { snapshotCount: number } | undefined {
   const metadata = run.metadata;
   const check = metadata?.backupTargetCheck;
   if (run.status !== "success" || !check || typeof check !== "object" || Array.isArray(check)) return undefined;
   const value = check as Record<string, unknown>;
   if (metadata?.backupTargetId !== run.resourceId || value.activityId !== run.id || value.ok !== true || (value.code !== undefined && value.code !== "")) return undefined;
+  if (value.hostId !== run.environmentId && !(value.hostId === "0" && run.resourceId === "local")) return undefined;
+  if (typeof value.at !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(value.at) || Number.isNaN(Date.parse(value.at))) return undefined;
   const count = value.snapshotCount;
   return typeof count === "number" && Number.isSafeInteger(count) && count >= 0 ? { snapshotCount: count } : undefined;
 }
