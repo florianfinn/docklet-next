@@ -1,3 +1,4 @@
+import { useDeployProgress } from "./deploy-progress";
 import { JobUpdateOutcomes } from "@/shared/components/updates/job-update-outcomes";
 import { summaryStepsAvailable } from "./summary-presentation";
 import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
@@ -18,7 +19,8 @@ export function RunStatusLine({ run, className }: { run: ActionRun; className?: 
   const t = useTranslations("activity");
   const { index, step } = runPhase(run);
   const state = runtimeState(run);
-  const text = state ? t(`runtime.${state}`) : run.status === "running" && step ? t("phase", { current: index + 1, total: run.steps.length, label: step.label }) : run.status === "failed" && step?.label.trim() ? t("failedAt", { label: step.label }) : run.status === "succeeded" ? t("dialog.result.succeeded") : t(`status.${run.status}`);
+  const progress = useDeployProgress(run);
+  const text = state ? t(`runtime.${state}`) : progress ?? ( run.status === "running" && step ? t("phase", { current: index + 1, total: run.steps.length, label: step.label }) : run.status === "failed" && step?.label.trim() ? t("failedAt", { label: step.label }) : run.status === "succeeded" ? t("dialog.result.succeeded") : t(`status.${run.status}`));
   return (
     <p role="status" aria-live="polite" data-tone={RUN_TONE[run.status]} className={cn("truncate font-medium text-(--tone)", className)}>
       {text}
@@ -29,9 +31,10 @@ export function RunStatusLine({ run, className }: { run: ActionRun; className?: 
 /** Key figures; target and services wrap instead of being cut off, so every affected service stays readable. */
 export function RunFacts({ run, now, className }: { run: ActionRun; now: number; className?: string }) {
   const t = useTranslations("activity.dialog");
+  const progress = useDeployProgress(run);
   const done = run.steps.filter((s) => s.state === "done").length;
   const items = [
-    ["progress", t("progress"), run.outcomeState === "unknown" || run.steps.length === 0 || !summaryStepsAvailable(run) ? "–" : `${done}/${run.steps.length} · ${withPercent(run.progress)}`],
+    ["progress", t("progress"), progress ?? (run.outcomeState === "unknown" || run.steps.length === 0 || !summaryStepsAvailable(run) ? "–" : `${done}/${run.steps.length} · ${withPercent(run.progress)}`)],
     ["elapsed", t("elapsed"), `${elapsedSeconds(run, now)} s`],
     ["target", t("target"), run.target],
     ["services", t("services"), run.services.join(", ") || t("none")],
@@ -41,7 +44,7 @@ export function RunFacts({ run, now, className }: { run: ActionRun; now: number;
       {items.map(([key, label, value]) => (
         <div key={key} className="min-w-0" data-fact={key}>
           <dt className="text-muted-foreground">{label}</dt>
-          <dd className={cn("font-medium [overflow-wrap:anywhere]", (key === "progress" || key === "elapsed") && "whitespace-nowrap tabular-nums")}>{value}</dd>
+          <dd className={cn("font-medium [overflow-wrap:anywhere]", key === "elapsed" && "whitespace-nowrap tabular-nums", key === "progress" && "tabular-nums")}>{value}</dd>
         </div>
       ))}
     </dl>

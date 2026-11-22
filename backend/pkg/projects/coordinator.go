@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; observe deploy operation barriers.
 
 package projects
 
@@ -45,6 +45,9 @@ func NewCoordinator(commands projecttypes.ComposeCommands) projecttypes.ComposeC
 // Deploy loads, prepares images, then reconciles the project.
 func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request projecttypes.ComposeDeployment) (_ *composetypes.Project, err error) {
 	defer func() {
+		if err != nil {
+			DeployReporterFromContext(ctx).PrepareFailed()
+		}
 		if err != nil && request.Recover != nil {
 			request.Recover(ctx)
 		}
@@ -70,6 +73,8 @@ func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request project
 	if prepareImagesForDeployErr := c.PrepareImagesForDeploy(ctx, request.ProjectID, model, request.Progress, operations, pullPolicy); prepareImagesForDeployErr != nil {
 		return nil, fmt.Errorf("failed to prepare project images for deploy: %w", prepareImagesForDeployErr)
 	}
+	DeployReporterFromContext(ctx).ConfigureProject(model)
+	DeployReporterFromContext(ctx).Phase("deploy")
 	if request.BeforeCreate != nil {
 		if err := request.BeforeCreate(ctx); err != nil {
 			return nil, err
@@ -353,6 +358,7 @@ func (c *composeCoordinatorInternal) ensureDeployServiceImageReadyInternal(
 		return nil
 	}
 
+	DeployReporterFromContext(ctx).Phase("pull")
 	err = operations.Pull(ctx, imageName, progressWriter)
 	if err == nil {
 		return nil

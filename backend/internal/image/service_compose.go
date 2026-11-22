@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-24
 // License: BSD-3-Clause
-// Deviations: Separate ordinary Compose pulls from M10 image admission; select saved host auth only.
+// Deviations: Separate ordinary Compose pulls from M10 image admission; select saved host auth only; observe pull JSON before unchanged rendering.
 
 package image
 
 import (
 	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"go.getarcane.app/docker"
@@ -40,7 +41,11 @@ func (s *ImageService) PullComposeImage(ctx context.Context, ref string, writer 
 	}
 	defer reader.Close()
 	lines := docker.NewLogLineWriter(writer)
-	err = docker.RenderJSONMessageStream(reader, lines)
+	var observed io.Reader = reader
+	if reporter := projects.DeployReporterFromContext(ctx); reporter != nil {
+		observed = &composePullReader{source: reader, reporter: reporter, image: ref}
+	}
+	err = docker.RenderJSONMessageStream(observed, lines)
 	_ = lines.Close()
 	if err != nil {
 		return err

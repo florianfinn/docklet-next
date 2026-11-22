@@ -1,3 +1,4 @@
+import { useDeployProgress } from "./deploy-progress";
 import { useConnectedSettings } from "@/data/queries";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { CheckCircle2, ChevronDown, History, ListChecks, Loader2, Maximize2, XCircle } from "lucide-react";
@@ -83,6 +84,11 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
   );
 }
 
+function DeployProgressLine({ run }: { run: ActionRun }) {
+  const progress = useDeployProgress(run);
+  return progress ? <span className="block" data-slot="deploy-progress">{progress}</span> : null;
+}
+
 function ActionsTab({ focusRunId }: { focusRunId?: string }) {
   const t = useTranslations("activity");
   const runs = useActionRuns();
@@ -154,6 +160,7 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
               <span className={cn(run.status === "failed" && "text-destructive")}>
                 {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)} · {run.target}
                 {run.error ? ` · ${run.error}` : ""}
+                <DeployProgressLine run={run} />
               </span>
             ),
             body: <RunBody run={run} defaultOpen={run.id === focusRunId} />,

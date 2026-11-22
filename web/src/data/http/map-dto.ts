@@ -2,8 +2,9 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps. M24 S6: observed recovery and update UI follow-ups.
+// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps. M24 S6: observed recovery and update UI follow-ups. Validated atomic deploy observations.
 
+import type { DeployProgress } from "@/features/activity/deploy-progress";
 import { runtimePeerAudit } from "./runtime-peer-audit";
 import { operationReasonKey } from "../operation-reason";
 import type { components } from "@/api/generated/schema";
@@ -198,6 +199,27 @@ function stepKey(name: string): DeployStepKey {
   return STEP_KEYS.has(key) ? key : "other";
 }
 
+// Progress is copied from the Activity owning status, never filled from another row.
+function deployProgress(run: Activity): DeployProgress | undefined {
+  if ((run.type !== "project_deploy" && run.type !== "project_redeploy") || run.status !== "running" || run.outcomeState === "unknown" || (run.step !== "pull" && run.step !== "deploy")) return undefined;
+  const object = (value: unknown): Record<string, unknown> | undefined => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  const integer = (value: unknown, max: number): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= max;
+  const result: DeployProgress = { phase: run.step };
+  const pull = object(run.metadata?.deployPull);
+  if (pull?.v === 1 && integer(pull.images, 64) && integer(pull.layersDone, 512) && integer(pull.layersTotal, 512) && pull.layersDone <= pull.layersTotal) {
+    result.pull = { images: pull.images, layersDone: pull.layersDone, layersTotal: pull.layersTotal };
+    if (integer(pull.bytesDone, Number.MAX_SAFE_INTEGER) && integer(pull.bytesTotal, Number.MAX_SAFE_INTEGER) && pull.bytesDone <= pull.bytesTotal) {
+      result.pull.bytesDone = pull.bytesDone;
+      result.pull.bytesTotal = pull.bytesTotal;
+    }
+  }
+  const activity = object(run.metadata?.deployActivity);
+  if (activity?.v === 1 && (activity.label === "create" || activity.label === "stop" || activity.label === "start" || activity.label === "wait") && integer(activity.services, 512) && activity.services > 0) {
+    result.activity = { label: activity.label, services: activity.services };
+  }
+  return result;
+}
+
 export function mapActivityDetail(detail: Detail): CodedActionRun {
   if (!detail || !detail.activity) throw new Error("dto.invalid-detail");
   const run: Activity = detail.activity;
@@ -221,6 +243,10 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   const m10 = run.type === "project_update" || run.type === "project_restore" || !!lifecycle;
   if (m10) { date(run.startedAt); optionalDate(run.endedAt); }
   const coded = (code: string | undefined, source: string, field: "progress" | "error" = "progress"): MessageCode => {
+    if (field === "progress" && (run.type === "project_deploy" || run.type === "project_redeploy")) {
+      const phase = source === "Pull" ? "pull" : source === "Deploy" ? "deploy" : source === "Preliminary pull failed; continuing deployment" ? "pullWarning" : undefined;
+      if (phase) return { code: `activity.deployProgress.${phase}`, params: {} };
+    }
     if (backup) {
       const key = backupCodeKey(code) ?? backupCodeKey(source);
       if (key) return { code: key, params: {} };
@@ -256,6 +282,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   });
   return Object.assign({
     id: run.id,
+    deployProgress: deployProgress(run),
     ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
     ...(updateRecovery ? { updateRecovery } : {}),
     ...(job && typeof run.metadata?.jobId === "string" && /^update-window:/.test(run.metadata.jobId) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
@@ -283,7 +310,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
       key: stepKey(step.name), state: stepState(step.status),
-      label: Object.hasOwn(RECREATE_STEPS, step.name) ? { code: `containers.recreate.steps.${RECREATE_STEPS[step.name]}`, params: {}, sourceText: step.name }
+      label: (run.type === "project_deploy" || run.type === "project_redeploy") && (step.name === "pull" || step.name === "deploy") ? { code: `activity.deployProgress.${step.name}`, params: {} }
+        : Object.hasOwn(RECREATE_STEPS, step.name) ? { code: `containers.recreate.steps.${RECREATE_STEPS[step.name]}`, params: {}, sourceText: step.name }
         : repositoryCheck && REPOSITORY_CHECK_STEPS.has(step.name) ? { code: `volumes.backups.repositoryCheck.steps.${step.name}`, params: {}, sourceText: step.name }
         : job && JOB_STEPS.has(step.name) ? { code: `activity.jobStep.${step.name}`, params: {} } : coded(step.code, step.name),
       startedAt: step.startedAt, finishedAt: step.endedAt,

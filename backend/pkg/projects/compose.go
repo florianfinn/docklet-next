@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Bound Compose log writer prefixes and messages before output.
+// Deviations: Bound Compose log writer prefixes and messages before output; tee structured deploy observations without changing plain rendering.
 
 package projects
 
@@ -113,7 +113,7 @@ func NewClient(ctx context.Context, dockerHost string, authConfigs map[string]re
 	}
 	if logWriter != nil {
 		serviceOptions = append(serviceOptions,
-			compose.WithEventProcessor(display.Plain(logWriter)),
+			compose.WithEventProcessor(deployEventTee{plain: display.Plain(logWriter), reporter: DeployReporterFromContext(ctx)}),
 			compose.WithOutputStream(logWriter),
 			compose.WithErrorStream(logWriter),
 		)

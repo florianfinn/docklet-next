@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs.
+// Deviations: Observe actual redeploy pulls and nonfatal warnings;  SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs.
 
 package project
 
@@ -340,6 +340,7 @@ func (s *ProjectService) RedeployProject(ctx context.Context, projectID string, 
 		slog.WarnContext(ctx, "failed to resolve registry credentials for redeploy pull", "error", cerr)
 	}
 	if pullProjectImagesErr := s.PullProjectImages(ctx, projectID, progressWriter, user, credentials); pullProjectImagesErr != nil {
+		projects.DeployReporterFromContext(ctx).PullWarning()
 		slog.WarnContext(ctx, "failed to pull project images", "error", pullProjectImagesErr)
 	}
 
@@ -361,6 +362,7 @@ func (s *ProjectService) PullProjectImages(ctx context.Context, projectID string
 	defer s.eventService.BeginComposeSuppressionWindow(compProj.Name)()
 
 	for _, imageRef := range projects.PullableImageRefs(compProj) {
+		projects.DeployReporterFromContext(ctx).Phase("pull")
 		if pullErr := s.deployment.Pull(ctx, imageRef, progressWriter, user, credentials); pullErr != nil {
 			return pullErr
 		}

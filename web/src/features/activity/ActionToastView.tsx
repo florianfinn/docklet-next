@@ -1,3 +1,4 @@
+import { useDeployProgress } from "./deploy-progress";
 import { History, X } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { Link } from "react-router";
@@ -36,14 +37,15 @@ function useToastFacts(run: ActionRun, now: number) {
   const seconds = elapsedSeconds(run, now);
   const done = run.steps.filter((s) => s.state === "done").length;
   const state = runtimeState(run);
-  const status = state ? t(`runtime.${state}`) :
+  const progress = useDeployProgress(run);
+  const status = state ? t(`runtime.${state}`) : progress ?? (
     run.status === "running" && step
       ? t("phase", { current: index + 1, total: run.steps.length, label: step.label })
       : run.status === "failed" && step?.label.trim()
         ? t("failedAt", { label: step.label })
-        : run.status === "succeeded" ? t("done", { seconds }) : t(`status.${run.status}`);
+        : run.status === "succeeded" ? t("done", { seconds }) : t(`status.${run.status}`));
   const line = state ? t(`runtime.${state}Body`) : run.status === "failed" ? (run.error ?? t("toast.unknownError")) : run.status === "running" ? (step?.detail ?? run.target) : run.target;
-  return { status, line, seconds, done, total: run.steps.length };
+  return { status, line, progress, seconds, done, total: run.steps.length };
 }
 
 type Facts = ReturnType<typeof useToastFacts>;
@@ -135,7 +137,7 @@ function Meta({ run, facts }: { run: ActionRun; facts: Facts }) {
       </div>
       <div className="flex shrink-0 gap-1">
         <dt>{t("progress")}</dt>
-        <dd className="tabular-nums">{run.outcomeState === "unknown" || !summaryStepsAvailable(run) ? "–" : t("stepsDone", { done: facts.done, total: facts.total })}</dd>
+        <dd className="tabular-nums">{facts.progress ?? (run.outcomeState === "unknown" || !summaryStepsAvailable(run) || facts.total === 0 ? "–" : t("stepsDone", { done: facts.done, total: facts.total }))}</dd>
       </div>
       <div className="flex shrink-0 gap-1">
         <dt>{t("duration")}</dt>
@@ -209,7 +211,7 @@ function CompactDesign(props: DesignProps) {
             {run.status === "failed" ? facts.line : facts.status}
           </div>
         </div>
-        <span className="w-10 shrink-0 text-right text-xs font-medium text-(--tone) tabular-nums">{run.outcomeState === "unknown" ? "–" : t("toast.percent", { value: run.progress })}</span>
+        <span className="shrink-0 text-right text-xs font-medium text-(--tone) tabular-nums">{facts.progress ? "" : run.outcomeState === "unknown" || ((run.kind === "deploy" || run.kind === "redeploy") && run.status === "running") ? "–" : t("toast.percent", { value: run.progress })}</span>
         <CloseButton onClose={onClose} />
       </div>
       <div className="px-3 pb-2" data-slot="toast-track">
