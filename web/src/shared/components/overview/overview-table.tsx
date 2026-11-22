@@ -10,7 +10,7 @@ import { Button } from "@/shared/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { BareTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
 
-import { ActionsContextMenu, type MenuGroups } from "../action-menu";
+import { ActionsContextMenu, type MenuSource } from "../action-menu";
 import { SortButton } from "../sortable-head";
 
 /** Table layouts; cards reuse the full table's columns. */
@@ -91,7 +91,7 @@ interface RowViewProps {
   busy?: boolean;
   hostColor?: string;
   /** Same entries as the ellipsis button; right click on the row or card opens them. */
-  menu?: MenuGroups;
+  menu?: MenuSource;
   menuTitle?: string;
   /** Vertical cell padding of the table row. */
   pad: string;

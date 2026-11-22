@@ -20,10 +20,41 @@ export interface MenuAction {
 /** Menu entries in groups; the ellipsis button and the context menu render the same list. */
 export type MenuGroups = readonly (readonly MenuAction[])[];
 
+/** Entries now, or a hook that only an open menu calls, so closed rows read no descriptors. */
+export type MenuSource = MenuGroups | { useGroups: () => MenuGroups };
+
 const visible = (groups: MenuGroups) => groups.filter((g) => g.length > 0);
+const PARTS = {
+  dropdown: { Item: DropdownMenuItem, Group: DropdownMenuGroup, Separator: DropdownMenuSeparator },
+  context: { Item: ContextMenuItem, Group: ContextMenuGroup, Separator: ContextMenuSeparator },
+};
+
+function Entries({ groups, kind }: { groups: MenuGroups; kind: keyof typeof PARTS }) {
+  const { Item, Group, Separator } = PARTS[kind];
+  return visible(groups).map((group, i) => (
+    <Fragment key={group[0]?.id ?? i}>
+      {(kind === "context" || i > 0) && <Separator />}
+      <Group>
+        {group.map((a) => (
+          <Item key={a.id} data-action={a.id} title={a.title} disabled={a.disabled} onSelect={a.onSelect} className={cn(a.muted && "text-muted-foreground")}>
+            {a.icon} {a.label}
+          </Item>
+        ))}
+      </Group>
+    </Fragment>
+  ));
+}
+
+function LazyEntries({ useGroups, kind }: { useGroups: () => MenuGroups; kind: keyof typeof PARTS }) {
+  return <Entries groups={useGroups()} kind={kind} />;
+}
+
+function Source({ source, kind }: { source: MenuSource; kind: keyof typeof PARTS }) {
+  return "useGroups" in source ? <LazyEntries useGroups={source.useGroups} kind={kind} /> : <Entries groups={source} kind={kind} />;
+}
 
 /** Ellipsis button with the row's actions. */
-export function ActionsMenu({ groups, label }: { groups: MenuGroups; label: string }) {
+export function ActionsMenu({ groups, label }: { groups: MenuSource; label: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -32,18 +63,7 @@ export function ActionsMenu({ groups, label }: { groups: MenuGroups; label: stri
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
-        {visible(groups).map((group, i) => (
-          <Fragment key={group[0]?.id ?? i}>
-            {i > 0 && <DropdownMenuSeparator />}
-            <DropdownMenuGroup>
-              {group.map((a) => (
-                <DropdownMenuItem key={a.id} data-action={a.id} title={a.title} disabled={a.disabled} onSelect={a.onSelect} className={cn(a.muted && "text-muted-foreground")}>
-                  {a.icon} {a.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuGroup>
-          </Fragment>
-        ))}
+        <Source source={groups} kind="dropdown" />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -54,25 +74,14 @@ export function ActionsMenu({ groups, label }: { groups: MenuGroups; label: stri
  * card opens the same actions as its ellipsis button. The trigger is the row
  * element itself; nested controls keep their own behaviour.
  */
-export function ActionsContextMenu({ groups, title, children }: { groups: MenuGroups | undefined; title: string; children: ReactNode }) {
+export function ActionsContextMenu({ groups, title, children }: { groups: MenuSource | undefined; title: string; children: ReactNode }) {
   if (!groups) return children;
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent className="w-60" aria-label={title}>
         <ContextMenuLabel className="truncate">{title}</ContextMenuLabel>
-        {visible(groups).map((group, i) => (
-          <Fragment key={group[0]?.id ?? i}>
-            <ContextMenuSeparator />
-            <ContextMenuGroup>
-              {group.map((a) => (
-                <ContextMenuItem key={a.id} data-action={a.id} title={a.title} disabled={a.disabled} onSelect={a.onSelect} className={cn(a.muted && "text-muted-foreground")}>
-                  {a.icon} {a.label}
-                </ContextMenuItem>
-              ))}
-            </ContextMenuGroup>
-          </Fragment>
-        ))}
+        <Source source={groups} kind="context" />
       </ContextMenuContent>
     </ContextMenu>
   );

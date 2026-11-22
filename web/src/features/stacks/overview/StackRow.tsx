@@ -8,7 +8,7 @@ import { useStackDefinitionHint, useStackNamePeers } from "@/shared/hooks/use-st
 import { useIsUser } from "@/data/use-principal";
 import { useAdapter } from "@/data/use-adapter";
 import { Copy, Globe, Layers, TriangleAlert } from "lucide-react";
-import { memo, type ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -78,7 +78,8 @@ export const StackRow = memo(function StackRow({ stack, host, mode, view, column
  const definitionHint = useStackDefinitionHint(stack);
  const namePeers = useStackNamePeers(stack);
   const href = `/stacks/${stack.id}`;
-  const menu = useStackMenu(stack, false);
+  // The row's menu reads its descriptors only while it is open (no fan-out for long lists).
+  const menu = useMemo(() => ({ useGroups: () => useStackMenu(stack, false) }), [stack]);
   const load = useStackLoad(stack);
   const scheduleText = useScheduleText();
   const compact = mode === "compact";
