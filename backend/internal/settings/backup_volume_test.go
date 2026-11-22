@@ -2,7 +2,7 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original settings consumer proof for the volume-owned read-only resolver.; M36 #570 scoped baseline, storage naming or address guidance.
+// Deviations: Original settings consumer proof for the volume-owned read-only resolver.; M36 #570: Docklet backup volume and runtime names.
 
 package settings
 
@@ -11,7 +11,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/stretchr/testify/require"
 )
@@ -31,9 +30,11 @@ func TestBackupVolumeSettingsReader(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "retained-backups", runtimeSettingKeysInternal(result.Body)["backupVolumeName"])
 	require.Equal(t, 1, calls)
+	// An unreadable selection omits the display-only value; the rest of the list stays available.
 	readErr = errors.New("synthetic inspect failure")
-	_, err = h.GetSettings(t.Context(), &GetSettingsInput{EnvironmentID: "0"})
-	var problem huma.StatusError
-	require.ErrorAs(t, err, &problem)
-	require.Equal(t, 503, problem.GetStatus())
+	result, err = h.GetSettings(t.Context(), &GetSettingsInput{EnvironmentID: "0"})
+	require.NoError(t, err)
+	keys := runtimeSettingKeysInternal(result.Body)
+	require.NotContains(t, keys, "backupVolumeName")
+	require.Greater(t, len(result.Body), 1)
 }

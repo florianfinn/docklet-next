@@ -2,7 +2,7 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original real-Compose coordinator proof for no-pull baseline recording on externally started stacks.; M36 #570 scoped baseline, storage naming or address guidance.
+// Deviations: Original real-Compose coordinator proof for no-pull baseline recording on externally started stacks.; M36 #568: record baseline without pulling images.
 
 package activity_test
 
@@ -133,6 +133,33 @@ func TestRecordBaselineRealCompose(t *testing.T) {
 			status, err = f.projects.ImageBaselineStatus(t.Context(), "example-project", f.store.RegistrationID)
 			require.NoError(t, err)
 			require.True(t, status.Available, "the successful normal deploy must capture the baseline: %s", status.Code)
+			require.Equal(t, runID, status.SourceRunID)
+		})
+	}
+}
+
+// An explicit request policy "never" wins over every service pull_policy (review M36-S1B-R01).
+func TestRecordBaselineIgnoresServicePullPolicies(t *testing.T) {
+	crypto.InitEncryption(&crypto.Config{Environment: "test", EncryptionKey: "synthetic-lifecycle-encryption-key-32bytes"})
+	for _, policy := range []string{"always", "daily", "every_2h", "missing", "build"} {
+		t.Run(policy, func(t *testing.T) {
+			f, dir := externalBaselineFixture(t)
+			extra := "    pull_policy: " + policy + "\n"
+			if policy == "build" {
+				extra += "    build: .\n"
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "compose.yaml"), []byte(recordBaselineCompose+extra), 0644))
+			before := len(f.http.snapshot())
+			command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
+			runID := f.run(command)
+			for _, event := range f.http.snapshot()[before:] {
+				require.False(t, event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/images/create"), "service pull_policy %s must not pull: %s", policy, event.Path)
+				require.False(t, event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/build"), "no build: %s", event.Path)
+			}
+			status, err := f.projects.ImageBaselineStatus(t.Context(), "example-project", f.store.RegistrationID)
+			require.NoError(t, err)
+			require.True(t, status.Available, status.Code)
 			require.Equal(t, runID, status.SourceRunID)
 		})
 	}

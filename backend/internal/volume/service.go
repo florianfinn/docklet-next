@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.; M36 #570 scoped baseline, storage naming or address guidance.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation.; M36 #570: Docklet backup volume and runtime names.
 
 package volume
 

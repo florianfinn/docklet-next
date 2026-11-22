@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.; Remove legacy archive helpers.; M36 #570 scoped baseline, storage naming or address guidance.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.; Remove legacy archive helpers.; M36 #570: Docklet backup volume and runtime names.
 
 package backup
 

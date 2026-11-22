@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; optional-module foundation (#472); M29 setup completion no longer waits for an initial password change.; M36 #570 scoped baseline, storage naming or address guidance.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; typed UI-configuration refusal producer; M15 simple-user rights and identity contracts; M16 bind mounts and backup completion; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration; optional-module foundation (#472); M29 setup completion no longer waits for an initial password change.; M36 #570: Docklet backup volume and runtime names.
 
 package settings
 
@@ -12,8 +12,10 @@ import (
 	"fmt"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	moduleDTO "github.com/florianfinn/docklet-next/types/modules"
+	"log/slog"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -255,10 +257,12 @@ func (h *SettingsHandler) GetSettings(ctx context.Context, input *GetSettingsInp
 
 	settingsDto = h.appendRuntimeSettingsInternal(settingsDto, true)
 	if h.settingsService.backupVolumeNameReader != nil {
+		// The backup volume name is display-only here; an unreadable selection omits it and never fails the list.
 		name, err := h.settingsService.backupVolumeNameReader(ctx)
 		if err != nil {
-			return nil, huma.Error503ServiceUnavailable("Backup volume selection is unavailable", err)
+			slog.WarnContext(ctx, "backup volume selection unavailable for settings read", "error", err)
 		}
+		settingsDto = slices.DeleteFunc(settingsDto, func(item settings.PublicSetting) bool { return err != nil && item.Key == "backupVolumeName" })
 		for i := range settingsDto {
 			if settingsDto[i].Key == "backupVolumeName" {
 				settingsDto[i].Value = name

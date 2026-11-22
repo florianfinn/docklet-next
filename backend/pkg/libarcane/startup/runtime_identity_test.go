@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed standalone build workshop; SQLite-only local persistence.; M36 #570 scoped baseline, storage naming or address guidance.
+// Deviations: functional cut: removed standalone build workshop; SQLite-only local persistence.; M36 #570: Docklet backup volume and runtime names.
 
 package startup
 

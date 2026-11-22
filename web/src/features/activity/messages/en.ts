@@ -34,7 +34,7 @@ export const enActivity = {
   deployProgress: {
     pullWarning: "Preliminary pull failed; continuing deployment",
     pull: "Pull", deploy: "Deploy",
-    layers: "{done}/{total} layers", bytes: "{done, number} / {total, number} B",
+    layers: "{done}/{total} layers", bytes: "{done} / {total}",
     create: "creating {count, plural, one {# service} other {# services}}",
     stop: "stopping {count, plural, one {# service} other {# services}}",
     start: "starting {count, plural, one {# service} other {# services}}",

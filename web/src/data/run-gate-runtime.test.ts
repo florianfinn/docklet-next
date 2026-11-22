@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 #349 observed same-kind runs reach durable admission.; M36 #568 scoped baseline, storage naming or address guidance.
+// Deviations: Original guarded command and notification consumer for issues #126 and #110. M19 #349 observed same-kind runs reach durable admission.; M36 #568: record baseline without pulling images.
 
 import { expect, it, vi } from "vitest";
 import type { DockletAdapter } from "./adapter";

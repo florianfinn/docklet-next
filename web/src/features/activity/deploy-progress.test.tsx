@@ -87,7 +87,7 @@ it.each(["summary-first", "detail-first"] as const)("keeps status and progress a
 
 it.each(["pull", "deploy"])("renders the current %s observation in focus and all toast designs without a whole-run percent", (phase) => {
   const run = renderRun(mapActivitySummary(freeze(row(phase))), "en-US");
-  const expected = phase === "pull" ? "Pull · 1/3 layers · 120 / 300 B" : "Deploy · starting 2 services";
+  const expected = phase === "pull" ? "Pull · 1/3 layers · 120 B / 300 B" : "Deploy · starting 2 services";
   const view = render(<IntlProvider locale="en-US" messages={catalogs["en-US"]}><MemoryRouter>
     <RunStatusLine run={run} /><RunFacts run={run} now={0} />
     {(["bar", "compact", "edge"] as const).map((design) => <ActionToastView key={design} run={run} design={design} detail="full" now={0} major onClose={() => {}} onOpen={() => {}} />)}
@@ -119,5 +119,14 @@ it("keeps the older agent dash fallback in focus and every toast design", () => 
     expect(view.container.querySelector('[data-fact="progress"] dd')?.textContent).toBe("–");
     expect(view.container.textContent).not.toContain("0%");
     expect(view.container.textContent).not.toContain("0/0");
+  } finally { view.unmount(); }
+});
+
+it("shows large pull byte counts in readable units", () => {
+  const large: Activity = { ...activity("good"), step: "pull", metadata: { deployPull: { ...pull, bytesDone: 41_234_567, bytesTotal: 312_456_789 } } };
+  const run = renderRun(mapActivitySummary(freeze(large)), "en-US");
+  const view = render(<IntlProvider locale="en-US" messages={catalogs["en-US"]}><MemoryRouter><RunFacts run={run} now={0} /></MemoryRouter></IntlProvider>);
+  try {
+    expect(view.container.querySelector('[data-fact="progress"] dd')?.textContent).toBe("Pull · 1/3 layers · 39 MB / 298 MB");
   } finally { view.unmount(); }
 });

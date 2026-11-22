@@ -2,7 +2,7 @@
 // Revision: 20a03b67fbeb6bcc82c758e6f2ece937d58f037a
 // Retrieved: 2026-11-02
 // License: Apache-2.0
-// Deviations: Original regressions for startup pruning of internal backup rows (M16 candidate F05, review CFR1-1).; M36 #570 scoped baseline, storage naming or address guidance.
+// Deviations: Original regressions for startup pruning of internal backup rows (M16 candidate F05, review CFR1-1).; M36 #570: Docklet backup volume and runtime names.
 
 package settings
 

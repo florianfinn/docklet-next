@@ -5,6 +5,7 @@
 // Deviations: Original executor-owned deploy progress observation and behavioural coverage.
 
 import { useTranslations } from "use-intl";
+import { formatBytes } from "@/domain/format";
 import type { ActionRun } from "@/domain/model";
 
 export interface DeployProgress {
@@ -23,7 +24,7 @@ export function useDeployProgress(run: ActionRun): string | undefined {
   if (progress.phase === "pull" && progress.pull) {
     const pull = progress.pull;
     parts.push(t("layers", { done: pull.layersDone, total: pull.layersTotal }));
-    if (pull.bytesDone !== undefined && pull.bytesTotal !== undefined) parts.push(t("bytes", { done: pull.bytesDone, total: pull.bytesTotal }));
+    if (pull.bytesDone !== undefined && pull.bytesTotal !== undefined) parts.push(t("bytes", { done: formatBytes(pull.bytesDone), total: formatBytes(pull.bytesTotal) }));
   }
   if (progress.phase === "deploy" && progress.activity) parts.push(t(progress.activity.label, { count: progress.activity.services }));
   return parts.join(" · ");

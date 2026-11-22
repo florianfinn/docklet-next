@@ -2,7 +2,7 @@
 // Revision: 81439fab6a8ec5232161dc933fbd41bec41885fa
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original production host onboarding UI acceptance tests.; M36 #572 scoped baseline, storage naming or address guidance.
+// Deviations: Original production host onboarding UI acceptance tests.; M36 #572: Edge hub address guidance.
 
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

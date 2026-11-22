@@ -70,6 +70,9 @@ func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request project
 		pullPolicy = NormalizeDeployPullPolicy(request.DefaultPullPolicy)
 	}
 	pullPolicy = cmp.Or(pullPolicy, "missing")
+	if request.Options != nil && NormalizeDeployPullPolicy(request.Options.PullPolicy) == "never" {
+		forceLocalImages(request.ProjectID, model)
+	}
 	if prepareImagesForDeployErr := c.PrepareImagesForDeploy(ctx, request.ProjectID, model, request.Progress, operations, pullPolicy); prepareImagesForDeployErr != nil {
 		return nil, fmt.Errorf("failed to prepare project images for deploy: %w", prepareImagesForDeployErr)
 	}
@@ -94,6 +97,20 @@ func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request project
 	}
 	slog.InfoContext(ctx, "compose up completed successfully", "projectId", request.ProjectID, "projectName", model.Name)
 	return model, nil
+}
+
+// forceLocalImages makes an explicit request policy "never" win over service pull_policy and build, as Compose's
+// `up --pull never` does: every service runs its existing local image (build services their resolved image name).
+func forceLocalImages(projectID string, model *composetypes.Project) {
+	for name, svc := range model.Services {
+		if svc.Build != nil {
+			image, resolved, _ := EnsureServiceImage(projectID, model.Name, name, svc)
+			svc = resolved
+			svc.Image, svc.Build = image, nil
+		}
+		svc.PullPolicy = composetypes.PullPolicyNever
+		model.Services[name] = svc
+	}
 }
 
 // ResolveRemoveOrphans preserves explicit caller opt-in.

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.; inert Arcane tools sentinel removed (#362); optional-module foundation (#472); M29 agent install default matches the setup wizard (#517).; M36 #570 scoped baseline, storage naming or address guidance.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation; M19 backend contracts and target identity integration.; inert Arcane tools sentinel removed (#362); optional-module foundation (#472); M29 agent install default matches the setup wizard (#517).; M36 #570: Docklet backup volume and runtime names.
 
 package settings
 

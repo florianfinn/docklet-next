@@ -2,7 +2,7 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original Edge hub address guidance and effect-synchronised acceptance coverage.; M36 #572 scoped baseline, storage naming or address guidance.
+// Deviations: Original Edge hub address guidance and effect-synchronised acceptance coverage.; M36 #572: Edge hub address guidance.
 
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { useState } from "react";

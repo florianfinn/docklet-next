@@ -35,7 +35,7 @@ export const deActivity: typeof enActivity = {
   deployProgress: {
     pullWarning: "Der vorbereitende Image-Abruf ist fehlgeschlagen; die Bereitstellung wird fortgesetzt.",
     pull: "Images abrufen", deploy: "Bereitstellen",
-    layers: "{done}/{total} Layer", bytes: "{done, number} / {total, number} B",
+    layers: "{done}/{total} Layer", bytes: "{done} / {total}",
     create: "{count, plural, one {# Dienst wird erstellt} other {# Dienste werden erstellt}}",
     stop: "{count, plural, one {# Dienst wird gestoppt} other {# Dienste werden gestoppt}}",
     start: "{count, plural, one {# Dienst wird gestartet} other {# Dienste werden gestartet}}",

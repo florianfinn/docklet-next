@@ -1,5 +1,6 @@
 // Exact reviewed technical notation and non-UI diagnostics; stale lines fail.
 export const uiLiteralExceptions = [
+  {"file": "src/data/http/map-dto.ts", "lineSha256": "c140a0d796ae8321f8a18360893d610859f25b8caf1bca98b0be6c368275be9f", "count": 1, "reason": "Wire comparison with the deploy reporter's English warning message (backend deploy_reporter.go); the displayed text comes from the activity catalogue."},
   {"file": "src/data/http/inventory.ts", "lineSha256": "af955a2b9c2629e067d7fac28db856c3bdc31f7d29860a62b016b4debf7833b4", "count": 1, "reason": "Technical notation: Docker Compose project label filter query parameter, not UI text."},
   {"file": "src/domain/agent-install.ts", "lineSha256": "6d085d3f5be42a073232a418d76a586a39c60a3a0fc0baddbb0d96e75f646fe2", "count": 1, "reason": "Generated English installation package, shell commands and operator documentation; UI messages use catalogues."},
   {"file": "src/domain/agent-install.ts", "lineSha256": "09b89584b8c6f81231a0a62abeebd6a77a0a24c5f2ab07a2a323b504bfa3d85c", "count": 1, "reason": "Generated English installation package, shell commands and operator documentation; UI messages use catalogues."},
