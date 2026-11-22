@@ -53,7 +53,7 @@ if (check) {
     }
   }
   const metadata = { schemaVersion: 1, ecosystem: "go", date: "2026-10-16", sourceRevision: source.revision,
-    target: "linux/amd64", tool: "go list -deps (Go 1.27.2)", lockfiles, targets,
+    target: "linux/amd64", tool: "go list -deps (Go 1.27.4)", lockfiles, targets,
     limitations: "Post-cut hub and agent source graphs; no release package, standalone CLI binary licence graph or container inventory. Exact upstream licence evidence remains in arcane-modules.json and arcane-binary.json." };
   const packages = [...records.values()].sort((a, b) => a.name.localeCompare(b.name, "en"));
   writeFileSync(file, JSON.stringify(metadata, null, 2).slice(0, -2) + ',\n  "packages": [\n' + packages.map((p) => '    ' + JSON.stringify(p)).join(',\n') + '\n  ]\n}\n');

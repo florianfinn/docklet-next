@@ -6,7 +6,7 @@
 
 module github.com/florianfinn/docklet-next/backend
 
-go 1.27.1
+go 1.27.4
 
 replace (
 	github.com/docker/buildx => github.com/docker/buildx v0.32.1

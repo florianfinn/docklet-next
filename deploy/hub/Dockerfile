@@ -4,7 +4,7 @@
 # License: Apache-2.0
 # Deviations: Original CGO-free hub image with embedded production UI and licence bundles; stamped scratch hub and agent runtimes with assessed CA roots.
 ARG NODE_IMAGE=node:24.11.1-bookworm-slim@sha256:48abc13a19400ca3985071e287bd405a1d99306770eb81d61202fb6b65cf0b57
-ARG GO_IMAGE=golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61
+ARG GO_IMAGE=golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea
 ARG RUNTIME_IMAGE=alpine:3.22.6@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
 FROM ${NODE_IMAGE} AS web
 WORKDIR /src

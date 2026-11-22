@@ -4,11 +4,11 @@
   "date": "2026-10-16",
   "sourceRevision": "095cb778daba1034e2a39961199e712a75d4ba29",
   "target": "linux/amd64",
-  "tool": "go list -deps (Go 1.27.2)",
+  "tool": "go list -deps (Go 1.27.4)",
   "lockfiles": [
     {
       "path": "backend/go.mod",
-      "sha256": "3228db65507e0d48506a521568b36e3960f8c5c5072c85822302bf863e5fac60"
+      "sha256": "4e8015c02e6c6c6be305a47c4ebdd6e3d817ec9c18c16aa47a06055c1bc31015"
     },
     {
       "path": "backend/go.sum",
@@ -20,7 +20,7 @@
     },
     {
       "path": "go.work",
-      "sha256": "3817e82b00b244ab3b44f55d24316c70d94b8eee87d6db7da1eddf64d23c61d4"
+      "sha256": "b91e390558f3fbfd12313a8222649f2614b94fc031babc681c5f86157b901949"
     },
     {
       "path": "go.work.sum",
