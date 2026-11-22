@@ -308,8 +308,7 @@ it("reviewer keeps the untouched shared upstream line bytes", async () => {
   fireEvent.change(screen.getByLabelText("Upstreams (one URL per line)"), {
     target: { value: old + "\nhttp://next.example.com:80" },
   });
-  await user.click(screen.getByRole("checkbox", { name: "Confirm" }));
-  await user.click(screen.getByRole("button", { name: "Confirm" }));
+  await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save service" }));
   await waitFor(() => expect(writes(f).length).toBe(1));
   expect(change(f).upstreams).toEqual([old, "http://next.example.com:80"]);
 });

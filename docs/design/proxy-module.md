@@ -348,8 +348,8 @@ file-driver logs are `logs-unavailable`, never "no error".
 
 - The Caddyfile is the authority. Owned routes live in a route directory mounted
   as a directory and imported by the root Caddyfile. When the `import` line is
-  missing, setup offers to insert it; after confirmation one operation appends it
-  to the root Caddyfile. The same action is offered again whenever owned route
+  missing, setup offers to insert it; pressing **Insert import line** runs one
+  operation that appends it to the root Caddyfile. The same action is offered again whenever owned route
   files exist and the line is missing. Apart from that line the module never
   changes the root Caddyfile; its existing sites stay readable. A root Caddyfile
   mounted as a single file cannot be written, so setup shows the line instead.

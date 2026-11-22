@@ -203,8 +203,7 @@ describe("production proxy Manager HTTP integration", () => {
     fireEvent.change(screen.getByLabelText("Upstreams (one URL per line)"), {
       target: { value: "http://next.example.com:8080" },
     });
-    await user.click(screen.getByRole("checkbox", { name: "Confirm" }));
-    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save service" }));
     await waitFor(() => expect(operationWrites(f).length).toBe(1));
     expect((operationWrites(f)[0]?.body as { change: object }).change).toEqual({
       kind: "edit-service",
@@ -236,8 +235,7 @@ describe("production proxy Manager HTTP integration", () => {
       return;
     }
     await userEvent.click(screen.getByRole("button", { name: "Insert import line" }));
-    await userEvent.click(screen.getByRole("checkbox", { name: "Confirm" }));
-    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Insert import line" }));
     await waitFor(() => expect(operationWrites(f).length).toBe(1));
     expect((operationWrites(f)[0]?.body as { target: string }).target).toBe("Caddyfile");
   });
@@ -257,8 +255,7 @@ describe("production proxy Manager HTTP integration", () => {
     await workspace(f);
     expect(screen.getAllByRole("button", { name: "Restore last verified version" }).length).toBe(1);
     await userEvent.click(screen.getByRole("button", { name: "Restore last verified version" }));
-    await userEvent.click(screen.getByRole("checkbox", { name: "Confirm" }));
-    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Restore last verified version" }));
     await waitFor(() => expect(operationWrites(f).length).toBe(1));
     expect((operationWrites(f)[0]?.body as { change: object }).change).toEqual({ kind: "restore-owned" });
   });

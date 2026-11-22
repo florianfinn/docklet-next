@@ -226,6 +226,7 @@ export const deProxyContract = {
     "serverValidation": "Der Proxy validiert die gesamte Konfiguration vor jedem Schreibvorgang.",
     "service": "Dienst",
     "editService": "Gemeinsamen Dienst bearbeiten",
+    "saveService": "Dienst speichern",
     "upstreams": "Upstreams (eine URL pro Zeile)",
     "dependants": "Betroffene Router",
     "opaqueService": "Dienst in ungelesener Datei {name}. Verschiebe ihn in eine lesbare Datei, um seine Upstreams zu bearbeiten.",

@@ -2,14 +2,14 @@
 // Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
 // Retrieved: 2026-11-16
 // License: Apache-2.0
-// Deviations: Original production proxy Manager implementation.
+// Deviations: Original production proxy Manager implementation. M35 #559: the named action confirms; risk acknowledgements stay.
 
 import { useState } from "react";
 import { useTranslations } from "use-intl";
 import { Button } from "@/shared/ui/button";
 import { Textarea } from "@/shared/ui/textarea";
 import { Label } from "@/shared/ui/label";
-import { AcknowledgementFields, RefusalView, ConfirmCheck, ProxyDialog } from "./controls";
+import { AcknowledgementFields, RefusalView, ProxyDialog } from "./controls";
 import { acknowledgementsReady, emptyAcknowledgements } from "./model";
 import type { Acknowledgements, Change, Inventory, Route } from "./types";
 
@@ -36,7 +36,6 @@ export function ChangeDialog({
   close: () => void;
 }) {
   const t = useTranslations("proxyContract.ui"),
-    [confirmed, setConfirmed] = useState(false),
     [ack, setAck] = useState(emptyAcknowledgements);
   const [upstreams, setUpstreams] = useState(action.route?.upstreams?.join("\n") ?? "");
   const title =
@@ -57,8 +56,8 @@ export function ChangeDialog({
         : action.kind === "insert-import"
           ? "insertHint"
           : "restoreHint";
-  const ready =
-    confirmed && acknowledgementsReady(inventory, [], ack) && (action.kind !== "edit-service" || !!upstreams.trim());
+  // The named button is the confirmation; only risk acknowledgements gate it.
+  const ready = acknowledgementsReady(inventory, [], ack) && (action.kind !== "edit-service" || !!upstreams.trim());
   return (
     <ProxyDialog title={t(title)} description={t(hint)} onClose={close} busy={busy}>
       <p className="break-all font-mono text-xs">{action.target}</p>
@@ -75,9 +74,6 @@ export function ChangeDialog({
           <Textarea id="service-upstreams" value={upstreams} onChange={e => setUpstreams(e.target.value)} />
         </>
       )}
-      <ConfirmCheck checked={confirmed} onChange={setConfirmed}>
-        {t("confirm")}
-      </ConfirmCheck>
       <AcknowledgementFields inventory={inventory} value={ack} onChange={setAck} />
       <Button
         disabled={!ready || busy}
@@ -100,7 +96,7 @@ export function ChangeDialog({
             );
         }}
       >
-        {t("confirm")}
+        {t(action.kind === "edit-service" ? "saveService" : title)}
       </Button>
       <RefusalView refusal={refusal} />
     </ProxyDialog>

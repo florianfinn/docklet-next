@@ -226,6 +226,7 @@ export const enProxyContract = {
     "serverValidation": "The proxy validates the complete configuration before any write.",
     "service": "Service",
     "editService": "Edit shared service",
+    "saveService": "Save service",
     "upstreams": "Upstreams (one URL per line)",
     "dependants": "Affected routers",
     "opaqueService": "Service in unread file {name}. Move it to a readable file to edit its upstreams.",
