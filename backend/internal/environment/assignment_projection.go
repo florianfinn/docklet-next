@@ -11,11 +11,13 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/environment"
 )
 
-// The embedded environment marshaler must not hide the one-time pairing key.
+// The embedded environment marshaler must not hide the one-time pairing key or the tailnet installer grant.
 func (e EnvironmentWithApiKey) MarshalJSON() ([]byte, error) {
 	type fields dto.Environment
 	return json.Marshal(struct {
 		fields
-		APIKey *string `json:"apiKey,omitempty"`
-	}{fields(e.Environment), e.ApiKey})
+		APIKey            *string `json:"apiKey,omitempty"`
+		TailnetAuthKey    *string `json:"tailnetAuthKey,omitempty"`
+		TailnetManagerURL *string `json:"tailnetManagerUrl,omitempty"`
+	}{fields(e.Environment), e.ApiKey, e.TailnetAuthKey, e.TailnetManagerURL})
 }

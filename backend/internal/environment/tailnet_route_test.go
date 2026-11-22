@@ -8,6 +8,7 @@ package environment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -214,6 +215,17 @@ func TestCreateTailnetHostReturnsTheOneUseKeyOnce(t *testing.T) {
 	require.Equal(t, "tskey-auth-example-host", *out.Body.Data.TailnetAuthKey)
 	require.Equal(t, "http://192.0.2.1:3552", *out.Body.Data.TailnetManagerURL)
 	require.Equal(t, tailnettypes.RouteTailnet, *out.Body.Data.NetworkRoute)
+	// The wire body is what the installer reads: the custom marshaler must carry the grant next to the pairing key.
+	var wire struct {
+		Data map[string]any `json:"data"`
+	}
+	body, err := json.Marshal(out.Body)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(body, &wire))
+	require.Equal(t, "tskey-auth-example-host", wire.Data["tailnetAuthKey"])
+	require.Equal(t, "http://192.0.2.1:3552", wire.Data["tailnetManagerUrl"])
+	require.NotEmpty(t, wire.Data["apiKey"])
+	require.Equal(t, "tailnet", wire.Data["networkRoute"])
 	stored := observed(t, db, out.Body.Data.ID)
 	require.Equal(t, tailnettypes.RouteTailnet, *stored.NetworkRoute)
 
