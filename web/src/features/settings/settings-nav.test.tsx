@@ -2,7 +2,7 @@
 // Revision: 0c0cb0d3e3b439684308e9d13b6ded2cbe1efde8
 // Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Original narrow-screen settings navigation guard.
+// Deviations: Original narrow-screen settings navigation guard and picker placement.
 
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -40,6 +40,16 @@ describe("settings navigation on narrow screens", () => {
     expect(["Hub", "Betrieb", "System"].every((group) => within(listbox).queryByText(group) !== null)).toBe(true);
     await userEvent.click(within(listbox).getByRole("option", { name: "Updates" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/settings/updates"));
+  });
+
+  it("opens the picker as a list below the trigger for lower sections", async () => {
+    renderRoutes(routes, ["/settings/security"]);
+    const picker = await screen.findByTestId("settings-section-picker");
+    picker.focus();
+    await userEvent.keyboard("{Enter}");
+    const listbox = await screen.findByRole("listbox");
+    // Item-aligned placement squeezes the list above the trigger when the selected item sits low.
+    expect(listbox.closest("[data-radix-popper-content-wrapper]") !== null).toBe(true);
   });
 
   it("keeps the unsaved-changes guard when switching through the picker", async () => {

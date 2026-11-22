@@ -68,7 +68,8 @@ export default function SettingsPage() {
           <div className="lg:hidden">
             <Select value={id} onValueChange={(next) => void navigate(`/settings/${next}${next === "updates" && hubVersion ? "#hub-update" : ""}`)}>
               <SelectTrigger aria-label={t("navLabel")} className="w-full" data-testid="settings-section-picker"><SelectValue /></SelectTrigger>
-              <SelectContent>
+              {/* Popper keeps the full list below the trigger; item-aligned shrinks it for lower sections. */}
+              <SelectContent position="popper">
                 {GROUPS.map((g) => (
                   <SelectGroup key={g.key}>
                     <SelectLabel>{t(`groups.${g.key}`)}</SelectLabel>
