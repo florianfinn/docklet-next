@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-11-20
 // License: Apache-2.0
-// Deviations: Original peer identity confirmation contract for issue 531.
+// Deviations: Original peer identity confirmation contract for issue 531; #573 undoes migration 7 first.
 
 package activity
 
@@ -25,7 +25,12 @@ func TestS4MigrationPreservesLegacyReceiptsAndReopenedConfirmation(t *testing.T)
 	require.NoError(t, f.store.svc.db.First(&original, "run_id = ?", result.ActivityID).Error)
 	// Reconstruct the shipped v5 schema with a real retained receipt, then run the
 	// same forward migrator used at startup. No earlier migration is edited.
-	for _, sql := range []string{"ALTER TABLE runtime_receipts DROP COLUMN acknowledged_uncertainty", "ALTER TABLE runtime_receipts DROP COLUMN peer_overrides", "DELETE FROM goose_db_version WHERE version_id = 6"} {
+	// Later migrations are undone first so the version history stays contiguous.
+	for _, sql := range []string{
+		"ALTER TABLE environments DROP COLUMN network_route", "ALTER TABLE environments DROP COLUMN tailnet_node_id",
+		"ALTER TABLE environments DROP COLUMN tailnet_tagged", "ALTER TABLE environments DROP COLUMN tailnet_observed_at",
+		"DELETE FROM goose_db_version WHERE version_id = 7",
+		"ALTER TABLE runtime_receipts DROP COLUMN acknowledged_uncertainty", "ALTER TABLE runtime_receipts DROP COLUMN peer_overrides", "DELETE FROM goose_db_version WHERE version_id = 6"} {
 		require.NoError(t, f.store.svc.db.Exec(sql).Error)
 	}
 	require.NoError(t, f.store.svc.db.Migrate(t.Context()))

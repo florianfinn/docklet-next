@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations; optional-module foundation (#472). M27 proxy contract foundation (#473/#474); M29 first-run claim and sign-in policy routes. Hub release list refresh.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations; optional-module foundation (#472). M27 proxy contract foundation (#473/#474); M29 first-run claim and sign-in policy routes. Hub release list refresh. #573 administrator-only tailnet routes.
 
 package access
 
@@ -153,6 +153,10 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/system/docker/info", "get-docker-info"},
 	{"GET", "/environments/{id}/system/upgrade/check", "check-upgrade"},
 	{"POST", "/system/releases/refresh", "refresh-releases"},
+	{"GET", "/tailnet/status", "get-tailnet-status"},
+	{"POST", "/tailnet/reset", "reset-tailnet"},
+	{"GET", "/settings/connections/tailnet", "get-tailnet-settings"},
+	{"PUT", "/settings/connections/tailnet", "update-tailnet-settings"},
 	{"GET", "/environments/{id}/updater/history", "get-updater-history"},
 	{"GET", "/environments/{id}/updater/policies", "list-update-policies"},
 	{"GET", "/environments/{id}/updater/policies/{kind}/{targetId}", "get-auto-update-policy"},

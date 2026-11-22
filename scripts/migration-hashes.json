@@ -5,5 +5,5 @@
   "sqlite/004_host_status_verdict.sql": "1ff037ee5af0fd4010db3a47dbf5676f6e728ed8e9ee67473f99201b0c612085",
   "sqlite/005_proxy.sql": "9f827b7efee9d1a741d78ba1c3ca1c3e80439bc916d2664afc694d0ebaa440b6",
   "sqlite/006_runtime_peer_uncertainty.sql": "b405c4f10e7eca407b3d22bf5b1ef949feb8e956a9aaad234d84bfa1434a4f33",
-  "sqlite/007_tailnet_route.sql": "5e3a682821a581ea840d0f147d3ab4187caf8a22ffa92d76cb43cdd4fbc1b5a3"
+  "sqlite/007_tailnet_route.sql": "41efb57d1e8283af4f6b4e01dbc5421f8a0de755afc359788d1d22de0e55edb5"
 }

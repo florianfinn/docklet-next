@@ -5,7 +5,7 @@
 -- Deviations: Original per-host network route and diagnostic tailnet node observation.
 
 -- +goose Up
-ALTER TABLE "environments" ADD COLUMN "network_route" TEXT CHECK ("network_route" IN ('lan', 'domain', 'tailnet'));
+ALTER TABLE "environments" ADD COLUMN "network_route" TEXT CHECK (network_route IN ('lan','domain','tailnet'));
 ALTER TABLE "environments" ADD COLUMN "tailnet_node_id" TEXT;
-ALTER TABLE "environments" ADD COLUMN "tailnet_tagged" INTEGER CHECK ("tailnet_tagged" IN (0, 1));
-ALTER TABLE "environments" ADD COLUMN "tailnet_observed_at" DATETIME;
+ALTER TABLE "environments" ADD COLUMN "tailnet_tagged" numeric;
+ALTER TABLE "environments" ADD COLUMN "tailnet_observed_at" datetime;

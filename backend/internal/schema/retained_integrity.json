@@ -380,7 +380,8 @@
     {"table":"vulnerability_scans","column":"image_name","notNull":true},
     {"table":"vulnerability_scans","column":"scan_time","notNull":true},
     {"table":"vulnerability_threat_intel","column":"cve_id","notNull":true},
-    {"table":"environments","column":"color","check":"CHECK (color IS NULL OR (length(color) = 7 AND substr(color,1,1) = '#' AND substr(color,2) NOT GLOB '*[^0-9a-f]*'))"}
+    {"table":"environments","column":"color","check":"CHECK (color IS NULL OR (length(color) = 7 AND substr(color,1,1) = '#' AND substr(color,2) NOT GLOB '*[^0-9a-f]*'))"},
+    {"table":"environments","column":"network_route","check":"CHECK (network_route IN ('lan','domain','tailnet'))"}
   ],
   "constraints": {
     "proxy_reservations": ["UNIQUE (operation_id)"],
