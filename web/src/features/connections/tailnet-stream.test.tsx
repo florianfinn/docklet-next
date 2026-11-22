@@ -12,6 +12,7 @@ import { setAppLocale } from "@/app/i18n/locale-store";
 import { useHosts } from "@/data/queries";
 import { mapHost } from "@/data/http/hosts";
 import { tailnetChain } from "@/domain/tailnet";
+import { createTailnet } from "@/data/http/tailnet";
 import { renderWithApp } from "@/test/render";
 import { HostCard } from "@/features/hosts/HostCard";
 import { TailnetHeaderChip } from "./TailnetHosts";
@@ -171,4 +172,22 @@ it("shows no cause for a new tailnet host that waits for its agent", async () =>
   await waitFor(() => expect(f.requests.filter((path) => path === "/api/environments").length >= 3).toBe(true));
   expect(screen.queryByRole("button", { name: "Show cause" }) === null).toBe(true);
   expect(notify).not.toHaveBeenCalled();
+});
+
+it("fences each overlapping credential save until its own status read settles", async () => {
+  const pending: ((response: Response) => void)[] = [];
+  const fetcher = vi.fn(() => new Promise<Response>((resolve) => pending.push(resolve)));
+  const tailnet = createTailnet("/api", { fetch: fetcher, token: async () => "" } as never, () => 0);
+  tailnet.observe(connectedStatus());
+  const reply = (index: number, data: unknown) => pending[index]!(new Response(JSON.stringify({ success: true, data })));
+  const first = tailnet.api.save({ enabled: true });
+  reply(0, {}); await vi.waitFor(() => expect(pending).toHaveLength(2));
+  // The first PUT settled; its status read is still in flight while a second save completes.
+  const second = tailnet.api.save({ enabled: true });
+  reply(2, {}); await vi.waitFor(() => expect(pending).toHaveLength(4));
+  reply(3, connectedStatus()); await second;
+  expect(tailnet.observe({ ...connectedStatus(), connection: { state: "joining" } })).toBe(false);
+  expect(tailnet.api.current()?.connection.state).toBe("connected");
+  reply(1, connectedStatus()); await first;
+  expect(tailnet.observe({ ...connectedStatus(), connection: { state: "joining" } })).toBe(true);
 });

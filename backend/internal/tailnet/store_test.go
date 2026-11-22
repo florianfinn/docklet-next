@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/sys/crypto"
 
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/tailnet"
 	"github.com/florianfinn/docklet-next/backend/internal/tailnet/tailnettest"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
@@ -152,4 +153,20 @@ func TestManualModeDoesNotAdvertiseTags(t *testing.T) {
 	require.Eventually(t, func() bool { return len(fleet.Nodes()) == 1 }, 2*time.Second, 5*time.Millisecond)
 	require.Empty(t, fleet.Nodes()[0].Config.AdvertiseTags)
 	require.Equal(t, manual.AuthKey, fleet.Nodes()[0].Config.AuthKey)
+}
+
+// The raw TAILSCALE_CONTROL_URL decides configuredness and installer use: whitespace anywhere (incl. Unicode spaces) withholds it.
+func TestRawControlURLDecidesInstallerUse(t *testing.T) {
+	initCrypto(t)
+	for _, raw := range []string{" https://control.example.com", "https://control.example.com\n", "https://control.example.com/a\u00a0b", "https://control.example.com/\ufeff", " "} {
+		service := tailnet.NewService(&config.Config{TailscaleControlURL: raw, EdgeMTLSMode: "disabled", TailscaleStateDir: t.TempDir()}, &memorySettings{values: map[string]string{}})
+		settings, err := service.Settings(t.Context())
+		require.NoError(t, err)
+		require.True(t, settings.CustomControl, "%q", raw)
+		require.Empty(t, settings.ControlURL, "%q", raw)
+	}
+	service := tailnet.NewService(&config.Config{TailscaleControlURL: "https://control.example.com", EdgeMTLSMode: "disabled", TailscaleStateDir: t.TempDir()}, &memorySettings{values: map[string]string{}})
+	settings, err := service.Settings(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "https://control.example.com", settings.ControlURL)
 }

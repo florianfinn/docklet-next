@@ -121,7 +121,8 @@ it("retains the created host but refuses a partial one-time installer response",
 
 it("refuses the Tailscale route when the hub's control server cannot be written into an installer", async () => {
   const f = tailnetFixture({ ...connectedStatus(), mode: "manual", provisioning: { state: "not-applicable" } });
-  f.state.settings.mode = "manual"; f.state.settings.customControl = true;
+  // A URL the installer rejects (here an interior no-break space) counts as missing, whichever validator let it through.
+  f.state.settings.mode = "manual"; f.state.settings.customControl = true; f.state.settings.controlUrl = "https://control.example.com/a\u00a0b";
   renderRoutes([{ path: "/hosts/new", element: <OnboardingPage /> }], ["/hosts/new"], f.adapter);
   await userEvent.type(await screen.findByLabelText("Host name in Docklet"), "New agent");
   await screen.findByText(/TAILSCALE_CONTROL_URL cannot be written into an agent installer/);

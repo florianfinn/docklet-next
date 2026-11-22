@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"go.getarcane.app/sys/crypto"
 
@@ -115,10 +116,11 @@ func Merge(stored Credential, update tailnettypes.SettingsUpdate) (Credential, e
 	return next, nil
 }
 
-// InstallerControlURL returns TAILSCALE_CONTROL_URL when agents' installers may carry it: an absolute http(s) URL with a host,
-// no userinfo and no whitespace, quotes or backslashes (web/src/domain/agent-install.ts applies the same rule).
+// InstallerControlURL returns the raw TAILSCALE_CONTROL_URL when agents' installers may carry it: an absolute http(s) URL with a
+// host, no userinfo, quotes, backslashes or whitespace (Unicode spaces and U+FEFF, the JavaScript \s set used by
+// web/src/domain/agent-install.ts installerControlUrl).
 func InstallerControlURL(raw string) (string, bool) {
-	if raw == "" || strings.ContainsAny(raw, " \t\r\n'\"\\") {
+	if raw == "" || strings.ContainsAny(raw, "'\"\\\uFEFF") || strings.IndexFunc(raw, unicode.IsSpace) >= 0 {
 		return "", false
 	}
 	parsed, err := url.Parse(raw)

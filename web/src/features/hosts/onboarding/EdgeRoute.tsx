@@ -10,6 +10,7 @@ import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 import { useTailnet } from "@/data/use-tailnet";
 import { tailnetRouteReason, type NetworkRoute } from "@/domain/tailnet";
+import { installerControlUrl } from "@/domain/agent-install";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
 import { FieldSet, FieldLegend } from "@/shared/ui/field";
 import { TextField } from "@/shared/components/form-field";
@@ -23,7 +24,7 @@ export function EdgeRoute({ draft, locked, candidates }: { draft: HostDraft; loc
   const { api, status } = useTailnet();
   const settings = useQuery({ queryKey: ["tailnet-settings"], queryFn: () => api!.settings(), enabled: !!api, retry: false });
   const reason = tailnetRouteReason(status);
-  const unusableControl = !!settings.data?.customControl && !settings.data.controlUrl;
+  const unusableControl = !!settings.data?.customControl && !installerControlUrl(settings.data.controlUrl);
   const disabled = reason !== undefined || !settings.data || unusableControl;
   const routes = [{ value: "lan", icon: HouseWifi, titleKey: "lan", hint: "lanHint" }, { value: "domain", icon: Globe, titleKey: "domain", hint: "domainHint" }, { value: "tailnet", icon: Network, titleKey: "name", hint: "routeHint" }] as const;
   const managerUrl = status?.hubAddress ? `http://${status.hubAddress}:3552` : "…";

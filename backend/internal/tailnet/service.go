@@ -44,7 +44,8 @@ func NewService(cfg *config.Config, settings SettingsBackend) *Service {
 		MTLSDisabled: edge.NormalizeEdgeMTLSMode(cfg.EdgeMTLSMode) == edge.EdgeMTLSModeDisabled,
 		Provisioner:  &Provisioner{},
 	})
-	controlURL := strings.TrimSpace(cfg.TailscaleControlURL)
+	// The raw value decides configuredness and installer use; only the hub's own join trims it.
+	controlURL := cfg.TailscaleControlURL
 	if _, ok := InstallerControlURL(controlURL); controlURL != "" && !ok {
 		// Never log the value: it may carry credentials.
 		slog.Warn("TAILSCALE_CONTROL_URL is not an http(s) URL without credentials; new hosts cannot use the Tailscale route")

@@ -67,13 +67,19 @@ function validatePlan(plan: AgentInstallPlan): void {
   if (image.length > 512 || !/^(?:\[[0-9A-Fa-f:.]+\](?::\d{1,5})?\/)?[A-Za-z0-9][A-Za-z0-9._/:-]*(?:@sha256:[a-f0-9]{64})?$/.test(image)) throw new Error("agent-install.invalid-image");
 }
 
+/** The one installer rule for TAILSCALE_CONTROL_URL; backend tailnet.InstallerControlURL rejects at least the same values. */
+export function installerControlUrl(value: string | undefined): value is string {
+  if (!value || !/^https?:\/\/[^\s'"\\]+$/.test(value)) return false;
+  try { const url = new URL(value); return !url.username && !url.password; } catch { return false; }
+}
+
 // An OAuth client secret is a hub credential and must never reach an agent .env.
 function validateTailnet(plan: AgentInstallPlan): void {
   const t = plan.tailnet!;
   if (plan.connection !== "edge" || !plan.hubUrl.startsWith("http://")) throw new Error("agent-install.invalid-tailnet");
   if (!/^[A-Za-z0-9._~:-]{1,512}$/.test(t.authKey) || t.authKey.startsWith("tskey-client-")) throw new Error("agent-install.invalid-tailnet-key");
   if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(t.hostname)) throw new Error("agent-install.invalid-tailnet");
-  if (t.controlUrl !== undefined && (!/^https?:\/\/[^\s'"\\]+$/.test(t.controlUrl) || new URL(t.controlUrl).username || new URL(t.controlUrl).password)) throw new Error("agent-install.invalid-tailnet");
+  if (t.controlUrl !== undefined && !installerControlUrl(t.controlUrl)) throw new Error("agent-install.invalid-tailnet");
 }
 
 export function agentCompose(plan: AgentInstallPlan): string {

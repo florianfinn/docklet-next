@@ -18,8 +18,8 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
   let current: TailnetStatus | undefined;
   let revision = 0;
   let streamEpoch = 0, observedEpoch = 0;
-  // While a credential write settles, same-epoch stream statuses up to the pre-write generation are the replaced lifecycle.
-  let write: { floor: number; epoch: number } | undefined;
+  // While any credential write settles, same-epoch stream statuses up to its pre-write generation are the replaced lifecycle.
+  const writes = new Set<{ floor: number; epoch: number }>();
   let lifetime = new AbortController();
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
@@ -52,12 +52,12 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
     async save(input) {
       // The hub keeps the generation when a same-mode credential replaces a connected run, so the post-write read decides.
       const owned = { floor: current?.generation ?? -1, epoch: streamEpoch };
-      ++revision; write = owned;
+      ++revision; writes.add(owned);
       try {
         const saved = await request<TailnetSettings>("/settings/connections/tailnet", "PUT", input);
         observe(await request<TailnetStatus>("/tailnet/status"));
         return saved;
-      } finally { if (write === owned) write = undefined; }
+      } finally { writes.delete(owned); }
     },
     async reset() { ++revision; observe(await request<TailnetStatus>("/tailnet/reset", "POST")); },
   };
@@ -75,7 +75,7 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
     if (current) await status();
   }
   function observeStream(next: TailnetStatus): boolean {
-    if (write && write.epoch === streamEpoch && next.generation <= write.floor) return false;
+    for (const write of writes) if (write.epoch === streamEpoch && next.generation <= write.floor) return false;
     return observe(next);
   }
   return { api, observe: observeStream, observeHosts, project, reconnect, clear: () => { ++revision; peers.clear(); lifetime.abort(); lifetime = new AbortController(); current = undefined; notify(); } };
