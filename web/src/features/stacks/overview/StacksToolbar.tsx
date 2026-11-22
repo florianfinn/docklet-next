@@ -32,7 +32,7 @@ export function StacksToolbar(p: ToolbarProps) {
   const t = useTranslations("stacks");
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-list-toolbar className="flex flex-wrap items-center gap-2">
         <InputGroup className="w-full sm:w-72">
           <InputGroupAddon>
             <Search />
@@ -61,7 +61,7 @@ export function StacksToolbar(p: ToolbarProps) {
         />
       </div>
       {p.labels.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t("labelsFilter")}>
+        <div className="flex flex-wrap items-center gap-1.5 max-md:flex-nowrap max-md:overflow-x-auto max-md:[scrollbar-width:none] [&>*]:shrink-0" role="group" aria-label={t("labelsFilter")}>
           <Tag className="size-3.5 text-muted-foreground" aria-hidden />
           {p.labels.map((l) => {
             const on = p.selectedLabels.includes(l);

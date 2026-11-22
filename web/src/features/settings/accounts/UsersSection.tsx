@@ -2,9 +2,9 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original live users table based on the approved AuthSection reference.
+// Deviations: Original live users table based on the approved AuthSection reference. M35 #561: one card per user with one action menu on phones.
 
-import { Pencil, Plus, ShieldCheck, Trash2, UserRound } from "lucide-react";
+import { KeyRound, Link2, Pencil, Plus, Power, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -12,6 +12,7 @@ import type { ManagedUser } from "@/data/api";
 import { useCurrentUser, useHosts, useStacks } from "@/data/queries";
 import { useAdapter } from "@/data/use-adapter";
 import type { AuthMode } from "@/domain/settings";
+import { ActionsMenu } from "@/shared/components/action-menu";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { QueryError } from "@/shared/components/page";
 import { ToneBadge } from "@/shared/components/tone";
@@ -26,7 +27,7 @@ export function UsersSection({ mode }: { mode: AuthMode }) {
 }
 
 function UsersTable({ mode }: { mode: AuthMode }) {
-  const t = useTranslations("settings.liveUsers");
+  const t = useTranslations("settings.liveUsers"), tc = useTranslations("common.actions");
   const adapter = useAdapter();
   const current = useCurrentUser();
   const users = useQuery({ queryKey: ["users"], queryFn: () => adapter.listUsers() });
@@ -51,9 +52,10 @@ function UsersTable({ mode }: { mode: AuthMode }) {
   return <>
     <Button size="sm" variant="outline" className="self-end" onClick={() => setEditing("new")}><Plus />{t("add")}</Button>
     {mode === "proxy" && <p className="text-xs text-muted-foreground">{t("proxyHint")}</p>}
-    {users.isError ? <QueryError error={users.error} onRetry={saved} /> : !users.data ? <p aria-busy="true">{t("loading")}</p> : <div className="overflow-x-auto rounded-xl border"><Table>
-      <TableHeader><TableRow><TableHead>{t("name")}</TableHead><TableHead>{t("state")}</TableHead><TableHead>{t("assignments")}</TableHead><TableHead><span className="sr-only">{t("edit")}</span></TableHead></TableRow></TableHeader>
-      <TableBody>{users.data.map((u) => <TableRow key={u.id}>
+    {users.isError ? <QueryError error={users.error} onRetry={saved} /> : !users.data ? <p aria-busy="true">{t("loading")}</p> : <div className="overflow-x-auto rounded-xl border max-md:overflow-visible max-md:border-0"><Table className="max-md:block">
+      <TableHeader className="max-md:hidden"><TableRow><TableHead>{t("name")}</TableHead><TableHead>{t("state")}</TableHead><TableHead>{t("assignments")}</TableHead><TableHead><span className="sr-only">{t("edit")}</span></TableHead></TableRow></TableHeader>
+      {/* Phones: one card per user with one action menu; the desktop table is unchanged. */}
+      <TableBody className="max-md:grid max-md:gap-2">{users.data.map((u) => <TableRow key={u.id} className="max-md:relative max-md:grid max-md:gap-1 max-md:rounded-xl max-md:border max-md:p-3 max-md:pr-12 max-md:[&>td]:p-0 max-md:[&>td]:whitespace-normal">
         <TableCell><span className="flex items-center gap-2 font-medium"><UserRound className="size-3.5" />{u.username}{u.isAdmin && <ToneBadge tone="violet"><ShieldCheck />{t("administrator")}</ToneBadge>}</span></TableCell>
         <TableCell>{t(u.disabledAt ? "disabled" : "enabled")}</TableCell>
         <TableCell className="text-xs">{u.assignments.length ? u.assignments.map((a) => {
@@ -61,7 +63,13 @@ function UsersTable({ mode }: { mode: AuthMode }) {
           const host = hosts.data?.find((h) => h.id === a.environmentId);
           return <div key={`${a.environmentId}~${a.projectId}`}>{host?.name ?? a.environmentId} · {stack?.name ?? a.projectId} · {t(a.level)}</div>;
         }) : t("empty")}</TableCell>
-        <TableCell><div className="flex flex-wrap justify-end gap-1">
+        <TableCell className="max-md:absolute max-md:top-2 max-md:right-2"><div className="md:hidden"><ActionsMenu label={`${tc("more")}: ${u.username}`} groups={[[
+          { id: "edit", label: t("edit"), icon: <Pencil />, onSelect: () => setEditing(u) },
+          { id: "assign", label: t("assign"), icon: <Link2 />, onSelect: () => setAssigning(u) },
+          { id: "toggle", label: t(u.disabledAt ? "enable" : "disable"), icon: <Power />, disabled: busy || (!u.disabledAt && !!locked(u)), title: locked(u), onSelect: () => void toggle(u) },
+          ...(mode === "local" ? [{ id: "reset", label: t("reset"), icon: <KeyRound />, onSelect: () => setReset(u) }] : []),
+          { id: "remove", label: t("remove"), icon: <Trash2 />, disabled: !!locked(u), title: locked(u), onSelect: () => setDeleting(u) },
+        ]]} /></div><div className="flex flex-wrap justify-end gap-1 max-md:hidden">
           <Button size="icon" variant="ghost" aria-label={`${t("edit")}: ${u.username}`} onClick={() => setEditing(u)}><Pencil /></Button>
           <Button size="sm" variant="ghost" onClick={() => setAssigning(u)}>{t("assign")}</Button>
           <Button size="sm" variant="ghost" disabled={busy || (!u.disabledAt && !!locked(u))} title={locked(u)} onClick={() => void toggle(u)}>{t(u.disabledAt ? "enable" : "disable")}</Button>

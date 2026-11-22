@@ -8,14 +8,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/shared/ui/empty";
 
-export function PageHeader({ title, description, actions, eyebrow }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode }) {
+/** `compact` (resource lists): on phones the intro is hidden and the actions stay beside the title. */
+export function PageHeader({ title, description, actions, eyebrow, compact }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode; compact?: boolean }) {
   return (
-    <header className="mb-6 flex flex-wrap items-end gap-3">
+    <header className={cn("mb-6 flex flex-wrap items-end gap-3", compact && "max-md:mb-3 max-md:items-center")}>
       {/* The title keeps a readable width; actions wrap below it on narrow screens. */}
-      <div className="min-w-[min(100%,20rem)] flex-1">
+      <div className={cn("min-w-[min(100%,20rem)] flex-1", compact && "max-md:min-w-0")}>
         {eyebrow}
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {description && <p className="mt-0.5 max-w-4xl text-sm text-muted-foreground">{description}</p>}
+        {description && <p className={cn("mt-0.5 max-w-4xl text-sm text-muted-foreground", compact && "max-md:hidden")}>{description}</p>}
       </div>
       {actions && (
         <div data-page-actions className="flex flex-wrap items-center gap-2">

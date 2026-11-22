@@ -110,7 +110,7 @@ export default function VolumesPage() {
 
   return (
     <>
-      <PageHeader
+      <PageHeader compact
         title={t("title")}
         description={t("description", { scope })}
         actions={
@@ -133,7 +133,7 @@ export default function VolumesPage() {
         }
       />
       <InventoryNotice hosts={hosts.visible} items={visible} />
-      <StatStrip
+      <StatStrip compact
         className="md:grid-cols-5"
         items={[
           { label: t("strip.volumes"), value: pending ? "–" : stats.volumes, icon: <Database /> },
@@ -143,16 +143,19 @@ export default function VolumesPage() {
           { label: t("strip.backup"), value: pending ? "–" : backup.available ? `${stats.backup}/${visible.length}` : t("unknown"), icon: <Archive />, tone: backup.available ? "ok" : undefined },
         ]}
       />
-      <Card className="gap-3 p-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <Card className="gap-3 p-4 max-md:p-3">
+        <div data-list-toolbar className="flex flex-wrap items-center gap-2">
           <InputGroup className="w-full sm:w-72">
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>
             <InputGroupInput type="search" placeholder={t("search")} aria-label={t("searchLabel")} value={query} onChange={(e) => setQuery(e.target.value)} />
           </InputGroup>
-          <SegmentedToggle<KindFilter> value={kind} onChange={(v) => setParam("kind", v)} label={t("kindFilter")} options={(["all", "volume", "bind"] as const).map((k) => ({ value: k, label: t(`kinds.${k}`) }))} fit="content" wrap />
-          <SegmentedToggle<UsageFilter> value={usage} onChange={(v) => setParam("usage", v)} label={t("usageFilter.label")} options={(["all", "used", "unused"] as const).map((k) => ({ value: k, label: t(`usageFilter.${k}`) }))} fit="content" wrap />
+          {/* Both filters share one row; on phones it scrolls instead of wrapping. */}
+          <div className="flex min-w-0 flex-wrap gap-2 max-md:w-full max-md:flex-nowrap max-md:overflow-x-auto max-md:[scrollbar-width:none]">
+            <SegmentedToggle<KindFilter> value={kind} onChange={(v) => setParam("kind", v)} label={t("kindFilter")} options={(["all", "volume", "bind"] as const).map((k) => ({ value: k, label: t(`kinds.${k}`) }))} fit="content" wrap />
+            <SegmentedToggle<UsageFilter> value={usage} onChange={(v) => setParam("usage", v)} label={t("usageFilter.label")} options={(["all", "used", "unused"] as const).map((k) => ({ value: k, label: t(`usageFilter.${k}`) }))} fit="content" wrap />
+          </div>
           <span className="flex-1" />
           <OverviewViewControls layout={layout} onLayout={(l) => setPreference("volumesLayout", l)} labels={{ layout: ts("layout.label"), table: ts("layout.table"), hosts: ts("layout.hosts"), tableHint: ts("layout.tableHint"), hostsHint: ts("layout.hostsHint") }} />
         </div>

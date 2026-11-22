@@ -105,7 +105,7 @@ export default function ImagesPage() {
 
   return (
     <>
-      <PageHeader
+      <PageHeader compact
         title={t("title")}
         description={t("description", { scope })}
         actions={
@@ -122,7 +122,7 @@ export default function ImagesPage() {
         }
       />
       <InventoryNotice hosts={hosts.visible} items={visible} />
-      <StatStrip
+      <StatStrip compact
         className="md:grid-cols-5"
         items={[
           { label: t("strip.images"), value: pending ? "–" : visible.length, icon: <Package /> },
@@ -132,8 +132,8 @@ export default function ImagesPage() {
           { label: t("strip.updates"), value: pending ? "–" : stats.updates, icon: <Download />, tone: stats.updates ? "warn" : undefined },
         ]}
       />
-      <Card className="gap-3 p-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <Card className="gap-3 p-4 max-md:p-3">
+        <div data-list-toolbar className="flex flex-wrap items-center gap-2">
           <InputGroup className="w-full sm:w-80">
             <InputGroupAddon>
               <Search />

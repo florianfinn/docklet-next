@@ -155,6 +155,7 @@ export const enCommon = {
     unknown: "Unknown",
   },
   actions: {
+    view: "View",
     retry: "Try again",
     open: "Open",
     close: "Close",

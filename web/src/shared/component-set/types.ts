@@ -26,6 +26,8 @@ export interface StripItem {
 export interface StatStripProps {
   items: StripItem[];
   className?: string;
+  /** Resource lists: one line of counts on phones instead of the tiles. */
+  compact?: boolean;
 }
 
 export interface BulkActionBarProps {

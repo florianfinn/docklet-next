@@ -360,3 +360,26 @@
   border-radius: 0 3px 3px 0;
   background: var(--primary);
 }
+
+/* Resource list toolbars on phones: search and the view menu share the first row, filters scroll in one row. */
+@media (width < 48rem) {
+  [data-list-toolbar] > [data-slot="input-group"] {
+    order: -2;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+  [data-list-toolbar] > [data-slot="view-menu"] {
+    order: -1;
+    margin-left: 0;
+  }
+  [data-list-toolbar] > .flex-1 {
+    display: none;
+  }
+  [data-list-toolbar] .seg[data-wrap] {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}

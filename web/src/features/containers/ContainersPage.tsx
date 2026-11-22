@@ -164,9 +164,9 @@ export default function ContainersPage() {
 
   return (
     <>
-      <PageHeader title={t("title")} description={t("description", { scope })} />
+      <PageHeader compact title={t("title")} description={t("description", { scope })} />
       <InventoryNotice hosts={hosts.visible} items={containers.visible} />
-      <StatStrip
+      <StatStrip compact
         items={[
           { label: t("strip.total"), value: totalsPending ? "–" : containers.visible.length, icon: <Boxes /> },
           { label: t("strip.running"), value: totalsPending ? "–" : counts.running, icon: <Play />, tone: "ok" },
@@ -174,8 +174,8 @@ export default function ContainersPage() {
           { label: t("strip.standalone"), value: totalsPending ? "–" : counts.standalone, icon: <Box /> },
         ]}
       />
-      <Card className="gap-3 p-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <Card className="gap-3 p-4 max-md:p-3">
+        <div data-list-toolbar className="flex flex-wrap items-center gap-2">
           <InputGroup className="w-full sm:w-72">
             <InputGroupAddon>
               <Search />

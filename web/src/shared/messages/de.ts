@@ -156,6 +156,7 @@ export const deCommon: typeof enCommon = {
     unknown: "Unbekannt",
   },
   actions: {
+    view: "Ansicht",
     retry: "Erneut versuchen",
     open: "Öffnen",
     close: "Schließen",

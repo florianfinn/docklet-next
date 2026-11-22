@@ -153,7 +153,7 @@ export default function StacksPage() {
 
   return (
     <>
-      <PageHeader
+      <PageHeader compact
         title={t("title")}
         description={t("description", { scope })}
         actions={
@@ -166,7 +166,7 @@ export default function StacksPage() {
         }
       />
       <InventoryNotice hosts={hosts.visible} items={stacks.visible} />
-      <StatStrip
+      <StatStrip compact
         items={[
           { label: t("strip.stacks"), value: stacks.isPending ? "–" : stacks.visible.length, icon: <Layers /> },
           { label: t("strip.running"), value: stacks.isPending ? "–" : counts.running, icon: <Play />, tone: counts.running ? "ok" : undefined },
@@ -174,7 +174,7 @@ export default function StacksPage() {
           { label: t("strip.updates"), value: stacks.isPending ? "–" : counts.updates, icon: <Download />, tone: counts.updates ? "warn" : undefined, sub: t("strip.updatesSub") },
         ]}
       />
-      <Card className="gap-3 p-4">
+      <Card className="gap-3 p-4 max-md:p-3">
         <StacksToolbar
           query={query}
           onQuery={setQuery}

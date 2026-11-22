@@ -283,7 +283,8 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
             </>
           ) : (
             <>
-              <div className="flex max-w-full shrink-0 justify-center">{visual}</div>
+              {/* Phones read the verdict first; the ring follows. */}
+              <div className="flex max-w-full shrink-0 justify-center max-md:order-last">{visual}</div>
               {verdict}
             </>
           )}
