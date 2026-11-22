@@ -19,6 +19,8 @@ import (
 // AgentConfig is the agent's env-only tailnet configuration. The route is on when AuthKey is set;
 // after the first join the retained state is used and the consumed key is ignored.
 type AgentConfig struct {
+	// Requested is the operator's opt-in (a key or an explicit TAILSCALE_HOSTNAME), decided before defaults apply.
+	Requested  bool
 	AuthKey    string
 	Hostname   string
 	StateDir   string
@@ -28,10 +30,10 @@ type AgentConfig struct {
 	RetryMax   time.Duration // 60 s
 }
 
-// Enabled reports whether the agent uses the tailnet route: a first-join key, the installer's tailnet
-// hostname or a retained node identity. A restart without the consumed key keeps the route.
+// Enabled reports whether the agent uses the tailnet route: an operator opt-in, a first-join key or a
+// retained node identity. A restart without the consumed key keeps the route.
 func (c AgentConfig) Enabled() bool {
-	return strings.TrimSpace(c.AuthKey) != "" || strings.TrimSpace(c.Hostname) != "" || HasNodeState(c.StateDir)
+	return c.Requested || strings.TrimSpace(c.AuthKey) != "" || HasNodeState(c.StateDir)
 }
 
 // Agent is the agent's joined node.
@@ -53,12 +55,10 @@ func JoinAgent(ctx context.Context, cfg AgentConfig) (*Agent, error) {
 	}
 	delay := cfg.RetryMin
 	for attempt := 1; ; attempt++ {
-		// The one-use key is offered only without a retained identity; it is consumed after the first join.
-		retained := HasNodeState(cfg.StateDir)
+		// A plain auth key needs no network exchange and a logged-in node ignores it, so the configured key is
+		// always offered; an interrupted first join keeps it for the next attempt.
 		key := strings.TrimSpace(cfg.AuthKey)
-		if retained {
-			key = ""
-		} else if key == "" {
+		if key == "" && !HasNodeState(cfg.StateDir) {
 			slog.ErrorContext(ctx, "Tailnet node state is missing and no auth key is configured; re-add this host to issue a new key", "attempt", attempt)
 		}
 		node, err := cfg.Factory(NodeConfig{

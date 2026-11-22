@@ -385,6 +385,7 @@ func runRoleStartupTasks(ctx context.Context, roleService *role.RoleService, api
 // newAgentTailnetRouteInternal installs the late-bound manager dialer before any service starts.
 func newAgentTailnetRouteInternal(cfg *config.Config) *tailnet.AgentRoute {
 	route := tailnet.NewAgentRoute(tailnet.AgentConfig{
+		Requested:  strings.TrimSpace(cfg.TailscaleAuthKey) != "" || strings.TrimSpace(cfg.TailscaleHostname) != "",
 		AuthKey:    cfg.TailscaleAuthKey,
 		Hostname:   cmp.Or(strings.TrimSpace(cfg.TailscaleHostname), "docklet-agent"),
 		StateDir:   cfg.TailscaleStateDir,

@@ -63,7 +63,7 @@ func captureLogs(t *testing.T) *syncBuffer {
 func retainedState(t *testing.T) func(*tailnet.ManagerConfig) {
 	return func(c *tailnet.ManagerConfig) {
 		require.NoError(t, os.MkdirAll(c.StateDir, 0o700))
-		require.NoError(t, os.WriteFile(filepath.Join(c.StateDir, "tailscaled.state"), []byte(`{"profiles":"example"}`), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(c.StateDir, "tailscaled.state"), []byte(`{"_machinekey":"ZXhhbXBsZQ==","profile-a1b2":"ZXhhbXBsZQ=="}`), 0o600))
 	}
 }
 
@@ -247,13 +247,31 @@ func TestStaleMintIsDiscarded(t *testing.T) {
 // F7: the agent route stays on across a keyless restart and fails closed when the identity is lost.
 func TestAgentRouteSurvivesKeylessRestart(t *testing.T) {
 	dir := t.TempDir()
-	require.False(t, tailnet.NewAgentRoute(tailnet.AgentConfig{StateDir: dir}).Enabled(), "no tailnet configuration at all")
-	require.True(t, tailnet.NewAgentRoute(tailnet.AgentConfig{StateDir: dir, Hostname: "docklet-example"}).Enabled(), "the installer's hostname keeps the route on")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "tailscaled.state"), []byte(`{"profiles":"example"}`), 0o600))
+	require.False(t, tailnet.NewAgentRoute(tailnet.AgentConfig{StateDir: dir, Hostname: "docklet-agent"}).Enabled(), "a default hostname alone is no opt-in")
+	require.True(t, tailnet.NewAgentRoute(tailnet.AgentConfig{StateDir: dir, Requested: true}).Enabled(), "the installer's explicit hostname keeps the route on")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tailscaled.state"), []byte(`{}`), 0o600))
+	require.False(t, tailnet.HasNodeState(dir), "an initialised but unenrolled store is no identity")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tailscaled.state"), []byte(`{"_machinekey":"ZXhhbXBsZQ==","profile-a1b2":"ZXhhbXBsZQ=="}`), 0o600))
 	route := tailnet.NewAgentRoute(tailnet.AgentConfig{StateDir: dir, Factory: tailnettest.NewFleet().Factory})
 	require.True(t, route.Enabled(), "a retained identity keeps the route on without the consumed key")
 	_, err := route.Dial(t.Context(), "tcp", "192.0.2.1:3552")
 	require.Error(t, err, "before joining the route fails closed instead of using normal networking")
 	require.NoError(t, route.Join(t.Context()))
 	t.Cleanup(func() { _ = route.Close() })
+}
+
+// R09: an interrupted first join (tsnet already created an empty store) keeps offering the key.
+func TestInterruptedAgentEnrollmentKeepsItsKey(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "tailscaled.state"), []byte(`{}`), 0o600))
+	fleet := tailnettest.NewFleet()
+	fleet.FailNextUps(context.DeadlineExceeded)
+	key := tailnettest.Key("auth", "example-agent")
+	agent, err := tailnet.JoinAgent(t.Context(), tailnet.AgentConfig{AuthKey: key, StateDir: dir, Factory: fleet.Factory, RetryMin: 5 * time.Millisecond, RetryMax: 20 * time.Millisecond})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = agent.Close() })
+	nodes := fleet.Nodes()
+	require.Len(t, nodes, 2)
+	require.Equal(t, key, nodes[0].Config.AuthKey)
+	require.Equal(t, key, nodes[1].Config.AuthKey, "the retry after a failed first join still enrolls")
 }

@@ -9,6 +9,7 @@ package tailnet
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -47,10 +48,24 @@ type NodeConfig struct {
 	Secrets       []string
 }
 
-// HasNodeState reports whether dir holds a node identity from an earlier join (tsnet's Dir/tailscaled.state).
+// HasNodeState reports whether dir holds a logged-in node identity from an earlier join. tsnet creates
+// Dir/tailscaled.state before enrolling, so only a stored login profile (a "profile-" key, written once the
+// node has a node ID) counts; an initialised but unenrolled store does not.
 func HasNodeState(dir string) bool {
-	info, err := os.Stat(filepath.Join(dir, "tailscaled.state"))
-	return err == nil && info.Size() > 0
+	raw, err := os.ReadFile(filepath.Join(dir, "tailscaled.state"))
+	if err != nil || len(raw) > 4<<20 {
+		return false
+	}
+	var keys map[string]json.RawMessage
+	if json.Unmarshal(raw, &keys) != nil {
+		return false
+	}
+	for key := range keys {
+		if strings.HasPrefix(key, "profile-") {
+			return true
+		}
+	}
+	return false
 }
 
 // Watcher is one IPN bus subscription.
