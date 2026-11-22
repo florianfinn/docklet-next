@@ -38,6 +38,7 @@ export const enVolumes = {
     failedReasons: {"inspect-failed": "Volume inspection failed.", "usage-failed": "Usage check failed.", "remove-failed": "Volume removal failed.", "protected": "Protected volume retained."},
     sizeUnknown: "Size unknown",
     includeNamed: "Include named volumes",
+    new: "New",
     removed: "Removed",
     skipped: "Skipped",
     failed: "Failed",
@@ -70,6 +71,7 @@ export const enVolumes = {
     partial: "Partial", bindUnavailable: "Not available",
     unavailable: "Backup status unavailable", none: "No backup", disabled: "Paused", ok: "OK · {time}", failed: "Failed", running: "Running …" },
   createDialog: {
+    hostUnavailable: "The selected host is offline.",
     title: "Create volume",
     description: "Empty local Docker volume. A stack uses it as soon as compose.yaml mounts it.",
     name: "Name",

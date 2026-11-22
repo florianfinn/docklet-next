@@ -5,6 +5,7 @@ import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useQuery } from "@tanstack/react-query";
 import { Eraser, ShieldCheck, Unplug } from "lucide-react";
 import { useId, useState } from "react";
+import { isHostAvailable } from "@/domain/hosts";
 import { useTranslations } from "use-intl";
 
 import type { VolumePruneResult } from "@/data/api";
@@ -34,23 +35,38 @@ interface Props {
  * why, and which hosts are skipped. The snapshot stays stable while the user
  * confirms; execution rechecks identity and usage and reports every deviation.
  */
+const identity = (v: { hostId: string; name: string; createdAt?: string }) => JSON.stringify([v.hostId, v.name, v.createdAt ?? ""]);
+// Host order, names and status never reset the dialog; a different set of hosts does.
+const scopeKey = (hosts: Host[]) => hosts.map((h) => h.id).sort().join("|");
+
 function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
   const t = useTranslations("volumes.prune");
   const adapter = useAdapter();
   const cmd = useVolumeCommands();
   const hostIds = hosts.map((h) => h.id);
+  // A host coming online or going offline reads a new plan without resetting earlier choices.
+  const available = hosts.filter(isHostAvailable).map((h) => h.id).sort();
   const session = useId();
   const feedback = useDialogCommand(open, session);
   const [all, setAll] = useState(false);
   const capability = useCapability("pruneVolumes");
-  const plan = useQuery({ queryKey: ["volume-prune-plan", session, all, ...hostIds], queryFn: () => adapter.planVolumePrune({ hostIds, all }), staleTime: Infinity, gcTime: 0 });
+  const plan = useQuery({ queryKey: ["volume-prune-plan", session, all, scopeKey(hosts), available.join(",")], queryFn: () => adapter.planVolumePrune({ hostIds, all }), staleTime: Infinity, gcTime: 0 });
   const [result, setResult] = useState<VolumePruneResult>();
-  const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
+  // Choices per candidate identity (host, name, creation). The first plan selects its candidates; candidates that
+  // appear later start unselected and are marked new, so a refresh never deletes something nobody chose.
+  const [choices, setChoices] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
+  const [adopted, setAdopted] = useState<unknown>();
+  if (plan.data && plan.data !== adopted) {
+    const first = adopted === undefined, next = new Map(choices), added = new Set(fresh);
+    for (const v of plan.data.candidates) if (!next.has(identity(v))) { next.set(identity(v), first); if (!first) added.add(identity(v)); }
+    setAdopted(plan.data); setChoices(next); setFresh(added);
+  }
   const [busy, setBusy] = useState(false);
   const hostName = (id: string) => hosts.find((h) => h.id === id)?.name ?? id;
 
   const candidates = plan.data?.candidates ?? [];
-  const chosen = candidates.filter((v) => !excluded.has(v.id));
+  const chosen = candidates.filter((v) => choices.get(identity(v)) === true);
   const size = chosen.some((v) => v.sizeUnavailable) ? t("sizeUnknown") : formatBytes(chosen.reduce((n, v) => n + v.sizeBytes, 0));
   const inUse = plan.data?.kept.filter((k) => k.reason === "in-use") ?? [];
   const binds = plan.data?.kept.filter((k) => k.reason === "bind").length ?? 0;
@@ -58,7 +74,6 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
 
   const close = (o: boolean) => {
     feedback.change(o, onOpenChange);
-    if (!o) setExcluded(new Set());
   };
 
   const confirm = async () => {
@@ -93,7 +108,7 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
           <QueryError error={plan.error} onRetry={() => void plan.refetch()} />
         ) : (
           <div className="flex flex-col gap-3 text-sm">
-            <label className="flex items-center gap-2"><Checkbox checked={all} disabled={busy} onCheckedChange={(checked) => { setAll(checked === true); setExcluded(new Set()); }} />{t("includeNamed")}</label>
+            <label className="flex items-center gap-2"><Checkbox checked={all} disabled={busy} onCheckedChange={(checked) => setAll(checked === true)} />{t("includeNamed")}</label>
             <p className="text-xs text-muted-foreground">{t("scope", { hosts: hosts.filter((h) => !skipped.includes(h.id) && !plan.data?.failedHosts?.some((f) => f.hostId === h.id)).map((h) => h.name).join(", ") || "–" })}</p>
             {plan.data?.failedHosts?.map((failure) => <p role="alert" key={failure.hostId}>{t("hostFailed", { host: hostName(failure.hostId) })}</p>)}
             {skipped.length > 0 && (
@@ -114,19 +129,12 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
                         <Checkbox
                           id={id}
                           disabled={busy}
-                          checked={!excluded.has(v.id)}
-                          onCheckedChange={(on) =>
-                            setExcluded((s) => {
-                              const next = new Set(s);
-                              if (on) next.delete(v.id);
-                              else next.add(v.id);
-                              return next;
-                            })
-                          }
+                          checked={choices.get(identity(v)) === true}
+                          onCheckedChange={(on) => setChoices((m) => new Map(m).set(identity(v), on === true))}
                         />
                         <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer">
                           <span className="block font-mono text-xs [overflow-wrap:anywhere]">{volumeLabel(v)}</span>
-                          <span className="text-[11px] text-muted-foreground">{hostName(v.hostId)}{reason ? ` · ${t(scopedKey(PRUNE_CANDIDATE_KEYS[reason], "volumes.prune."))}` : ""}</span>
+                          <span className="text-[11px] text-muted-foreground">{fresh.has(identity(v)) && <span className="font-medium text-info">{t("new")} · </span>}{hostName(v.hostId)}{reason ? ` · ${t(scopedKey(PRUNE_CANDIDATE_KEYS[reason], "volumes.prune."))}` : ""}</span>
                         </label>
                         <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">{v.sizeUnavailable ? t("sizeUnknown") : formatBytes(v.sizeBytes)}</span>
                       </li>
@@ -161,5 +169,5 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
 }
 
 export function PruneVolumesDialog(props: Props) {
-  return props.open ? <PruneVolumesForm key={props.hosts.map((h) => `${h.id}:${h.status}`).join("|")} {...props} /> : null;
+  return props.open ? <PruneVolumesForm key={scopeKey(props.hosts)} {...props} /> : null;
 }

@@ -93,11 +93,12 @@ describe("volumes page actions", () => {
     const includeNamed = await within(dialog).findByRole("checkbox", { name: "Benannte Volumes einbeziehen" });
     expect(includeNamed.getAttribute("aria-checked")).toBe("false");
     await userEvent.click(includeNamed);
-    await within(dialog).findByText("2 von 2 Volumes ausgewählt · 1,5 GB");
+    // Named volumes added by the toggle start unselected (M35 #557); the user picks the one to delete.
+    await within(dialog).findByText(/^0 von 2 Volumes ausgewählt/);
     expect(within(dialog).getByText(/Nicht verbunden und deshalb nicht geprüft: Cedar/) !== null).toBe(true);
     expect(within(dialog).queryByText("wiki_uploads_old") === null).toBe(true);
 
-    await userEvent.click(within(dialog).getByRole("checkbox", { name: /paperless_export_tmp/ }));
+    await userEvent.click(within(dialog).getByRole("checkbox", { name: /plex_old_config/ }));
     await userEvent.click(within(dialog).getByRole("button", { name: "1 Volume löschen" }));
     await within(dialog).findByRole("region", { name: "Entfernt" });
     await userEvent.click(within(dialog).getAllByRole("button", { name: "Schließen" }).find((button) => button.dataset.slot !== "dialog-close")!);

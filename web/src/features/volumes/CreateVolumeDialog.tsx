@@ -37,6 +37,9 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
   const online = hosts.filter((h) => isHostAvailable(h));
   const [name, setName] = useState("");
   const [hostId, setHostId] = useState(defaultHostId ?? online[0]?.id ?? "");
+  if (!hostId && online[0]) setHostId(online[0].id);
+  // The draft survives a host going offline; only the submit waits for it.
+  const hostOffline = !!hostId && !online.some((h) => h.id === hostId);
   const feedback = useDialogCommand(open, hostId);
   const capability = useCapability("createVolume", { kind: "host", id: hostId });
   const [labels, setLabels] = useState("");
@@ -66,7 +69,7 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
           onSubmit={async (e) => {
             e.preventDefault();
             setTried(true);
-            if (busy || error || !hostId || !capability.available) return;
+            if (busy || error || !hostId || hostOffline || !capability.available) return;
             setBusy(true);
             const created = await feedback.run(() => cmd.create({ name: name.trim(), hostId, labels: parseLabels(labels) }));
             setBusy(false);
@@ -109,8 +112,9 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
             <Textarea id="vol-labels" value={labels} onChange={(e) => setLabels(e.target.value)} className="min-h-16 font-mono text-[13px]" placeholder="docklet.owner=team" />
             <FieldDescription>{t("labelsHint")}</FieldDescription>
           </Field>
+          {hostOffline && <p role="status" className="text-xs text-warning">{t("hostUnavailable")}</p>}
           <DialogCommandFooter feedback={feedback}>
-            <Button type="submit" disabled={busy || !online.length || !capability.available} title={capability.reason}>
+            <Button type="submit" disabled={busy || !online.length || hostOffline || !capability.available} title={capability.reason}>
               {busy && <Spinner data-icon="inline-start" />}
               {t("submit")}
             </Button>
@@ -122,5 +126,5 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
 }
 
 export function CreateVolumeDialog(props: Parameters<typeof CreateVolumeForm>[0]) {
-  return props.open ? <CreateVolumeForm key={props.hosts.map((h) => `${h.id}:${h.status}`).join("|")} {...props} /> : null;
+  return props.open ? <CreateVolumeForm key={props.hosts.map((h) => h.id).sort().join("|")} {...props} /> : null;
 }

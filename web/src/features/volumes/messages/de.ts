@@ -36,6 +36,7 @@ export const deVolumes: typeof enVolumes = {
     delete: "Löschen",
   },
   prune: {
+    new: "Neu",
     failedReasons: {"inspect-failed": "Volume konnte nicht geprüft werden.", "usage-failed": "Verwendung konnte nicht geprüft werden.", "remove-failed": "Volume konnte nicht entfernt werden.", "protected": "Geschütztes Volume bleibt erhalten."},
     sizeUnknown: "Größe unbekannt",
     includeNamed: "Benannte Volumes einbeziehen",
@@ -71,6 +72,7 @@ export const deVolumes: typeof enVolumes = {
     partial: "Teilweise", bindUnavailable: "Nicht verfügbar",
     unavailable: "Backup-Status nicht verfügbar", none: "Kein Backup", disabled: "Pausiert", ok: "OK · {time}", failed: "Fehlgeschlagen", running: "Läuft …" },
   createDialog: {
+    hostUnavailable: "Der gewählte Host ist offline.",
     title: "Volume anlegen",
     description: "Leeres lokales Docker-Volume. Ein Stack nutzt es, sobald compose.yaml es einbindet.",
     name: "Name",

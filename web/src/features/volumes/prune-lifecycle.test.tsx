@@ -2,7 +2,7 @@
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Deferred preview and execution lifecycle regressions for #181.
+// Deviations: Deferred preview and execution lifecycle regressions for #181. M35 #557: named volumes start unselected.
 
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -146,8 +146,8 @@ for (const includeNamed of [false, true]) {
       await userEvent.click(toggle);
       const named = await screen.findByRole("checkbox", { name: /^named/ });
       expect(requests).toEqual(["?all=false", "?all=true"]);
-      expect(named.getAttribute("aria-checked")).toBe("true");
-      await userEvent.click(named);
+      // Named volumes added by the toggle start unselected (M35 #557).
+      expect(named.getAttribute("aria-checked")).toBe("false");
     }
     await userEvent.click(screen.getByRole("button", { name: "1 Volume löschen" }));
     await screen.findByRole("region", { name: "Entfernt" });
