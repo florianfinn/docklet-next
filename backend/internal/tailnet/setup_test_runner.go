@@ -63,13 +63,13 @@ func (m *Manager) Test(ctx context.Context) (dto.TestResult, error) {
 		hub[0].Code = dto.CodeNotConnected
 		if joined {
 			hub[0] = dto.TestCheck{ID: "hub-joined", State: "pass"}
-			hub[2] = dto.TestCheck{ID: "hub-address", State: "fail", Code: dto.CodeNotConnected}
+			hub[2] = dto.TestCheck{ID: "hub-address", State: "fail"}
 			if m.status != nil {
 				if hubIPv4(m.status) != "" {
 					hub[2] = dto.TestCheck{ID: "hub-address", State: "pass"}
 				}
 				if m.status.Self != nil {
-					hub[1] = dto.TestCheck{ID: "hub-tag", State: "fail", Code: dto.CodeNotConnected}
+					hub[1] = dto.TestCheck{ID: "hub-tag", State: "fail"}
 					if m.status.Self.Tags != nil && slices.Contains(m.status.Self.Tags.AsSlice(), HubTag) {
 						hub[1] = dto.TestCheck{ID: "hub-tag", State: "pass"}
 					}

@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -261,16 +262,18 @@ func TestSetupConcurrentRequests(t *testing.T) {
 		w.WriteHeader(204)
 	})
 	router := setupRouter(m, true, false)
-	done := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+	first := make(chan int, 1)
 	go func() {
-		defer close(done)
-		code, body := setupHTTP(t, router, t.Context())
-		require.Equal(t, 200, code, string(body))
+		code, _ := setupHTTP(t, router, t.Context())
+		first <- code
 	}()
 	<-held
 	code, body := setupHTTP(t, router, t.Context())
-	close(release)
-	<-done
+	unblock()
+	require.Equal(t, 200, <-first)
 	require.Equal(t, 409, code, string(body))
 	require.Contains(t, string(body), dto.CodeTestRunning)
 	require.EqualValues(t, 1, mints.Load())
@@ -280,6 +283,8 @@ func TestSetupCredentialRevision(t *testing.T) {
 	for _, change := range []string{"same-mode", "reset", "disable"} {
 		t.Run(change, func(t *testing.T) {
 			held, release := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			unblock := func() { once.Do(func() { close(release) }) }
 			m := setupManager(t, func(w http.ResponseWriter, r *http.Request) {
 				if strings.HasSuffix(r.URL.Path, "/token") {
 					setupToken(w)
@@ -300,8 +305,14 @@ func TestSetupCredentialRevision(t *testing.T) {
 			m.run = &run{ctx: runCtx, cancel: cancel, done: done}
 			gen := m.Status().Generation
 			revision := m.Status().CredentialRevision
-			result := make(chan dto.TestResult, 1)
-			go func() { out, err := m.Test(t.Context()); require.NoError(t, err); result <- out }()
+			// A failed assertion below must fail, not hang on the held provider response.
+			t.Cleanup(unblock)
+			type outcome struct {
+				out dto.TestResult
+				err error
+			}
+			result := make(chan outcome, 1)
+			go func() { out, err := m.Test(t.Context()); result <- outcome{out, err} }()
 			<-held
 			switch change {
 			case "same-mode":
@@ -315,8 +326,10 @@ func TestSetupCredentialRevision(t *testing.T) {
 				m.Apply(t.Context(), false, m.cred)
 			}
 			require.NotEqual(t, revision, m.Status().CredentialRevision)
-			close(release)
-			out := <-result
+			unblock()
+			got := <-result
+			require.NoError(t, got.err)
+			out := got.out
 			require.Equal(t, revision, out.CredentialRevision)
 			require.True(t, out.Stale)
 			require.Equal(t, "pass", out.Checks[2].State)
@@ -389,6 +402,13 @@ func TestSetupManualAndHubChecks(t *testing.T) {
 	for _, row := range out.Checks[3:] {
 		require.Equal(t, "pass", row.State)
 	}
+	// A joined hub without its tag or address fails that row only; no row claims the hub is disconnected.
+	untagged := views.SliceOf([]string{"tag:other"})
+	m.status.Self = &ipnstate.PeerStatus{Tags: &untagged}
+	out, err = m.Test(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, dto.TestCheck{ID: "hub-joined", State: "pass"}, out.Checks[3])
+	require.Equal(t, dto.TestCheck{ID: "hub-tag", State: "fail"}, out.Checks[4])
 	m.status.Self = nil
 	out, err = m.Test(t.Context())
 	require.NoError(t, err)
@@ -396,7 +416,7 @@ func TestSetupManualAndHubChecks(t *testing.T) {
 	m.status.TailscaleIPs = nil
 	out, err = m.Test(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, "fail", out.Checks[5].State)
+	require.Equal(t, dto.TestCheck{ID: "hub-address", State: "fail"}, out.Checks[5])
 	m.conn.State = "joining"
 	out, err = m.Test(t.Context())
 	require.NoError(t, err)

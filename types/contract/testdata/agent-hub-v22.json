@@ -311,7 +311,7 @@
       {"method":"GET","path":"/environments/{id}/vulnerabilities/advisories/{key}","operationId":"get-vulnerability-advisory","sha256":"941a20c97f3fa0ea74ecf7b093be00d7ad27ae8449a67d23984927c1ca2f8874"},
       {"method":"GET","path":"/environments/{id}/vulnerabilities/all","operationId":"list-environment-vulnerabilities","sha256":"9ddd290cd41dac04cd7702bdf5ab2622cb2d0864ed9dd89b7b8cf65591451ca9"},
       {"method":"GET","path":"/environments/{id}/vulnerabilities/candidates","operationId":"get-vulnerability-candidates","sha256":"16f9ce25c8b36ed73c10d166d6d4e6deabc7b183fce5966451d845c9d16904f6"},
-      {"method":"GET","path":"/environments/{id}/vulnerabilities/candidates/runs/{activityId}","operationId":"get-vulnerability-candidate-run","sha256":"682917010d7b0e1a0954705ca560d5da961ff00871dfb2d9fc93719d9698e1a0"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/candidates/runs/{activityId}","operationId":"get-vulnerability-candidate-run","sha256":"5f05069e4f449dc6df1da2dbc387f47b0dff658a59400f9bc611dd01735464c6"},
       {"method":"POST","path":"/environments/{id}/vulnerabilities/candidates/scan","operationId":"scan-vulnerability-candidates","sha256":"b6ccda78e9fc19e43cbd350cfac207ae8ecf9a337da701d92f5f8007a4445b1f"},
       {"method":"GET","path":"/environments/{id}/vulnerabilities/export","operationId":"export-environment-vulnerabilities","sha256":"4fa2da815e86838d6438058b786bc420e61b956cc5af33be29368d7ed9220e66"},
       {"method":"POST","path":"/environments/{id}/vulnerabilities/ignore","operationId":"ignore-vulnerability","sha256":"a16db1bdc4fdb14fea6bf10b8f0875cdba4224f2e4d27b7d675810b73fe9e377"},

@@ -23,6 +23,20 @@ test("retention 404 is unavailable without another run's counts", async () => {
   const request = vulnerabilityTransport("/api", { token: async () => "example", fetch: async () => Response.json({ code: "vulnerability.run-not-found", status: 404 }, { status: 404 }) }, () => 0);
   await expect(readCandidateRun(request, "example", "old-activity")).resolves.toBeUndefined();
 });
+test.each([
+  ["a 1.4.0 Direct agent without the route (uncoded router 404)", () => Response.json({ message: "Not Found" }, { status: 404 })],
+  ["a 1.4.0 Edge agent refusing the command (hub tunnel failure)", () => Response.json({ success: false, code: "agent.unavailable", error: "failed to proxy request through tunnel" }, { status: 502 })],
+  ["a plain-text refusal", () => new Response("unsupported edge command", { status: 400 })],
+])("%s leaves the run without counts instead of failing", async (_name, answer) => {
+  const request = vulnerabilityTransport("/api", { token: async () => "example", fetch: async () => answer() }, () => 0);
+  await expect(readCandidateRun(request, "example", "old-activity")).resolves.toBeUndefined();
+});
+test("authentication and permission refusals still reject", async () => {
+  for (const status of [401, 403]) {
+    const request = vulnerabilityTransport("/api", { token: async () => "example", fetch: async () => Response.json({ status, title: "refused" }, { status }) }, () => 0);
+    await expect(readCandidateRun(request, "example", "old-activity")).rejects.toThrow();
+  }
+});
 test.each([{ activityId: "newer-activity" }, { targets: -1 }, { scanned: null }, { status: "future" }])("rejects unrelated or malformed stored counters %#", async (change) => {
   const request = vulnerabilityTransport("/api", { token: async () => "example", fetch: async () => Response.json({ success: true, data: { ...run, ...change } }) }, () => 0);
   await expect(readCandidateRun(request, "example", "old-activity")).rejects.toThrow();

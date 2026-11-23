@@ -60,7 +60,14 @@ export async function readScanProgress(request: ReturnType<typeof vulnerabilityT
 export async function readCandidateRun(request: ReturnType<typeof vulnerabilityTransport>, host: string, activityId: string, signal?: AbortSignal) {
   let body: unknown;
   try { body = await request(`/environments/${encodeURIComponent(host)}/vulnerabilities/candidates/runs/${encodeURIComponent(activityId)}`, "GET", undefined, true, signal); }
-  catch (error) { if (error instanceof VulnerabilityFailure && error.code === "vulnerability.run-not-found") return undefined; throw error; }
+  catch (error) {
+    // Counts are optional (result only): a missing run, or a host that cannot answer this read. A 1.4.0 Direct agent has
+    // no such route (uncoded 404); the hub reports an Edge agent's refused command as a tunnel failure (502).
+    const status = error instanceof VulnerabilityFailure ? error.status : error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.status : undefined;
+    if (error instanceof VulnerabilityFailure && error.code === "vulnerability.run-not-found") return undefined;
+    if (status !== undefined && status >= 400 && status !== 401 && status !== 403) return undefined;
+    throw error;
+  }
   const r = object(object(body).data);
   if (r.activityId !== activityId) invalid();
   return { activityId: id(r.activityId), trigger: choice(r.trigger, ["manual", "automatic"]),
