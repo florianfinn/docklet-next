@@ -28,7 +28,7 @@ export const enConnections = {
   "manualHint": "Paste a hub key now and a separate one-use key for each host.",
   "createOAuth": "1. Create an OAuth client",
   "createManual": "1. Create a hub auth key",
-  "createOAuthHint": "Allow auth_keys write and the tags tag:docklet-hub and tag:docklet-agent. Keep the secret on the hub.",
+  "createOAuthHint": "Allow auth_keys write and the tags tag:docklet-hub and tag:docklet-agent. Tailscale offers these tags only after the policy from step 2 is saved, so add it first. Keep the secret on the hub.",
   "createManualHint": "Create a pre-authorised hub key with the hub tag. Use a separate one-use agent key when adding each host.",
   "console": "Open admin console",
   "policy": "2. Copy the tailnet policy",

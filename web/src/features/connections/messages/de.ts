@@ -28,7 +28,7 @@ export const deConnections = {
   "manualHint": "Jetzt einen Hub-Schlüssel einfügen, später pro Host einen eigenen einmaligen Schlüssel.",
   "createOAuth": "1. OAuth-Client erstellen",
   "createManual": "1. Hub-Auth-Schlüssel erstellen",
-  "createOAuthHint": "Erlaube auth_keys write und die Tags tag:docklet-hub und tag:docklet-agent. Das Secret bleibt auf dem Hub.",
+  "createOAuthHint": "Erlaube auth_keys write und die Tags tag:docklet-hub und tag:docklet-agent. Tailscale bietet diese Tags erst an, wenn die Richtlinie aus Schritt 2 gespeichert ist; füge sie also zuerst ein. Das Secret bleibt auf dem Hub.",
   "createManualHint": "Erstelle einen vorab genehmigten Hub-Schlüssel mit dem Hub-Tag. Nutze beim Hinzufügen pro Host einen eigenen einmaligen Agent-Schlüssel.",
   "console": "Adminkonsole öffnen",
   "policy": "2. Tailnet-Regel kopieren",
