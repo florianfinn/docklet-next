@@ -25,8 +25,9 @@ export interface TailnetApi {
   save: (input: TailnetUpdate) => Promise<TailnetSettings>;
   reset: () => Promise<void>;
   test: () => Promise<TestResult>;
-  /** Capture these before a test; writes and reconnects fence results without fencing ordinary status observations. */
+  /** Lifecycle counter; ordinary status observations leave it unchanged. */
   testEpoch: () => number;
+  /** Most recently started test request; test() increments this before awaiting transport. */
   testSequence: () => number;
 }
 
