@@ -81,7 +81,7 @@ test.each(["revision", "stale", "identity", "sequence"] as const)("fences late t
 
 
 test.each(["pass", "fail", "skipped", "unknown"] as const)("decodes check state %s", async (state) => {
-  const f = fixture(), out = result(); out.checks[2].state = state;
+  const f = fixture(), out = result(); out.checks[2]!.state = state;
   const pending = f.controller.api.test(); f.answer(out);
-  expect((await pending).checks[2].state).toBe(state);
+  expect((await pending).checks[2]!.state).toBe(state);
 });
