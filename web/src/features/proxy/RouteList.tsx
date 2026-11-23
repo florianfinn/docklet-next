@@ -2,7 +2,7 @@
 // Revision: 1d8ef389b0a40f3ba27fb09f8f59d8ac993180ff
 // Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Production Route DTOs and shared overview rows; real certificate check spans a companion row. Tile icons, compact toolbar, entry-point TLS, label summary (lab LabelDetails).
+// Deviations: Production Route DTOs and shared overview rows; real certificate check spans a companion row. Tile icons, compact toolbar, entry-point TLS, label summary (lab LabelDetails). M37 #581: left-out Unraid containers not named.
 
 // Source: docklet-next/issues/473
 // Revision: 02c2a7139b3e0b1f3ec2790f403710de35ef051c
@@ -31,11 +31,18 @@ import { canEdit } from "./model";
 import { simpleHost } from "./suggestions";
 import type { Instance, Inventory, Route } from "./types";
 import type { ChangeAction } from "./ChangeDialog";
+import { useHiddenUnraidIds } from "@/shared/hooks/use-host-scope";
 
 export function RouteList({ instance, routes, hashes, writable, edit, action, create, entryPoints = [] }: {
   instance: Instance; routes: Route[]; hashes?: Record<string, string>; writable: boolean; entryPoints?: Inventory["entryPoints"];
   edit: (r: Route) => void; action: (a: ChangeAction) => void; create?: () => void;
 }) {
+  // A label route names the container that serves it ("docker:<container>:<router>"); a left-out Unraid container is not named.
+  const hiddenIds = useHiddenUnraidIds();
+  const labelContainerHidden = (r: Route) => {
+    const raw = r.id.startsWith("docker:") ? r.id.split(":")[1] : undefined;
+    return !!raw && (hiddenIds.has(`${instance.environmentId}~${raw}`) || hiddenIds.has(raw));
+  };
   const t = useTranslations(), ui = useTranslations("proxyContract.ui"), stacks = useStacks();
   const [search, setSearch] = useState(""), [source, setSource] = useState("all");
   const cards = useMediaQuery("(max-width: 767px)");
@@ -86,7 +93,7 @@ export function RouteList({ instance, routes, hashes, writable, edit, action, cr
         return <Fragment key={r.id}>
           <OverviewRowView view={cards ? "cards" : "table"} columns={columns} pad="px-3 py-4" menu={menu.length ? menu : undefined} menuTitle={r.name} actions={menu.length ? <ActionsMenu groups={menu} label={ui("actions", { name: r.name })} /> : null} cells={{
             name: <div className="flex min-w-0 items-start gap-3"><IconTile tone="cyan"><Globe /></IconTile><div className="min-w-0 [overflow-wrap:anywhere]"><h3 className="font-medium">{simpleHost(r.rule) ?? r.rule}</h3><p className="text-xs text-muted-foreground">{r.name}</p><p className="mt-1 font-mono text-xs text-muted-foreground">{r.file}</p></div></div>,
-            destination: r.class === "label-read-only" ? <LabelSummary route={r} tls={tlsOf(r).text} stackHref={r.projectId ? `/stacks/${encodeURIComponent(inventoryId(instance.environmentId, r.projectId))}?tab=editor` : undefined} kind={ref => t(PROXY_REFERENCE_KEYS[ref])} /> : <div className="min-w-0 space-y-1 text-xs [overflow-wrap:anywhere]"><span className="flex items-center gap-1"><ArrowUpRight className="size-3 shrink-0" />{r.service}</span>{r.upstreams?.map((u, n) => <p key={n} className="font-mono">{u}</p>)}{r.serviceFile && !r.upstreams?.length && <p>{ui("opaqueService", { name: r.serviceFile })}</p>}</div>,
+            destination: r.class === "label-read-only" ? <LabelSummary route={r} hidden={labelContainerHidden(r)} tls={tlsOf(r).text} stackHref={r.projectId ? `/stacks/${encodeURIComponent(inventoryId(instance.environmentId, r.projectId))}?tab=editor` : undefined} kind={ref => t(PROXY_REFERENCE_KEYS[ref])} /> : <div className="min-w-0 space-y-1 text-xs [overflow-wrap:anywhere]"><span className="flex items-center gap-1"><ArrowUpRight className="size-3 shrink-0" />{r.service}</span>{r.upstreams?.map((u, n) => <p key={n} className="font-mono">{u}</p>)}{r.serviceFile && !r.upstreams?.length && <p>{ui("opaqueService", { name: r.serviceFile })}</p>}</div>,
             tls: (() => { const tls = tlsOf(r); return <span className="flex items-start gap-1 text-xs [overflow-wrap:anywhere]">{tls.on ? <LockKeyhole className="size-3 shrink-0 text-success" /> : <LockKeyholeOpen className="size-3 shrink-0 text-muted-foreground" />}{tls.text}</span>; })(),
             source: r.class === "infrastructure" ? <ToneBadge tone="gray"><Server className="size-3" />{ui("internalSource")}</ToneBadge> : <ToneBadge tone={r.class === "label-read-only" ? "accent" : "cyan"}>{r.class === "label-read-only" ? <Boxes className="size-3" /> : <FileText className="size-3" />}{ui(r.class === "label-read-only" ? "dockerLabels" : "fileSource")}</ToneBadge>,
             status: <div className="grid justify-items-start gap-1"><ToneBadge tone={canEdit(r) ? "ok" : r.class === "infrastructure" ? "gray" : "warn"}>{ui(r.class === "infrastructure" ? "classes.infrastructure" : canEdit(r) ? "classes.editable" : "readOnly")}</ToneBadge>{!canEdit(r) && r.class !== "infrastructure" && r.eligibility.reason && <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]"><Reason code={r.eligibility.reason} /></span>}</div>,
@@ -100,12 +107,12 @@ export function RouteList({ instance, routes, hashes, writable, edit, action, cr
 }
 
 /** Readable label-route summary as in the lab's LabelDetails, from the agent's Route fields. */
-function LabelSummary({ route, tls, stackHref, kind }: { route: Route; tls: string; stackHref?: string; kind: (k: NonNullable<Route["references"]>[number]["kind"]) => string }) {
-  const ui = useTranslations("proxyContract.ui");
+function LabelSummary({ route, tls, stackHref, kind, hidden }: { route: Route; tls: string; stackHref?: string; kind: (k: NonNullable<Route["references"]>[number]["kind"]) => string; hidden: boolean }) {
+  const ui = useTranslations("proxyContract.ui"), th = useTranslations("common.hidden");
   return <div className="min-w-0 text-xs">
     <dl className="grid min-w-0">
       <Detail label={ui("labelMatch")}><span className="font-mono">{route.rule}</span></Detail>
-      <Detail label={ui("labelTarget")}>{[route.service, route.containerName].filter(Boolean).join(" · ")}</Detail>
+      <Detail label={ui("labelTarget")}>{[route.service, hidden ? th("count", { count: 1 }) : route.containerName].filter(Boolean).join(" · ")}</Detail>
       <Detail label={ui("labelTls")}>{tls}</Detail>
       <Detail label={ui("labelMiddlewares")}>{route.references?.length ? <ul aria-label={ui("references")}>{route.references.map((ref, n) => <li key={n}>{ref.name} · {kind(ref.kind)}</li>)}</ul> : ui("none")}</Detail>
     </dl>

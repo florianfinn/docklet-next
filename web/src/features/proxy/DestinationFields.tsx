@@ -2,7 +2,7 @@
 // Revision: 1d8ef389b0a40f3ba27fb09f8f59d8ac993180ff
 // Retrieved: 2026-11-21
 // License: Apache-2.0
-// Deviations: Real same-host running inventory; deliberate lossless backend edits, TCP ports and connectivity hints.
+// Deviations: Real same-host running inventory; deliberate lossless backend edits, TCP ports and connectivity hints. M37 #581: left-out Unraid containers not named.
 
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -13,13 +13,16 @@ import { FieldHelp } from "./presentation";
 import { containerSuggestions, offNetwork, tcpPorts } from "./suggestions";
 import type { backendParts } from "./model";
 import type { Instance } from "./types";
+import { useHiddenUnraidIds } from "@/shared/hooks/use-host-scope";
 
 type Backend = ReturnType<typeof backendParts>;
 export function DestinationFields({ instance, backend, update }: { instance: Instance; backend: Backend; update: (f: (b: Backend) => Backend) => void }) {
   const t = useTranslations("proxyContract.ui");
   const containers = useContainers();
   const rows = containers.data ?? [];
-  const candidates = containerSuggestions(instance, rows);
+  // Left-out Unraid containers are not offered as destinations (display choice; the inventory stays complete).
+  const hidden = useHiddenUnraidIds();
+  const candidates = containerSuggestions(instance, rows).filter((c) => !hidden.has(c.id));
   const [kind, setKind] = useState("external"), [picked, setPicked] = useState("");
   const selected = candidates.find(c => c.id === picked);
   const ports = selected ? tcpPorts(selected) : [];

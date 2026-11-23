@@ -19,7 +19,7 @@ import DashboardPage from "@/features/dashboard/DashboardPage";
 import { ImageDetails } from "@/features/images/ImageDetails";
 import { NetworkTable } from "@/features/networks/NetworkTable";
 import { TopologyDetails } from "@/features/networks/TopologyDetails";
-import { useVisibleContainers } from "@/shared/hooks/use-host-scope";
+import { useHiddenUnraidIds, useVisibleContainers } from "@/shared/hooks/use-host-scope";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderWithApp, renderRoutes } from "@/test/render";
 import { FileAside } from "@/features/volumes/files/FileAside";
@@ -132,4 +132,38 @@ it("lists only shown consumers on the volume overview while the volume stays in 
   await waitFor(() => expect(view.container.textContent?.includes("1 hidden")).toBe(true));
   expect(view.container.textContent?.includes("duplicati")).toBe(false);
   expect(view.container.textContent?.includes("No container mounts this entry.")).toBe(false);
+});
+
+it("offers no left-out container as a proxy destination", async () => {
+  setAppLocale("en-US");
+  const { DestinationFields } = await import("@/features/proxy/DestinationFields");
+  const { instance } = await import("@/features/proxy/proxy.test-support");
+  let hidden = false;
+  function Probe() { hidden = useHiddenUnraidIds().has("c-duplicati"); return null; }
+  preferencesStore.set((p) => ({ ...p, unraidHidden: ["atlas"] }));
+  const view = renderWithApp(<><Probe /><DestinationFields instance={{ ...instance, environmentId: "atlas" }} backend={{ scheme: "http", host: "", port: "", colon: false, rest: "" }} update={() => {}} /></>);
+  await waitFor(() => expect(hidden).toBe(true));
+  await userEvent.click(screen.getByRole("radio", { name: /Container/ }));
+  document.getElementById("destination-container")!.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  const options = await screen.findAllByRole("option");
+  expect(options.length > 0).toBe(true);
+  expect(options.some((o) => o.textContent?.includes("duplicati"))).toBe(false);
+  view.unmount();
+});
+
+it("does not name a left-out container serving a label route", async () => {
+  setAppLocale("en-US");
+  const { RouteList } = await import("@/features/proxy/RouteList");
+  const { instance, route } = await import("@/features/proxy/proxy.test-support");
+  let hidden = false;
+  function Probe() { hidden = useHiddenUnraidIds().has("c-duplicati"); return null; }
+  const routes = [{ ...route, class: "label-read-only", id: "docker:c-duplicati:app", containerName: "duplicati" }] as Parameters<typeof RouteList>[0]["routes"];
+  const view = renderWithApp(<><Probe /><RouteList instance={{ ...instance, environmentId: "atlas" }} routes={routes} writable={false} edit={() => {}} action={() => {}} /></>);
+  await waitFor(() => expect(view.container.textContent?.includes("duplicati")).toBe(true));
+  act(() => preferencesStore.set((p) => ({ ...p, unraidHidden: ["atlas"] })));
+  await waitFor(() => expect(hidden).toBe(true));
+  await waitFor(() => expect(view.container.textContent?.includes("duplicati")).toBe(false));
+  expect(view.container.textContent?.includes("1 hidden")).toBe(true);
+  view.unmount();
 });
