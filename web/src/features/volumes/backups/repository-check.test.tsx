@@ -4,9 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original repository check run kind, stage labels, validated result and consumer presentation proof.
 
-import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
-import { IntlProvider } from "use-intl";
+import { screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { catalogs } from "@/app/i18n/catalog";
 import { setAppLocale, type AppLocale } from "@/app/i18n/locale-store";
@@ -99,7 +97,8 @@ const failing = (reached: number) => steps.slice(0, reached).map((step, index) =
 function focus(run: CodedActionRun, locale: AppLocale) {
   setAppLocale(locale);
   const rendered = renderRun(run, locale);
-  const view = render(<IntlProvider locale={locale} messages={catalogs[locale]}><MemoryRouter><RunStatusLine run={rendered} /><RunFacts run={rendered} now={Date.parse(at)} /></MemoryRouter></IntlProvider>);
+  // RunFacts resolves its host target reactively, so it renders inside the app providers like the real focus.
+  const view = renderWithApp(<><RunStatusLine run={rendered} /><RunFacts run={rendered} now={Date.parse(at)} /></>, createDemoAdapter());
   const result = { status: view.getByRole("status").textContent, progress: view.container.querySelector("[data-fact=progress] dd")?.textContent };
   view.unmount();
   return result;
