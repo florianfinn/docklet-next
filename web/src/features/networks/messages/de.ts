@@ -19,6 +19,7 @@ export const deNetworks: typeof enNetworks = {
     stack: "Gehört zum Compose-Stack {name}",
     member: "{name} · {state}",
     noAttachments: "Keine verbundenen Container",
+    hiddenMembers: "Zusätzlich {count, plural, one {# ausgelassener Unraid-Container} other {# ausgelassene Unraid-Container}} verbunden",
     states: { running: "läuft", stopped: "gestoppt", restarting: "startet neu", unknown: "unbekannt" },
   },
   title: "Netzwerke",

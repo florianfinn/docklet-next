@@ -7,6 +7,7 @@
 import { CancelledError, useQuery } from "@tanstack/react-query";
 
 import { hostDetailsEpoch } from "@/data/host-details-source";
+import { freshFrom } from "@/data/refresh-owner";
 import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
 import { isHostAvailable } from "@/domain/hosts";
@@ -18,12 +19,18 @@ export function useHostDetails(host: Host): HostDetails | undefined {
   const available = isHostAvailable(host);
   const query = useQuery({
     queryKey: [...queryKeys.hostDetails, host.id, host.identity ?? ""],
-    // A hosts or settings change during the read fences it; the refresh owner then reads again instead of publishing it.
+    // A hosts or settings change during a read supersedes it: the read repeats until one ran without a change, so a
+    // superseded answer is never published and a fetch never ends without a current one. Each repeat needs a change
+    // notification during the read, which this read does not cause; a burst of changes therefore ends the loop.
     queryFn: async ({ signal }) => {
-      const epoch = hostDetailsEpoch();
-      const details = await adapter.getHostDetails!(host.id, signal);
-      if (epoch !== hostDetailsEpoch()) throw new CancelledError({ silent: true });
-      return details;
+      for (;;) {
+        // Each read starts from the current state, so the refresh owner does not repeat it once more for changes before it.
+        freshFrom(signal);
+        const epoch = hostDetailsEpoch();
+        const details = await adapter.getHostDetails!(host.id, signal);
+        if (epoch === hostDetailsEpoch()) return details;
+        if (signal.aborted) throw new CancelledError();
+      }
     },
     enabled: available && !!adapter.getHostDetails,
     retry: false,

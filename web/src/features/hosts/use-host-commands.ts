@@ -12,6 +12,7 @@ import { queueDemoFailure } from "@/runtime";
 import type { ActionKind } from "@/domain/model";
 import { useBusyAction } from "@/shared/components/use-busy-action";
 import { useHostError } from "./use-host-error";
+import { forgetUnraidDetection } from "./unraid-detection";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 
 /** Host commands with translated errors; progress of connections is shown by action toasts. */
@@ -47,6 +48,7 @@ export function useHostCommands() {
         // A filter that only listed the removed host would hide everything.
         // A confirmed removal is the only time a remembered Unraid choice for the host is dropped.
         preferencesStore.set((p) => ({ ...p, hostSelection: p.hostSelection.filter((id) => id !== hostId), unraidHidden: p.unraidHidden.filter((id) => id !== hostId) }));
+        forgetUnraidDetection(hostId);
         return true;
       }),
     token: (hostId: string) => guard(() => adapter.issueAgentToken(hostId)),

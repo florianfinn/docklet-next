@@ -18,6 +18,7 @@ export const enNetworks = {
     stack: "Owned by Compose stack {name}",
     member: "{name} · {state}",
     noAttachments: "No attached containers",
+    hiddenMembers: "{count, plural, one {# left-out Unraid container} other {# left-out Unraid containers}} also connected",
     states: { running: "running", stopped: "stopped", restarting: "restarting", unknown: "unknown" },
   },
   title: "Networks",

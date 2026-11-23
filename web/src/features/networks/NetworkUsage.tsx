@@ -40,7 +40,8 @@ export function NetworkUsage({ network, members, hidden = 0 }: { network: Topolo
           <ul>
             {members.map((c) => <li key={c.id}>{t("member", { name: c.name, state: t(`states.${c.state}`) })}</li>)}
           </ul>
-        ) : !unknown && <p>{t("noAttachments")}</p>}
+        ) : !unknown && !hidden && <p>{t("noAttachments")}</p>}
+        {hidden > 0 && <p>{t("hiddenMembers", { count: hidden })}</p>}
       </TooltipContent>
     </Tooltip>
   );

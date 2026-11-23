@@ -107,15 +107,22 @@ it("hides left-out Unraid references in image, volume and network displays witho
   expect(usage()).toBe("br0: In use, 0 containers");
 });
 
-it("keeps a detected Unraid switch while the inventory is unknown and drops it only on a fresh empty result", async () => {
-  const { unraidDetected, resetUnraidDetection } = await import("./unraid-detection");
+it("keeps a detected Unraid switch while the inventory is unknown and drops it only on a fresh empty result, a new sign-in or the host's removal", async () => {
+  const { unraidDetected, resetUnraidDetection, forgetUnraidDetection } = await import("./unraid-detection");
   resetUnraidDetection();
-  expect(unraidDetected("atlas", undefined)).toBe(false);
-  expect(unraidDetected("atlas", 2)).toBe(true);
-  expect(unraidDetected("atlas", undefined)).toBe(true);
-  expect(unraidDetected("atlas", undefined)).toBe(true);
-  expect(unraidDetected("atlas", 0)).toBe(false);
-  expect(unraidDetected("atlas", undefined)).toBe(false);
+  expect(unraidDetected(1, "atlas", undefined)).toBe(false);
+  expect(unraidDetected(1, "atlas", 2)).toBe(true);
+  expect(unraidDetected(1, "atlas", undefined)).toBe(true);
+  expect(unraidDetected(1, "atlas", undefined)).toBe(true);
+  expect(unraidDetected(1, "atlas", 0)).toBe(false);
+  expect(unraidDetected(1, "atlas", undefined)).toBe(false);
+  // Another sign-in starts without the previous user's detections.
+  expect(unraidDetected(1, "atlas", 1)).toBe(true);
+  expect(unraidDetected(2, "atlas", undefined)).toBe(false);
+  // A removed host's ID comes back undetected.
+  expect(unraidDetected(2, "atlas", 1)).toBe(true);
+  forgetUnraidDetection("atlas");
+  expect(unraidDetected(2, "atlas", undefined)).toBe(false);
   resetUnraidDetection();
 });
 
@@ -125,9 +132,12 @@ it("never prunes a remembered choice from a failed or partial host list", async 
   const adapter = createDemoAdapter();
   const partial = renderWithApp(<HostsPage />, { ...adapter, listHosts: async () => (await adapter.listHosts()).filter((h) => h.id !== "atlas") });
   await waitFor(() => expect(partial.container.querySelectorAll("[data-host]").length > 0).toBe(true));
+  expect(partial.container.querySelector('[data-host="atlas"]') === null).toBe(true);
   expect(preferencesStore.get().unraidHidden).toEqual(["atlas", "gone"]);
   partial.unmount();
   const failed = renderWithApp(<HostsPage />, { ...adapter, listHosts: async () => { throw new Error("read failed"); } });
-  await waitFor(() => expect(failed.container.textContent?.length).toBeGreaterThan(0));
+  // The failure has settled once the page offers its retry.
+  expect(await screen.findByRole("button", { name: "Try again" }) !== null).toBe(true);
+  expect(failed.container.querySelectorAll("[data-host]").length).toBe(0);
   expect(preferencesStore.get().unraidHidden).toEqual(["atlas", "gone"]);
 });

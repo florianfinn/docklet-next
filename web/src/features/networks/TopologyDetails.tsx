@@ -1,6 +1,7 @@
 import { isHostAvailable } from "@/domain/hosts";
 import { useCapability } from "@/data/use-capability";
 import { useNetworkCapabilities } from "./use-network-capabilities";
+import { useHiddenUnraidIds } from "@/shared/hooks/use-host-scope";
 import { ArrowRight, Box, ChevronsDownUp, ChevronsUpDown, Link2, Network, Trash2, Unlink, X } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -48,6 +49,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
   const t = useTranslations("networks.detail");
   const tn = useTranslations("networks");
   const ts = useTranslations("common.status");
+  const hiddenIds = useHiddenUnraidIds();
   const metrics = useMetrics((s) => (selected ? s?.containers[selected] : undefined));
   const net = topology.networks.find((n) => n.id === selected);
   const container = containers.find((c) => c.id === selected);
@@ -78,6 +80,8 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
   const online = isHostAvailable(host);
   const hostAddr = hostAddress(host);
   const peers = topology.attachments.filter((a) => (net ? a.networkId === net.id : a.containerId === container?.id));
+  // Left-out Unraid containers are not listed under a network; removal guards still count every attachment.
+  const listed = net ? peers.filter((a) => !hiddenIds.has(a.containerId)) : peers;
   const dependsOn = container ? topology.dependencies.filter((d) => d.from === container.id).map((d) => d.to) : [];
   const requiredBy = container ? topology.dependencies.filter((d) => d.to === container.id).map((d) => d.from) : [];
   const rt = container ? containerRuntime(container, host) : "running";
@@ -177,7 +181,8 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
         <h4 className="mb-1.5 text-xs font-medium text-muted-foreground">{net ? t("attached") : t("memberships")}</h4>
         <ul className="flex flex-col">
           {peers.length === 0 && <li className="text-xs text-muted-foreground">{net?.detailUnavailable ? tn("usage.unknown") : t("noPeers")}</li>}
-          {peers.map((p) => {
+          {peers.length > listed.length && <li className="text-xs text-muted-foreground">{tn("usage.hiddenMembers", { count: peers.length - listed.length })}</li>}
+          {listed.map((p) => {
             const id = net ? p.containerId : p.networkId;
             const pair = { container: containerName(p.containerId), network: name(p.networkId) };
             const modeNet = topology.networks.find((n) => n.id === p.networkId);
@@ -230,10 +235,10 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
           <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{t("dependenciesHint")}</p>
         </section>
       )}
-      {net && peers.length > 0 && (
+      {net && listed.length > 0 && (
         <Button size="sm" variant="secondary" className="self-start" onClick={() => onToggleExpand(net.id)} aria-pressed={expanded.has(net.id)}>
           {expanded.has(net.id) ? <ChevronsDownUp data-icon="inline-start" /> : <ChevronsUpDown data-icon="inline-start" />}
-          {expanded.has(net.id) ? t("collapse") : t("expand", { count: peers.length })}
+          {expanded.has(net.id) ? t("collapse") : t("expand", { count: listed.length })}
         </Button>
       )}
       <div className="flex flex-wrap gap-2 border-t pt-3">

@@ -28,6 +28,8 @@ import { HostSettingsDialog } from "./HostSettingsDialog";
 import { useHostAction, useHostCommands } from "./use-host-commands";
 import { useHostDetails } from "./use-host-details";
 import { unraidDetected } from "./unraid-detection";
+import { identityLifetime } from "@/data/identity-lifetime";
+import { useAdapter } from "@/data/use-adapter";
 
 function Row({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
   return (
@@ -73,8 +75,9 @@ function UnraidSwitch({ hostId, count }: { hostId: string; count: number | undef
   const t = useTranslations("hosts.card");
   const hidden = usePreference("unraidHidden");
   const excluded = hidden.includes(hostId);
+  const identity = identityLifetime(useAdapter()).version();
   const id = `unraid-${hostId}`;
-  if (!unraidDetected(hostId, count) && !excluded) return null;
+  if (!unraidDetected(identity, hostId, count) && !excluded) return null;
   return (
     <div data-slot="unraid-switch" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       <Switch id={id} checked={!excluded} onCheckedChange={(on) => setPreference("unraidHidden", on ? hidden.filter((h) => h !== hostId) : [...hidden, hostId])} />

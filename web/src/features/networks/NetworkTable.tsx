@@ -110,7 +110,7 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
   const menu = (n: TopologyNetwork): MenuGroups => [
     [{ id: "focus", label: t("menu.focus"), icon: <Crosshair />, onSelect: () => onFocus(n.id) }],
     [{ id: "connect", label: t("menu.connect"), icon: <Link2 />, disabled: !connect.get(n.id)?.available || !!n.detailUnavailable || !!n.inventory?.stale || !online || n.driver === "host" || n.driver === "none", title: n.detailUnavailable || n.inventory?.stale ? t("partial.detail") : connect.get(n.id)?.reason, onSelect: () => onConnect({ mode: "connect", networkId: n.id }) }],
-    [{ id: "remove", label: t("menu.remove"), icon: <Trash2 />, disabled: !remove.get(n.id)?.available || !!n.detailUnavailable || !!n.inventory?.stale || !online || !!removeBlock(topology, n), title: removeBlock(topology, n) ? t(`removeBlocked.${removeBlock(topology, n)!}`, { stack: networkComposeOwner(n) ?? "", count: members.get(n.id)?.length ?? 0 }) : remove.get(n.id)?.reason, onSelect: () => onRemove(n) }],
+    [{ id: "remove", label: t("menu.remove"), icon: <Trash2 />, disabled: !remove.get(n.id)?.available || !!n.detailUnavailable || !!n.inventory?.stale || !online || !!removeBlock(topology, n), title: removeBlock(topology, n) ? t(`removeBlocked.${removeBlock(topology, n)!}`, { stack: networkComposeOwner(n) ?? "", count: (members.get(n.id)?.length ?? 0) + (hiddenCounts.get(n.id) ?? 0) }) : remove.get(n.id)?.reason, onSelect: () => onRemove(n) }],
   ];
 
   return (

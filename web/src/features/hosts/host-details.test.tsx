@@ -154,3 +154,34 @@ it("reads again when an offline host returns with an unchanged identity", async 
   act(() => { store.set(row()); listeners.forEach((fn) => fn(["hosts"])); });
   await waitFor(() => expect(/^Read [2-9]$/.test(value(view.container, "System") ?? "")).toBe(true));
 });
+
+it.each([["cold"], ["warm"]] as const)("a %s card publishes the current answer after more changes in a row than the shared repeat budget", async (start) => {
+  setAppLocale("en-US");
+  const local = mapHost({ id: "0", name: "Local Docker", color: null, registrationRevision: 1, apiUrl: "https://hub.example.com", enabled: true, status: "online", isEdge: false });
+  const listeners = new Set<(topics: string[]) => void>();
+  const reads: ReturnType<typeof deferred<HostDetails>>[] = [];
+  const demo = createDemoAdapter();
+  const adapter = { ...demo, subscribeChanges: (fn: (topics: string[]) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, getHostDetails: () => { const done = deferred<HostDetails>(); reads.push(done); return done.promise; } };
+  const view = renderWithApp(<HostCard host={local} system={undefined} stacks={0} containers={0} allIds={["0"]} />, adapter as typeof demo);
+  await waitFor(() => expect(reads.length).toBe(1));
+  if (start === "warm") {
+    await act(async () => { reads[0]!.resolve({ os: "Warm OS" }); });
+    await waitFor(() => expect(value(view.container, "System")).toBe("Warm OS"));
+    act(() => listeners.forEach((fn) => fn(["hosts"])));
+    await waitFor(() => expect(reads.length).toBe(2));
+  }
+  const first = reads.length - 1;
+  // Each read is overtaken by a change before it answers: five times, more than MAX_SUPERSEDED_REPEATS.
+  for (let i = 0; i < 5; i++) {
+    act(() => listeners.forEach((fn) => fn([i % 2 ? "settings" : "hosts"])));
+    await act(async () => { reads[first + i]!.resolve({ os: `Superseded ${i}` }); });
+    await waitFor(() => expect(reads.length).toBe(first + i + 2));
+    expect(view.container.textContent?.includes("Superseded")).toBe(false);
+  }
+  await act(async () => { reads[first + 5]!.resolve({ os: "Current OS" }); });
+  // Quiet afterwards: the current answer is shown without any further notification and no read is left running.
+  await waitFor(() => expect(value(view.container, "System")).toBe("Current OS"));
+  await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  expect(reads.length).toBe(first + 6);
+  expect(view.container.textContent?.includes("Superseded")).toBe(false);
+});
