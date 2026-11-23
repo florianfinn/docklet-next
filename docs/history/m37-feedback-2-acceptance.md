@@ -19,22 +19,27 @@ pushed head.
   after reviews and acceptance runs.
 - Codex workers built the setup test backend, the Action Centre titles with scan
   counts, and paging.
-- Every review came from the other provider than the implementation.
+- Each implementation received a review from the other provider. The first
+  review of the setup test backend (Claude) also covered the Claude main
+  thread's contract 22 bump, so it was not provider-independent for that
+  commit; a later Codex review covered the bump and its corrections.
 
 | Issue | Step | Review outcome |
 | --- | --- | --- |
 | all | Design notes with break maps for the risky steps | The bundled design review failed with 8 blockers. The verify left 7 partly resolved; the kickoff decisions and revision 3 of the notes settled them. |
-| #579, #581, #582, #580 | Host cards, per-host Unraid switch, fixed CPU bars, wordmark loader | Round 1 failed with 4 blockers. Two classes failed twice and received root-cause tables: freshness of host details, and every view that names containers. The host details read was rebuilt around answers and failures stamped with the source state they were read under; a complete reader inventory classified every container view. The sixth round passed. |
+| #579, #581, #582, #580 | Host cards, per-host Unraid switch, fixed CPU bars, wordmark loader | Round 1 failed with 4 blockers. Three classes failed twice and received root-cause tables: freshness of host details, every view that names containers, and the evidence for the production HTTP path and lifecycle. The host details read was rebuilt around answers and failures stamped with the source state they were read under; a complete reader inventory classified every container view. The sixth round passed. |
 | #586 | Setup test backend and retained candidate run read | Failed with 1 blocker: the candidate run read treated the answers of agents at contract 21 as errors instead of unavailable. Fixed; the verify passed, including a cross-provider review of the contract 22 bump. |
 | #585 | Paged findings and folder views | Failed with 3 blockers in occurrence targets and page anchoring. Fixed; the verify passed. |
 | #586 | Tailscale stepper and setup test UI | Failed with 2 blockers: results had to follow the credential revision, and an ambiguous mint had to be explained truthfully. Fixed; the verify passed. |
 | #583, #584 | Action Centre titles, host targets and scan counts | Failed with 1 blocker: system backups and shell sessions were titled "Action". Fixed; the verify passed. |
-| all | Closing integration (#588) | The closing review on `30f576f6` passed without findings. The two later acceptance fixes passed their own reviews. |
+| all | Closing integration (#588) | Both acceptance fixes passed their own reviews. The closing review on `30f576f6`, which includes the first fix, passed without findings; the second fix (`7811e74f`) was reviewed afterwards. |
 
 Every blocker fix and break-map row has a test that fails on an assertion when
 its guard is reverted.
 
-Main-thread decisions AUTO-1 to AUTO-4 were posted on #587. They define which
+Main-thread decisions AUTO-1 to AUTO-4 were posted on #587. AUTO-1 keeps scan
+counters out of the shared activity list refresh; the dialog, toast and
+Security box keep their own observed counts. AUTO-2 to AUTO-4 define which
 views leave out per-user hidden Unraid containers: lists, counts, search and
 proxy suggestions hide them. Operation consequence texts, security advisories,
 platform coverage, explicit detail routes and proxy instances keep every
