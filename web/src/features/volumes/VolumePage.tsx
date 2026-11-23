@@ -34,6 +34,7 @@ import { useVolumeCapability } from "./use-volume-capability";
 import { useVolumeCommands } from "./use-volume-commands";
 import { RenameVolumeDialog } from "./RenameVolumeDialog";
 import { deleteBlock } from "./volume-menu";
+import { useHiddenUnraidIds } from "@/shared/hooks/use-host-scope";
 
 type Tab = "overview" | "files" | "backups";
 
@@ -46,6 +47,10 @@ function OverviewTab({ volume: v, host, onMeasured }: { volume: VolumeDetail & {
   const navigate = useNavigate();
   const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const th = useTranslations("common.hidden");
+  // Display only: left-out Unraid consumers are not listed, while removal and restore safety read every consumer.
+  const hiddenIds = useHiddenUnraidIds();
+  const consumers = v.consumers.filter((c) => !hiddenIds.has(c.containerId));
   const share = !v.sizeUnavailable && host && host.diskTotalGb > 0 ? (v.sizeBytes / (host.diskTotalGb * 1024 ** 3)) * 100 : undefined;
   const block = deleteBlock(v, host);
   const blocked = block === "bind" ? t("deleteBind") : block === "in-use" ? t("deleteBlocked") : block === "offline" ? t("deleteOffline") : undefined;
@@ -65,7 +70,10 @@ function OverviewTab({ volume: v, host, onMeasured }: { volume: VolumeDetail & {
         <CardContent className="px-2">
           {v.consumers.length === 0 ? (
             <p className="px-2 text-sm text-muted-foreground">{t("consumersNone")}</p>
+          ) : consumers.length === 0 ? (
+            <p className="px-2 text-sm text-muted-foreground">{th("count", { count: v.consumers.length })}</p>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -77,7 +85,7 @@ function OverviewTab({ volume: v, host, onMeasured }: { volume: VolumeDetail & {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {v.consumers.map((c) => (
+                {consumers.map((c) => (
                   <TableRow key={`${c.containerId}-${c.target || t("none")}`}>
                     <TableCell>
                       <span className="flex items-center gap-2 font-medium">
@@ -106,6 +114,8 @@ function OverviewTab({ volume: v, host, onMeasured }: { volume: VolumeDetail & {
                 ))}
               </TableBody>
             </Table>
+            {consumers.length < v.consumers.length && <p className="px-2 pt-1 text-xs text-muted-foreground">{th("count", { count: v.consumers.length - consumers.length })}</p>}
+            </>
           )}
         </CardContent>
       </Card>

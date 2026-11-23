@@ -21,7 +21,10 @@ import { NetworkTable } from "@/features/networks/NetworkTable";
 import { TopologyDetails } from "@/features/networks/TopologyDetails";
 import { useVisibleContainers } from "@/shared/hooks/use-host-scope";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
-import { renderWithApp } from "@/test/render";
+import { renderWithApp, renderRoutes } from "@/test/render";
+import { FileAside } from "@/features/volumes/files/FileAside";
+import { AdminSearchGroups } from "@/app/shell/AdminSearchGroups";
+import { Command, CommandList } from "@/shared/ui/command";
 
 import HostsPage from "./HostsPage";
 import { resetUnraidDetection } from "./unraid-detection";
@@ -94,4 +97,39 @@ it("detects and hides Unraid containers of two hosts independently", async () =>
   await waitFor(() => expect(names.includes("boreal-unraid-app")).toBe(true));
   expect(names.includes("duplicati") || names.includes("krusader")).toBe(false);
   expect(preferencesStore.get().unraidHidden).toEqual(["atlas"]);
+});
+
+it("leaves left-out consumers out of the file details and names how many are hidden", async () => {
+  setAppLocale("en-US");
+  const demo = createDemoAdapter();
+  const volume = { ...(await demo.listVolumes())[0]!, consumers: [{ containerId: "c-duplicati", containerName: "duplicati", target: "/data", readOnly: false, running: true }, { containerId: "c-plain", containerName: "plain-app", target: "/srv", readOnly: true, running: true }] };
+  const props = { mode: "details", volume, path: "/", active: undefined, files: [], secondary: null, onSecondary: () => {}, onEdit: () => {}, onSave: () => {}, onDownload: () => {} } as unknown as Parameters<typeof FileAside>[0];
+  const view = renderWithApp(<FileAside {...props} />);
+  expect(within(view.container).queryByRole("link", { name: "duplicati" }) !== null).toBe(true);
+  act(() => preferencesStore.set((p) => ({ ...p, unraidHidden: ["atlas"] })));
+  await waitFor(() => expect(within(view.container).queryByRole("link", { name: "duplicati" })).toBe(null));
+  expect(within(view.container).queryByRole("link", { name: "plain-app" }) !== null).toBe(true);
+  expect(view.container.textContent?.includes("1 hidden")).toBe(true);
+});
+
+it("offers no left-out container in the global search", async () => {
+  setAppLocale("en-US");
+  const view = renderWithApp(<Command shouldFilter={false}><CommandList><AdminSearchGroups query="duplicati" select={() => {}} hostName={(id) => id} pages={[]} actions={[]} stacks={[]} stacksLoading={false} /></CommandList></Command>);
+  await waitFor(() => expect(within(view.container).queryByText("duplicati") !== null).toBe(true));
+  act(() => preferencesStore.set((p) => ({ ...p, unraidHidden: ["atlas"] })));
+  await waitFor(() => expect(within(view.container).queryByText("duplicati")).toBe(null));
+});
+
+it("lists only shown consumers on the volume overview while the volume stays in use", async () => {
+  setAppLocale("en-US");
+  const demo = createDemoAdapter();
+  const base = (await demo.listVolumes()).find((v) => v.hostId === "atlas")!;
+  const volume = { ...(await demo.getVolume(base.id)), consumers: [{ containerId: "c-duplicati", containerName: "duplicati", target: "/data", readOnly: false, running: true }] };
+  const adapter = { ...demo, getVolume: async () => volume } as typeof demo;
+  preferencesStore.set((p) => ({ ...p, unraidHidden: ["atlas"] }));
+  const VolumePage = (await import("@/features/volumes/VolumePage")).default;
+  const view = renderRoutes([{ path: "/volumes/:volumeId", element: <VolumePage /> }], [`/volumes/${encodeURIComponent(base.id)}`], adapter);
+  await waitFor(() => expect(view.container.textContent?.includes("1 hidden")).toBe(true));
+  expect(view.container.textContent?.includes("duplicati")).toBe(false);
+  expect(view.container.textContent?.includes("No container mounts this entry.")).toBe(false);
 });

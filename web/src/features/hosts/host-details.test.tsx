@@ -185,3 +185,29 @@ it.each([["cold"], ["warm"]] as const)("a %s card publishes the current answer a
   expect(reads.length).toBe(first + 6);
   expect(view.container.textContent?.includes("Superseded")).toBe(false);
 });
+
+it.each([["cold"], ["warm"]] as const)("a %s card never keeps an answer superseded between the read's last check and its publication", async (start) => {
+  setAppLocale("en-US");
+  const host = mapHost({ id: "atlas", name: "Example", color: null, registrationRevision: 1, apiUrl: "https://agent.example.com", enabled: true, status: "online", isEdge: false });
+  const listeners = new Set<(topics: string[]) => void>();
+  const reads: ReturnType<typeof deferred<HostDetails>>[] = [];
+  const demo = createDemoAdapter();
+  const adapter = { ...demo, subscribeChanges: (fn: (topics: string[]) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, getHostDetails: () => { const done = deferred<HostDetails>(); reads.push(done); return done.promise; } };
+  const view = renderWithApp(<HostCard host={host} system={undefined} stacks={0} containers={0} allIds={["atlas"]} />, adapter as typeof demo);
+  await waitFor(() => expect(reads.length).toBe(1));
+  if (start === "warm") {
+    await act(async () => { reads[0]!.resolve({ os: "Warm OS" }); });
+    await waitFor(() => expect(value(view.container, "System")).toBe("Warm OS"));
+    act(() => listeners.forEach((fn) => fn(["hosts"])));
+    await waitFor(() => expect(reads.length).toBe(2));
+  }
+  const last = reads.length - 1;
+  // The change lands in the microtask after the read resolved: after its fence passed, before the query publishes.
+  await act(async () => { reads[last]!.resolve({ os: "Superseded at publication" }); queueMicrotask(() => listeners.forEach((fn) => fn(["hosts"]))); });
+  await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  expect(value(view.container, "System") === "Superseded at publication").toBe(false);
+  // Quiet afterwards: a follow-up read runs and its answer is shown.
+  await waitFor(() => expect(reads.length).toBe(last + 2));
+  await act(async () => { reads[last + 1]!.resolve({ os: "Current OS" }); });
+  await waitFor(() => expect(value(view.container, "System")).toBe("Current OS"));
+});

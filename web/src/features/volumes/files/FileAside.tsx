@@ -6,6 +6,7 @@ import { baseName } from "@/domain/files";
 import { formatBytes } from "@/domain/format";
 import type { Volume } from "@/domain/volumes";
 import { cn } from "@/shared/lib/utils";
+import { useHiddenUnraidIds } from "@/shared/hooks/use-host-scope";
 import { languageFor } from "@/shared/workspace/languages";
 import { AsideHeader, EditorPane, EditorPlaceholder, type AsideMode } from "@/shared/workspace/workspace";
 
@@ -42,6 +43,10 @@ function Kv({ label, children, mono }: { label: string; children: React.ReactNod
 function Details({ volume, path, active, warning }: Pick<FileAsideProps, "volume" | "path" | "active" | "warning">) {
   const t = useTranslations("volumes.files.aside");
   const tw = useTranslations("workspace");
+  const th = useTranslations("common.hidden");
+  // Display only: left-out Unraid consumers are not named; the count still includes them, so the volume never reads as unused.
+  const hiddenIds = useHiddenUnraidIds();
+  const consumers = volume.consumers.filter((c) => !hiddenIds.has(c.containerId));
   return (
     <div className="grid min-h-0 flex-1 auto-rows-min gap-4 overflow-auto p-3 text-xs @min-[3000px]/ws:grid-cols-2">
       <section aria-labelledby="fa-item" className="min-w-0">
@@ -70,7 +75,8 @@ function Details({ volume, path, active, warning }: Pick<FileAsideProps, "volume
           <p className="text-muted-foreground">{t("unused")}</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
-            {volume.consumers.map((c) => (
+            {consumers.length < volume.consumers.length && <li className="text-muted-foreground">{th("count", { count: volume.consumers.length - consumers.length })}</li>}
+            {consumers.map((c) => (
               <li key={`${c.containerId}-${c.target}`} className="rounded-lg border bg-muted/15 px-2.5 py-1.5">
                 <div className="flex items-center gap-1.5 font-medium">
                   {c.stackId ? <Layers className="size-3.5 text-muted-foreground" aria-hidden /> : <Box className="size-3.5 text-muted-foreground" aria-hidden />}
