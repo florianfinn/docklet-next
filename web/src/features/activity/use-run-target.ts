@@ -7,8 +7,13 @@
 import { useHosts } from "@/data/queries";
 import type { ActionRun } from "@/domain/model";
 
-/** Host load, rename and removal are reflected in every run surface. */
+/**
+ * Host load, rename and removal are reflected in every run surface. Every run names its host; a resource run also names
+ * its resource, while a scheduler job's target would only repeat its title.
+ */
 export function useRunTarget(run: ActionRun): string {
   const hosts = useHosts();
-  return run.hostScoped ? hosts.data?.find((host) => host.id === run.hostId)?.name ?? "" : run.target;
+  const host = run.hostId === undefined ? undefined : hosts.data?.find((h) => h.id === run.hostId)?.name;
+  if (run.hostScoped) return host ?? "";
+  return [run.operationTarget ? "" : run.target, host].filter(Boolean).join(" · ");
 }

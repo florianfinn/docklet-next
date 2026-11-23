@@ -6,7 +6,7 @@
 
 import { act, waitFor } from "@testing-library/react";
 import { useSyncExternalStore } from "react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
@@ -17,8 +17,9 @@ import type { Host, HostDetails } from "@/domain/model";
 import { renderWithApp } from "@/test/render";
 
 import { HostCard } from "./HostCard";
+import { FAILED_READ_RETRY_MS } from "./use-host-details";
 
-afterEach(() => { setAppLocale("de"); });
+afterEach(() => { setAppLocale("de"); vi.useRealTimers(); });
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
@@ -238,7 +239,7 @@ it.each([["cold", false], ["cold", true], ["warm", false], ["warm", true]] as co
   await waitFor(() => expect(value(view.container, "System")).toBe("Current OS"));
 });
 
-it("does not retry a failing read on its own when no change arrives", async () => {
+it("does not retry a failing read within the retry interval when no change arrives", async () => {
   setAppLocale("en-US");
   const host = mapHost({ id: "atlas", name: "Example", color: null, registrationRevision: 1, apiUrl: "https://agent.example.com", enabled: true, status: "online", isEdge: false });
   let reads = 0;
@@ -249,4 +250,24 @@ it("does not retry a failing read on its own when no change arrives", async () =
   await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
   expect(reads).toBe(1);
   expect(value(view.container, "System")).toBe("Not reported by the agent");
+});
+
+it("reads a failed card again after the retry interval while the host stays available, as after an agent restart", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  setAppLocale("en-US");
+  const host = mapHost({ id: "atlas", name: "Example", color: null, registrationRevision: 1, apiUrl: "https://agent.example.com", enabled: true, status: "online", isEdge: false });
+  let reads = 0;
+  const demo = createDemoAdapter();
+  const adapter = { ...demo, getHostDetails: async () => { reads++; if (reads === 1) throw new Error("HTTP 502"); return { os: "Debian GNU/Linux 13 (trixie)", dockerVersion: "28.5.1" }; } };
+  const view = renderWithApp(<HostCard host={host} system={undefined} stacks={0} containers={0} allIds={["atlas"]} />, adapter as typeof demo);
+  await waitFor(() => expect(reads).toBe(1));
+  await waitFor(() => expect(value(view.container, "System")).toBe("Not reported by the agent"));
+  await act(async () => { await vi.advanceTimersByTimeAsync(FAILED_READ_RETRY_MS - 1_000); });
+  expect(reads).toBe(1);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+  await waitFor(() => expect(value(view.container, "System")).toBe("Debian GNU/Linux 13 (trixie)"));
+  expect(reads).toBe(2);
+  // A settled answer is not read again on the failure interval.
+  await act(async () => { await vi.advanceTimersByTimeAsync(FAILED_READ_RETRY_MS * 2); });
+  expect(reads).toBe(2);
 });

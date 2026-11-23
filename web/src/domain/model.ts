@@ -283,6 +283,8 @@ export interface ActionRun {
   target: string;
   /** Resolve the display target from the current host list, never a raw environment ID. */
   hostScoped?: boolean;
+  /** The target only names the operation (a scheduler job), so it is not repeated next to the title. */
+  operationTarget?: boolean;
   hostId?: string;
   stackId?: string;
   containerId?: string;

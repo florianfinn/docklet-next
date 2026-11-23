@@ -297,6 +297,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     kind, sourceOperation: run.type,
     title: repositoryCheck ? { code: `activity.runKind.${kind}`, params: {} } : activityTitle(run),
     hostScoped,
+    ...(run.type === "job_run" && !hostScoped ? { operationTarget: true } : {}),
     target: !hostScoped && jobKind(run) ? { code: `activity.runKind.${kind}`, params: {} } as MessageCode : { code: "runMessages.value", params: { value: hostScoped ? "" : target } },
     hostId: run.environmentId,
     ...((run.resourceType === "project" || run.resourceType === "stack") && run.resourceId ? { stackId: inventoryId(run.environmentId, run.resourceId) } : {}),

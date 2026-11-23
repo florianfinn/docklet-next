@@ -2,7 +2,7 @@
 // Revision: 34fb271fc0cea26ae89b231dc8f4dbfbb3531376
 // Retrieved: 2026-11-23
 // License: Apache-2.0
-// Deviations: Original per-host detail query for M37 #579; answers and failures stamped with their source epoch.
+// Deviations: Original per-host detail query for M37 #579; answers and failures stamped with their source epoch; failures retried at a fixed interval.
 
 import { CancelledError, useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -22,6 +22,9 @@ class StampedFailure extends Error {
   constructor(epoch: number, cause: unknown) { super("host-details.read-failed", { cause }); this.epoch = epoch; }
 }
 
+/** An agent that has just restarted can fail its first reads while the hub already reports it available. */
+export const FAILED_READ_RETRY_MS = 15_000;
+
 /** Answers seen as current when they were rendered; such a value may stay visible while its follow-up read runs. */
 const proven = new WeakSet<Stamped>();
 
@@ -29,7 +32,8 @@ const proven = new WeakSet<Stamped>();
  * Details belong to one host identity and show only while the host is available; a cached read never outlives either.
  * Every answer carries the source epoch it was read under. An answer that is no longer current when it is rendered is
  * hidden unless it was current before (then it stays until the follow-up arrives), and it always gets a follow-up read:
- * this covers a change that lands after the read's last check but before the query publishes it.
+ * this covers a change that lands after the read's last check but before the query publishes it. A settled failure is
+ * read again at a fixed interval while the card is open and the host available.
  */
 export function useHostDetails(host: Host): HostDetails | undefined {
   const adapter = useAdapter();
@@ -57,6 +61,7 @@ export function useHostDetails(host: Host): HostDetails | undefined {
     },
     enabled: available && !!adapter.getHostDetails,
     retry: false,
+    refetchInterval: (q) => q.state.status === "error" ? FAILED_READ_RETRY_MS : false,
   });
   const data = available && query.isSuccess ? query.data : undefined;
   const fresh = !!data && data.epoch === hostDetailsEpoch();
