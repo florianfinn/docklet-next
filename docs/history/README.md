@@ -35,3 +35,4 @@ The [design index](../design/README.md) holds the current contracts.
 | [M29 first-run setup acceptance](m29-first-run-setup-acceptance.md) | Merged package, review rounds, sandbox-found defects, method and limits on 2026-11-19 |
 | [M34 simpler stack actions, recorded env files and proxy UI acceptance](m34-stacks-proxy-ui-acceptance.md) | Merged package, review rounds, acceptance-found defect and fixture correction AUTO-22, method and limits on 2026-11-21 |
 | [M35 simpler everyday use acceptance](m35-everyday-use-acceptance.md) | Merged package, review rounds, acceptance-found defects, main-thread decisions AUTO-1 and AUTO-2, method and limits on 2026-11-22 |
+| [M36 feedback fixes and private Tailscale route acceptance](m36-feedback-tailscale-acceptance.md) | Merged package, review rounds, acceptance-found defects, the maintainer's T3 method decision, the real-account T5 run, method and limits on 2026-11-23 |
