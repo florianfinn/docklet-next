@@ -1,4 +1,8 @@
 import { Download, File, FileText, Folder, FolderInput, MoreHorizontal, Pencil, TextCursorInput, Trash2 } from "lucide-react";
+import { useMemo } from "react";
+import { useLocation } from "react-router";
+import { Pager } from "@/shared/components/pager";
+import { usePagedRows } from "@/shared/hooks/use-paged-rows";
 import { useTranslations } from "use-intl";
 
 import { workspaceErrorKey } from "./workspace-error";
@@ -27,7 +31,10 @@ interface FolderViewProps {
 /** Folder tab of the volume workspace: entries of the current folder with size, date and actions. */
 export function FolderView({ listing, singleFile, canRename = true, canDelete = true, canDownload = true, onOpen, onDownload, onRename, onMove, onDelete }: FolderViewProps) {
   const t = useTranslations("volumes.files");
-  const entries = listing.data?.entries ?? [];
+  const location = useLocation();
+  const entries = useMemo(() => (listing.data?.entries ?? []).map((entry) => ({ key: entry.path, entry })), [listing.data?.entries]);
+  // Volume ids are host-scoped. The requested route also resets while a previous folder is placeholder data.
+  const paging = usePagedRows(entries, 200, { resetKey: JSON.stringify([location.pathname, new URLSearchParams(location.search).get("path"), listing.data?.volumeId, listing.data?.path]) });
   if (listing.isPending)
     return (
       <div className="flex flex-col gap-1.5 p-3">
@@ -57,10 +64,10 @@ export function FolderView({ listing, singleFile, canRename = true, canDelete = 
           </TableRow>
         </TableHeader>
         <TableBody className={cn(listing.isPlaceholderData && "opacity-60")}>
-          {entries.map((e) => {
+          {paging.visible.map(({ entry: e }) => {
             const Icon = e.type === "dir" ? Folder : e.editable ? FileText : File;
             return (
-              <TableRow key={e.path} className="group">
+              <TableRow key={e.path} data-folder-row className="group">
                 <TableCell className="py-1.5 pl-4">
                   <button type="button" onClick={() => onOpen(e)} aria-label={t("open", { name: e.name })} className="flex max-w-full items-center gap-2 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring">
                     <Icon className={cn("size-4 shrink-0", e.type === "dir" ? "text-warning" : "text-muted-foreground")} aria-hidden />
@@ -115,6 +122,7 @@ export function FolderView({ listing, singleFile, canRename = true, canDelete = 
           })}
         </TableBody>
       </Table>
+      <Pager {...paging} />
     </div>
   );
 }

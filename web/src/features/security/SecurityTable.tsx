@@ -2,16 +2,18 @@
 // Revision: 5f56262875af9a8ec0fe9007cb889bd3a513085d
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original measured security table, compact filters and labelled card fields; accessible header help in every view. M21 #437: advisory detail. M24 S6: observed recovery and update UI follow-ups. M26 #449: tap help composition.
+// Deviations: Original measured security table, compact filters and labelled card fields; accessible header help in every view. M21 #437: advisory detail. M24 S6: observed recovery and update UI follow-ups. M26 #449: tap help composition. M37 #585: bounded page summary and focus-preserving page measurement.
 
 import type { CSSProperties, ReactNode } from "react";
 import { useTranslations } from "use-intl";
 
 import { ColumnFilterRow, ColumnFilterSummary } from "@/shared/components/column-filters";
 import { CardSortBar, ROW_EDGES, ROW_SURFACE } from "@/shared/components/overview/overview-table";
+import { Pager, type PagerProps } from "@/shared/components/pager";
+import { Button } from "@/shared/ui/button";
 import { SortableHead } from "@/shared/components/sortable-head";
 import { useFitView } from "@/shared/hooks/use-fit-view";
-import type { ColumnFilter, FilterValues } from "@/shared/lib/column-filter";
+import { activeFilters, type ColumnFilter, type FilterValues } from "@/shared/lib/column-filter";
 import { securityColumnGroups } from "./security-layout";
 import type { SortState } from "@/shared/lib/table-sort";
 import { cn } from "@/shared/lib/utils";
@@ -43,6 +45,8 @@ interface Props<T, K extends string> {
   onSort: (key: K) => void;
   summary: { shown: number; total: number; noun: string; nounOf: string };
   empty: ReactNode;
+  paging?: PagerProps & { from: number; to: number };
+  targetHidden?: boolean;
 }
 
 const HEADER_HELP = {
@@ -79,11 +83,13 @@ function CompactFilters<T, K extends string>({ columns, filters, values, onChang
 }
 
 /** The measured overview policy keeps all columns in cards and merges labelled fields in condensed tables. */
-export function SecurityTable<T, K extends string>({ label, fitKey, columns, condensed, rows, filters, values, setValues, sort, onSort, summary, empty }: Props<T, K>) {
+export function SecurityTable<T, K extends string>({ label, fitKey, columns, condensed, rows, filters, values, setValues, sort, onSort, summary, empty, paging, targetHidden }: Props<T, K>) {
   const t = useTranslations("security");
   const tf = useTranslations("common.columnFilters");
+  const tp = useTranslations("common.pager");
   // Filter values only remeasure: a reset would unmount the compact filter being typed into.
-  const { view, ref } = useFitView<HTMLElement>(JSON.stringify([fitKey, columns]), undefined, JSON.stringify(values));
+  const { view, ref } = useFitView<HTMLElement>(JSON.stringify(columns), undefined, JSON.stringify([fitKey, values, paging?.page]));
+  const filtered = activeFilters(values) > 0;
   const groups = securityColumnGroups(view, columns.map((c) => c.id), condensed);
   const help = new Map(Object.entries(HEADER_HELP).map(([id, key]) => [id, t(`headerHelp.${key}`, { severity: columns.find((c) => c.id === id)?.label ?? "" })]));
   const onChange = (id: string, value: string) => setValues((cur) => ({ ...cur, [id]: value }));
@@ -99,7 +105,11 @@ export function SecurityTable<T, K extends string>({ label, fitKey, columns, con
   });
   const edge = (row: SecurityRow<K>) => ({ "--host": row.color }) as CSSProperties;
   return <Card tabIndex={-1} className="min-w-0 gap-2 p-4" data-slot="security-table" data-view={view}>
-    <ColumnFilterSummary {...summary} values={values} onReset={() => setValues(() => ({}))} className="px-1" />
+    {paging ? <div data-slot="column-filter-summary" data-active={filtered || undefined} className="flex min-h-8 flex-wrap items-center gap-2 px-1 text-xs text-muted-foreground">
+      <span aria-live="polite">{tp("range", { from: paging.from, to: paging.to, filtered: summary.shown })}{filtered && <> · {tp("total", { total: summary.total })}</>}</span>
+      {filtered && <Button type="button" variant="outline" size="sm" onClick={() => setValues(() => ({}))}>{tf("reset")}</Button>}
+    </div> : <ColumnFilterSummary {...summary} values={values} onReset={() => setValues(() => ({}))} className="px-1" />}
+    {targetHidden && <p role="status" className="px-1 text-xs text-muted-foreground">{tp("hiddenFinding")}</p>}
     {view !== "table" && <>
       <CardSortBar columns={columns.map((c) => ({ ...c, sorts: [{ key: c.id, label: c.label }] }))} sort={sort} onSort={onSort} />
       <CompactFilters columns={columns} filters={filters} values={values} onChange={onChange} />
@@ -129,5 +139,6 @@ export function SecurityTable<T, K extends string>({ label, fitKey, columns, con
         </TableBody>
       </BareTable>}
     </div>
+    {paging && <Pager {...paging} />}
   </Card>;
 }

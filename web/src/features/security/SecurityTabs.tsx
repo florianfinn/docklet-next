@@ -1,19 +1,21 @@
-import { advisoryKey } from "@/data/vulnerability-advisory";
+import { advisoryKey, decodeAdvisoryKey } from "@/data/vulnerability-advisory";
 import { SCAN_STATUS_KEYS } from "@/data/wire-catalogue-states";
 import { scopedKey } from "@/data/wire-catalogue";
 import { useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { formatRelative } from "@/domain/format";
 import { COLLATOR } from "@/domain/hosts";
 import type { ContainerInfo, Finding, Host, ScannedImage, ScanRun, Severity, Stack } from "@/domain/model";
 import { StatStrip } from "@/shared/component-set/stat-strip";
+import { usePagedRows } from "@/shared/hooks/use-paged-rows";
 import { HostChip } from "@/shared/components/host-chip";
 import { ToneBadge } from "@/shared/components/tone";
 import { activeFilters, applyColumnFilters, type ColumnFilter, type FilterValues } from "@/shared/lib/column-filter";
 import type { SortState } from "@/shared/lib/table-sort";
 
+import { occurrenceSelectionKey } from "./advisory-selection";
 import { SecurityTable } from "./SecurityTable";
 import { imageCoverage } from "./platform-coverage";
 import { FINDING_GROUPS, IMAGE_GROUPS } from "./security-layout";
@@ -147,12 +149,13 @@ const byValue = <T,>(rows: T[], dir: SortState<string>["dir"], value: (r: T) => 
     return dir === "asc" ? c : -c;
   });
 
+// JSON preserves boundaries when image names or package versions contain separators.
+const findingOccurrence = (f: Finding) => JSON.stringify([f.hostId, f.imageId ?? f.image, f.id, f.pkg, f.installed]);
+
 const worst = (i: ScannedImage) => SEVERITIES.find((s) => (i.counts[s.key] ?? 0) > 0)?.color ?? "var(--border)";
 
 export function FindingsTab({ findings, hosts, highlight, onOpen }: Pick<Data, "findings" | "hosts"> & { highlight: string | null; onOpen?: (finding: Finding, element: HTMLElement) => void }) {
   const t = useTranslations("security");
-  // Serialised once per data change, not per keystroke; cell text widths decide the measured view.
-  const findingsKey = useMemo(() => JSON.stringify([findings, [...hosts.values()].map((h) => h.name)]), [findings, hosts]);
   const tf = useTranslations("common.columnFilters");
   const [values, setValues] = useState<FilterValues>({});
   const [sort, onSort] = useTableSort<FindingKey>({ key: "risk", dir: "desc" }, ["cvss", "severity", "risk", "epss"]);
@@ -170,37 +173,75 @@ export function FindingsTab({ findings, hosts, highlight, onOpen }: Pick<Data, "
       { id: "cvss", kind: "choice", options: ["9", "7", "4"].map((v) => ({ value: v, label: t("filters.cvssMin", { value: `${v},0` }) })), match: (f, v) => f.cvss >= Number(v) },
     ];
   }, [findings, hosts, t]);
-  const value = (f: Finding, key: FindingKey): string | number =>
-    key === "risk" ? (f.risk ?? f.cvss) : key === "epss" ? (f.epss ?? -1) : key === "severity" ? SEV_RANK[f.severity] : key === "cvss" ? f.cvss : key === "fixed" ? (f.fixedIn ?? "") : key === "image" ? short(f.image) : key === "host" ? (hosts.get(f.hostId)?.name ?? f.hostId) : f[key];
-  const rows = byValue(applyColumnFilters(findings, filters, values), sort.dir, (f) => value(f, sort.key));
+  const ordered = useMemo(() => {
+    const value = (f: Finding, key: FindingKey): string | number =>
+      key === "risk" ? (f.risk ?? f.cvss) : key === "epss" ? (f.epss ?? -1) : key === "severity" ? SEV_RANK[f.severity] : key === "cvss" ? f.cvss : key === "fixed" ? (f.fixedIn ?? "") : key === "image" ? short(f.image) : key === "host" ? (hosts.get(f.hostId)?.name ?? f.hostId) : f[key];
+    return byValue(findings, sort.dir, (f) => value(f, sort.key));
+  }, [findings, sort, hosts]);
+  const rows = useMemo(() => {
+    const occurrences = new Map<string, number>();
+    return applyColumnFilters(ordered, filters, values).map((finding) => {
+      const key = findingOccurrence(finding);
+      const ordinal = occurrences.get(key) ?? 0;
+      occurrences.set(key, ordinal + 1);
+      return { key, finding, ordinal };
+    });
+  }, [ordered, filters, values]);
+  const [params] = useSearchParams();
+  const urlFinding = params.get("finding");
+  const urlOccurrence = params.get("occ");
+  let advisory = urlFinding;
+  if (urlFinding) { try { advisory = decodeAdvisoryKey(urlFinding); } catch { /* Legacy plain advisory ids remain valid. */ } }
+  const source = urlFinding ? JSON.stringify(["url", urlFinding, urlOccurrence]) : highlight;
+  const match = urlFinding || highlight ? ordered.find((f) => urlFinding
+    ? f.id === advisory && (!urlOccurrence || occurrenceSelectionKey({ host: f.hostId, imageId: f.imageId ?? "", package: f.pkg, installed: f.installed, class: (f as { class?: string }).class ?? "", type: (f as { type?: string }).type ?? "" }) === urlOccurrence)
+    : findingOccurrence(f) === highlight || f.id === highlight) : undefined;
+  // Resolve advisory links once; retain the occurrence across sort/filter and sheet dismissal.
+  const [target, setTarget] = useState(() => ({ source, key: match ? findingOccurrence(match) : undefined, fromUrl: !!urlFinding }));
+  const dismissed = target.fromUrl && source === null;
+  const sameTarget = target.source === source || dismissed;
+  const targetKey = sameTarget && target.key ? target.key : match ? findingOccurrence(match) : source ?? undefined;
+  if ((!sameTarget || (!target.key && match))) setTarget({ source, key: match ? findingOccurrence(match) : undefined, fromUrl: !!urlFinding });
+  const paging = usePagedRows(rows, 100, { targetKey, resetKey: JSON.stringify([sort, values]) });
   const columns = FINDING_COLUMNS.map((c) => ({ id: c, label: t(`columns.${c}`) }));
+  const visibleRows = paging.visible.map(({ finding: f, key, ordinal }) => {
+    const sev = SEVERITIES.find((s) => s.key === f.severity);
+    const text = {
+      id: f.id + (f.knownExploited ? t("kev") : ""), severity: t(`severities.${f.severity}`),
+      pkg: f.pkg, installed: f.installed, fixed: f.fixedIn ?? t("noFix"), image: f.image,
+      host: hosts.get(f.hostId)?.name ?? "", cvss: f.cvss.toFixed(1),
+      risk: f.risk?.toFixed(1) ?? "–", epss: f.epss === undefined ? "–" : `${(f.epss * 100).toFixed(2)}%`,
+    };
+    return {
+      maxCellLength: Math.max(...Object.values(text).map((cell) => cell.length)),
+      id: `${key}:${ordinal}`,
+      selected: targetKey === key && ordinal === 0,
+      advisoryKey: advisoryKey(f.id),
+      onOpen: onOpen ? (element: HTMLElement) => onOpen(f, element) : undefined,
+      color: sev?.color ?? "var(--border)",
+      cells: {
+        id: <span className="font-mono" title={f.title}>{f.id}{f.knownExploited && <ToneBadge tone="err">{t("kev")}</ToneBadge>}</span>,
+        severity: <ToneBadge tone={sev?.tone ?? "gray"}>{text.severity}</ToneBadge>,
+        pkg: <span className="font-mono">{text.pkg}</span>,
+        installed: <span className="font-mono text-muted-foreground">{text.installed}</span>,
+        fixed: <span className="font-mono">{text.fixed}</span>,
+        image: <span className="font-mono">{text.image}</span>,
+        host: <HostChip host={hosts.get(f.hostId)} />,
+        cvss: <span className="font-semibold tabular">{text.cvss}</span>,
+        risk: <span className="tabular" title={f.risk === undefined ? t("unknownIntel") : undefined}>{text.risk}</span>,
+        epss: <span className="tabular">{text.epss}</span>,
+      },
+    };
+  });
+  const findingsKey = JSON.stringify([FINDING_COLUMNS, rows.length, Math.max(0, ...visibleRows.map((row) => row.maxCellLength))]);
   return (
     <SecurityTable
       label={t("tabs.findings")}
       fitKey={findingsKey}
       condensed={FINDING_GROUPS}
-      rows={rows.map((f, index) => {
-        const sev = SEVERITIES.find((s) => s.key === f.severity);
-        return {
-          id: `${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}:${index}`,
-          selected: highlight === f.id,
-          advisoryKey: advisoryKey(f.id),
-          onOpen: onOpen ? (element: HTMLElement) => onOpen(f, element) : undefined,
-          color: sev?.color ?? "var(--border)",
-          cells: {
-            id: <span className="font-mono" title={f.title}>{f.id}{f.knownExploited && <ToneBadge tone="err">{t("kev")}</ToneBadge>}</span>,
-            severity: <ToneBadge tone={sev?.tone ?? "gray"}>{t(`severities.${f.severity}`)}</ToneBadge>,
-            pkg: <span className="font-mono">{f.pkg}</span>,
-            installed: <span className="font-mono text-muted-foreground">{f.installed}</span>,
-            fixed: <span className="font-mono">{f.fixedIn ?? t("noFix")}</span>,
-            image: <span className="font-mono">{f.image}</span>,
-            host: <HostChip host={hosts.get(f.hostId)} />,
-            cvss: <span className="font-semibold tabular">{f.cvss.toFixed(1)}</span>,
-            risk: <span className="tabular" title={f.risk === undefined ? t("unknownIntel") : undefined}>{f.risk?.toFixed(1) ?? "–"}</span>,
-            epss: <span className="tabular">{f.epss === undefined ? "–" : `${(f.epss * 100).toFixed(2)}%`}</span>,
-          },
-        };
-      })}
+      rows={visibleRows}
+      paging={paging}
+      targetHidden={paging.targetHidden}
       columns={columns}
       filters={filters}
       values={values}
