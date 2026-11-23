@@ -119,3 +119,46 @@ it("keeps the test button busy while a test runs and explains a test already run
   await waitFor(() => expect(screen.queryByText("A setup test is already running. Wait for it to finish.") !== null).toBe(true));
   expect(screen.getByRole("button", { name: "Run test" }).hasAttribute("disabled")).toBe(false);
 });
+
+it("hides a completed result once another credential revision is observed, and keeps it for observations of the same revision", async () => {
+  const user = userEvent.setup();
+  const f = tailnetFixture();
+  const view = renderWithApp(<TailnetConnection />, f.adapter);
+  await user.click(await screen.findByRole("button", { name: "Run test" }));
+  expect(await screen.findByRole("list", { name: "4. Test the setup" }) !== null).toBe(true);
+  expect(screen.queryByText("Test finished: 6 passed, 0 failed or unknown.") !== null).toBe(true);
+  // An ordinary status observation of the same credential keeps the proof.
+  act(() => f.send({ ...f.state.status, hostCount: 2, generation: f.state.status.generation }));
+  await waitFor(() => expect(screen.queryByText(/2 hosts/) !== null).toBe(true));
+  expect(checks() !== null).toBe(true);
+  expect(view.container.textContent?.includes("Verified")).toBe(true);
+  // Another tab replaces the credential: the hub keeps the generation and streams a new revision.
+  act(() => f.send({ ...f.state.status, credentialRevision: "example-boot:2" }));
+  await waitFor(() => expect(checks()).toBe(null));
+  expect(view.container.textContent?.includes("Verified")).toBe(false);
+});
+
+it.each(["en-US", "de"] as const)("explains an ambiguous mint in %s: a test key may remain and expires, without promising a retry", async (locale) => {
+  setAppLocale(locale);
+  const user = userEvent.setup();
+  const f = tailnetFixture();
+  const ambiguous = allPass(f.state.status.credentialRevision!);
+  ambiguous.checks[1] = { id: "agent-key", state: "fail", code: "tailnet.provider-unavailable" } as never;
+  ambiguous.checks[2] = { id: "cleanup", state: "unknown" } as never;
+  f.state.test = () => ok(ambiguous);
+  const view = renderWithApp(<TailnetConnection />, f.adapter);
+  await user.click(await screen.findByRole("button", { name: locale === "de" ? "Test starten" : "Run test" }));
+  await waitFor(() => expect(view.container.querySelector('[data-check="cleanup"]') !== null).toBe(true));
+  const text = view.container.querySelector('[data-slot="tailnet-test-checks"]')!.textContent ?? "";
+  expect(text.includes(locale === "de" ? "läuft nach fünf Minuten ab" : "expires after five minutes")).toBe(true);
+  expect(/automatic|automatisch/i.test(text)).toBe(false);
+  expect(view.container.textContent?.includes(locale === "de" ? "Geprüft" : "Verified")).toBe(false);
+});
+
+it("describes only the hub checks for manual keys", async () => {
+  const f = tailnetFixture({ ...connectedStatus(), mode: "manual" });
+  f.state.settings = { ...f.state.settings, mode: "manual" };
+  renderWithApp(<TailnetConnection />, f.adapter);
+  expect(await screen.findByText("Checks that the hub joined the tailnet with its tag and address. Manual keys create no test key.") !== null).toBe(true);
+  expect(screen.queryByText(/Creates a tagged one-use key/)).toBe(null);
+});

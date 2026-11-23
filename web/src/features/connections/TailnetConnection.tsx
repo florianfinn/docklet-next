@@ -98,7 +98,7 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
       <Button className="min-h-10 self-start" disabled={!ready || busy || mtls || settings.customControl && mode === "oauth"} onClick={() => void save(true)}>{t(setup || !status.enabled ? "connect" : "save")}</Button>
     </fieldset>}
     {feedback && <p role="status" className="px-4 pb-4 text-sm">{feedback}</p>}
-    {status.enabled && <div className="border-t p-4"><TestStep api={api} saved={!!settings.secretConfigured} /></div>}
+    {status.enabled && <div className="border-t p-4"><TestStep api={api} saved={!!settings.secretConfigured} revision={status.credentialRevision} manual={settings.mode === "manual"} /></div>}
     <footer className="flex flex-wrap items-center gap-2 border-t p-4">
       {onSkip && !status.enabled && <Button variant="outline" className="min-h-10" onClick={onSkip}>{t("skip")}</Button>}
       {setup && status.enabled && <Button className="min-h-10" onClick={onContinue}>{t("continue")}</Button>}

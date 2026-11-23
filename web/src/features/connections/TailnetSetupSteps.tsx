@@ -84,16 +84,20 @@ export function CredentialStep({ settings, mode, done, onCopied }: { settings: T
 
 type TestView = { epoch: number; result?: TestResult; error?: string; stale?: boolean };
 
-/** Runs the hub's setup test; a result from before a credential change (other test epoch) is never shown. */
-export function TestStep({ api, saved }: { api: TailnetApi; saved: boolean }) {
+/**
+ * Runs the hub's setup test. A result shows only for the test epoch it started in (local save, reset, reconnect) and the
+ * credential revision it proved; a revision observed later (for example a replacement from another tab) hides it.
+ */
+export function TestStep({ api, saved, revision, manual }: { api: TailnetApi; saved: boolean; revision: string | undefined; manual: boolean }) {
   const t = useTranslations("connections.steps");
   const all = useTranslations();
   const commandError = useCommandError();
   const [view, setView] = useState<TestView>();
   const [busy, setBusy] = useState(false);
-  const current = view && view.epoch === api.testEpoch() ? view : undefined;
+  const current = view && view.epoch === api.testEpoch() && (!view.result || view.result.credentialRevision === revision) ? view : undefined;
   const checks = current?.result?.checks ?? [];
   const verified = checks.some((c) => c.state === "pass") && checks.every((c) => c.state === "pass" || c.state === "skipped");
+  const passed = checks.filter((c) => c.state === "pass").length, failed = checks.filter((c) => c.state === "fail" || c.state === "unknown").length;
   async function run() {
     const epoch = api.testEpoch();
     setBusy(true); setView(undefined);
@@ -106,17 +110,21 @@ export function TestStep({ api, saved }: { api: TailnetApi; saved: boolean }) {
       }
     } finally { setBusy(false); }
   }
-  return <Step title={t("testTitle")} hint={t("testHint")} done={verified ? "verified" : undefined}>
+  // The explicit test does not retry on its own; the generic provider text describes background provisioning.
+  const codeText = (code: NonNullable<TestResult["checks"][number]["code"]>) => code === "tailnet.provider-unavailable" ? t("testProviderUnavailable") : all(TAILNET_CODE_KEYS[code]);
+  return <Step title={t("testTitle")} hint={t(manual ? "testHintManual" : "testHint")} done={verified ? "verified" : undefined}>
     <Button type="button" className="min-h-10 self-start" disabled={!saved || busy} aria-busy={busy || undefined} onClick={() => void run()}>{t(busy ? "testRunning" : "testRun")}</Button>
     {!saved && <p className="text-xs text-muted-foreground">{t("testSaveFirst")}</p>}
     {current?.stale && <p role="status" className="text-sm">{t("testStale")}</p>}
     {current?.error && <p role="alert" className="text-sm text-destructive">{current.error}</p>}
+    {checks.length > 0 && <p role="status" className="text-sm">{t("testDone", { passed, failed })}</p>}
     {checks.length > 0 && <ul className="grid gap-1.5 text-sm" aria-label={t("testTitle")} data-slot="tailnet-test-checks">
       {checks.map((check) => <li key={check.id} className="flex min-w-0 flex-wrap items-center gap-2" data-check={check.id} data-state={check.state}>
         <ToneBadge tone={check.state === "pass" ? "ok" : check.state === "fail" ? "err" : "gray"}>{all(TAILNET_TEST_STATE_KEYS[check.state])}</ToneBadge>
         <span>{all(TAILNET_TEST_CHECK_KEYS[check.id])}</span>
-        {check.code && <span className="w-full text-xs text-muted-foreground">{all(TAILNET_CODE_KEYS[check.code])}</span>}
+        {check.code && <span className="w-full text-xs text-muted-foreground">{codeText(check.code)}</span>}
         {check.providerStatus !== undefined && <span className="w-full text-xs text-muted-foreground">{all("connections.providerStatus", { status: check.providerStatus })}</span>}
+        {check.id === "cleanup" && check.state === "unknown" && <span className="w-full text-xs text-muted-foreground">{t("cleanupUnknown")}</span>}
       </li>)}
     </ul>}
   </Step>;

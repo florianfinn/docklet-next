@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -139,4 +140,15 @@ func TestPolicySnippetGrantsOnlyAgentToHubIngress(t *testing.T) {
 	require.Equal(t, []string{tailnet.AgentTag}, policy.Grants[0].Src)
 	require.Equal(t, []string{tailnet.HubTag}, policy.Grants[0].Dst)
 	require.Equal(t, []string{"tcp:3552"}, policy.Grants[0].IP)
+}
+
+// The web setup steps derive tags, owner and grant from this text; their fixture must stay the producer's exact text.
+func TestPolicySnippetMatchesWebFixture(t *testing.T) {
+	source, err := os.ReadFile("../../../web/src/features/connections/tailnet.test-support.ts")
+	require.NoError(t, err)
+	_, rest, found := strings.Cut(string(source), "export const PRODUCER_POLICY = `")
+	require.True(t, found)
+	fixture, _, found := strings.Cut(rest, "`")
+	require.True(t, found)
+	require.Equal(t, tailnet.PolicySnippet(), fixture)
 }
