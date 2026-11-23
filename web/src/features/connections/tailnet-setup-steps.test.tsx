@@ -36,7 +36,7 @@ it("orders the steps policy, credential, paste and test, with places and values 
   // Values to paste have their own copy buttons: scope and both tags.
   for (const value of ["Keys → Auth keys: write", "tag:docklet-hub", "tag:docklet-agent"]) expect(screen.getByRole("button", { name: new RegExp(`^Copy (Scope|Tag) ${value}$`) }) !== null).toBe(true);
   // Before a credential is saved, there is no test to run.
-  expect(screen.queryByRole("button", { name: "Run test" })).toBe(null);
+  expect(screen.queryByRole("button", { name: "Run test" }) === null).toBe(true);
 });
 
 it("offers the policy as form values for consoles without the JSON editor", async () => {
@@ -94,14 +94,14 @@ it("drops a result when the credential is replaced while the test runs, and hide
   await waitFor(() => expect(f.writes.some((w) => w.path === "/api/settings/connections/tailnet")).toBe(true));
   await act(async () => { held.resolve(ok(allPass(f.state.status.credentialRevision!))); });
   await waitFor(() => expect(screen.queryByText("The credential changed during the test. Run it again.") !== null).toBe(true));
-  expect(checks()).toBe(null);
+  expect(checks() === null).toBe(true);
   // A passing result is shown, then a later save hides it: it belongs to the replaced credential.
   f.state.test = undefined;
   await user.click(screen.getByRole("button", { name: "Run test" }));
   expect(await screen.findByRole("list", { name: "4. Test the setup" }) !== null).toBe(true);
   await user.type(screen.getByLabelText("Client secret"), "test-only-third");
   await user.click(screen.getByRole("button", { name: "Save credential" }));
-  await waitFor(() => expect(checks()).toBe(null));
+  await waitFor(() => expect(checks() === null).toBe(true));
 });
 
 it("keeps the test button busy while a test runs and explains a test already running elsewhere", async () => {
@@ -134,7 +134,7 @@ it("hides a completed result once another credential revision is observed, and k
   expect(view.container.textContent?.includes("Verified")).toBe(true);
   // Another tab replaces the credential: the hub keeps the generation and streams a new revision.
   act(() => f.send({ ...f.state.status, credentialRevision: "example-boot:2" }));
-  await waitFor(() => expect(checks()).toBe(null));
+  await waitFor(() => expect(checks() === null).toBe(true));
   expect(view.container.textContent?.includes("Verified")).toBe(false);
 });
 
@@ -160,5 +160,5 @@ it("describes only the hub checks for manual keys", async () => {
   f.state.settings = { ...f.state.settings, mode: "manual" };
   renderWithApp(<TailnetConnection />, f.adapter);
   expect(await screen.findByText("Checks that the hub joined the tailnet with its tag and address. Manual keys create no test key.") !== null).toBe(true);
-  expect(screen.queryByText(/Creates a tagged one-use key/)).toBe(null);
+  expect(screen.queryByText(/Creates a tagged one-use key/) === null).toBe(true);
 });

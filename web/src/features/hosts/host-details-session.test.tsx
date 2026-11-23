@@ -13,6 +13,7 @@ import { setAppLocale } from "@/app/i18n/locale-store";
 import { deferred } from "@/data/http/activity-reader.test-support";
 import { envelope, response } from "@/data/http/runtime-commands.test-support";
 import { sessionFixture } from "@/data/http/session-lifecycle.test-support";
+import { hostDetailsEpoch } from "@/data/host-details-source";
 import { queryKeys } from "@/data/query-keys";
 import { renderRoutes } from "@/test/render";
 
@@ -30,7 +31,8 @@ function hub(initial: Row[]) {
   const info: { host: string; done: ReturnType<typeof deferred<Response>> }[] = [];
   const f = sessionFixture((url) => {
     const path = url.pathname;
-    if (path.endsWith("/environments")) return response({ success: true, data: state.rows, pagination: { totalItems: state.rows.length } });
+    // The host list carries the CSRF token pair, as the hub does; without it the client serialises reads behind its bootstrap.
+    if (path.endsWith("/environments")) return new Response(JSON.stringify({ success: true, data: state.rows, pagination: { totalItems: state.rows.length } }), { headers: { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") } });
     if (path.endsWith("/auth/me")) return envelope({ id: state.user, username: state.user, requiresPasswordChange: false });
     const docker = /\/environments\/([^/]+)\/system\/docker\/info$/.exec(path);
     if (docker) { const done = deferred<Response>(); info.push({ host: decodeURIComponent(docker[1]!), done }); return done.promise; }
@@ -118,5 +120,26 @@ it("a stream reopen during the first held read repeats it, so the hub's supersed
   await act(async () => { h.info[1]!.done.resolve(answer("Example OS")); });
   await waitFor(() => expect(fact("0", "Project directory")).toBe("/srv/projects-b"));
   expect(document.body.textContent?.includes("/srv/projects-a")).toBe(false);
+  view.unmount();
+});
+
+it("a first read that fails after a host-list change starts a current read through the real adapter", async () => {
+  setAppLocale("en-US");
+  const h = hub([host()]);
+  const original = h.f.adapter.getHostDetails!.bind(h.f.adapter);
+  let started = 0;
+  Object.assign(h.f.adapter, { getHostDetails: (id: string, signal?: AbortSignal) => { started++; return original(id, signal); } });
+  const { view } = render(h);
+  await waitFor(() => expect(h.info.length).toBe(1));
+  const epoch = hostDetailsEpoch();
+  act(() => h.f.sources[0]!.environments());
+  await waitFor(() => expect(hostDetailsEpoch() > epoch).toBe(true));
+  await act(async () => { h.info[0]!.done.resolve(response({ error: "old connection unavailable" }, 502)); });
+  await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+  // The failure belongs to the replaced state: the card starts a current read. The transport's host read admission
+  // holds reads to a host that just failed, so this read stays in flight here; the deferred-adapter tests in
+  // host-details.test.tsx cover its answer being shown.
+  expect(started).toBe(2);
+  expect(fact("atlas", "System")).toBe("Not reported by the agent");
   view.unmount();
 });

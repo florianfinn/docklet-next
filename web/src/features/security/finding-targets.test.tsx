@@ -47,10 +47,10 @@ it("an occ link selects the occurrence that differs only in class and type", asy
 
 it("a target that is absent or not loaded yet is never reported as hidden by filters", async () => {
   renderWithApp(<Live initial={[]} highlight="CVE-1999-0001" />);
-  expect(screen.queryByText("Finding hidden by filters")).toBe(null);
+  expect(screen.queryByText("Finding hidden by filters") === null).toBe(true);
   act(() => live.set(findings));
   expect(rows().length).toBe(100);
-  expect(screen.queryByText("Finding hidden by filters")).toBe(null);
+  expect(screen.queryByText("Finding hidden by filters") === null).toBe(true);
 });
 
 it("a target that exists but is filtered out is reported as hidden by filters", () => {
@@ -92,6 +92,6 @@ it("keeps keyboard focus on the pager when a button becomes disabled at an end",
 
 it("shows no pager for a single page", () => {
   renderWithApp(<FindingsTab findings={findings.slice(0, 40)} hosts={hosts} highlight={null} />);
-  expect(screen.queryByRole("navigation", { name: "Pagination" })).toBe(null);
+  expect(screen.queryByRole("navigation", { name: "Pagination" }) === null).toBe(true);
   expect(rows().length).toBe(40);
 });

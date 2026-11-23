@@ -2,7 +2,7 @@
 // Revision: 34fb271fc0cea26ae89b231dc8f4dbfbb3531376
 // Retrieved: 2026-11-23
 // License: Apache-2.0
-// Deviations: Original per-host detail query for M37 #579; answers stamped with their source epoch.
+// Deviations: Original per-host detail query for M37 #579; answers and failures stamped with their source epoch.
 
 import { CancelledError, useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -15,6 +15,12 @@ import { isHostAvailable } from "@/domain/hosts";
 import type { Host, HostDetails } from "@/domain/model";
 
 type Stamped = { details: HostDetails; epoch: number };
+
+/** A failed read carries the source epoch it ran under, so a failure overtaken by a change still gets a current read. */
+class StampedFailure extends Error {
+  readonly epoch: number;
+  constructor(epoch: number, cause: unknown) { super("host-details.read-failed", { cause }); this.epoch = epoch; }
+}
 
 /** Answers seen as current when they were rendered; such a value may stay visible while its follow-up read runs. */
 const proven = new WeakSet<Stamped>();
@@ -37,7 +43,14 @@ export function useHostDetails(host: Host): HostDetails | undefined {
         // Each read starts from the current state, so the refresh owner does not repeat it once more for changes before it.
         freshFrom(signal);
         const epoch = hostDetailsEpoch();
-        const details = await adapter.getHostDetails!(host.id, signal);
+        let details: HostDetails;
+        try { details = await adapter.getHostDetails!(host.id, signal); }
+        catch (error) {
+          if (signal.aborted) throw new CancelledError();
+          // A failure overtaken by a change says nothing about the current state: read again, like a superseded answer.
+          if (epoch !== hostDetailsEpoch()) continue;
+          throw new StampedFailure(epoch, error);
+        }
         if (epoch === hostDetailsEpoch()) return { details, epoch };
         if (signal.aborted) throw new CancelledError();
       }
@@ -48,7 +61,9 @@ export function useHostDetails(host: Host): HostDetails | undefined {
   const data = available && query.isSuccess ? query.data : undefined;
   const fresh = !!data && data.epoch === hostDetailsEpoch();
   if (data && fresh) proven.add(data);
-  const stale = !!data && !fresh;
+  // A failure settled after a change (between the read's last check and publication) is as superseded as an answer.
+  const failedBefore = available && query.error instanceof StampedFailure && query.error.epoch !== hostDetailsEpoch();
+  const stale = (!!data && !fresh) || failedBefore;
   const { isFetching, refetch } = query;
   useEffect(() => { if (stale && !isFetching) void refetch(); }, [stale, isFetching, refetch]);
   return data && (fresh || proven.has(data)) ? data.details : undefined;

@@ -211,3 +211,42 @@ it.each([["cold"], ["warm"]] as const)("a %s card never keeps an answer supersed
   await act(async () => { reads[last + 1]!.resolve({ os: "Current OS" }); });
   await waitFor(() => expect(value(view.container, "System")).toBe("Current OS"));
 });
+
+it.each([["cold", false], ["cold", true], ["warm", false], ["warm", true]] as const)("a %s card reads again when its failing read was overtaken by a change (late handoff: %s)", async (start, late) => {
+  setAppLocale("en-US");
+  const host = mapHost({ id: "atlas", name: "Example", color: null, registrationRevision: 1, apiUrl: "https://agent.example.com", enabled: true, status: "online", isEdge: false });
+  const listeners = new Set<(topics: string[]) => void>();
+  const reads: { promise: Promise<HostDetails>; resolve: (v: HostDetails) => void; reject: (e: unknown) => void }[] = [];
+  const demo = createDemoAdapter();
+  const adapter = { ...demo, subscribeChanges: (fn: (topics: string[]) => void) => { listeners.add(fn); return () => listeners.delete(fn); }, getHostDetails: () => { let resolve!: (v: HostDetails) => void, reject!: (e: unknown) => void; const promise = new Promise<HostDetails>((a, b) => { resolve = a; reject = b; }); reads.push({ promise, resolve, reject }); return promise; } };
+  const view = renderWithApp(<HostCard host={host} system={undefined} stacks={0} containers={0} allIds={["atlas"]} />, adapter as typeof demo);
+  await waitFor(() => expect(reads.length).toBe(1));
+  if (start === "warm") {
+    await act(async () => { reads[0]!.resolve({ os: "Warm OS" }); });
+    await waitFor(() => expect(value(view.container, "System")).toBe("Warm OS"));
+    act(() => listeners.forEach((fn) => fn(["hosts"])));
+    await waitFor(() => expect(reads.length).toBe(2));
+  }
+  const last = reads.length - 1;
+  const notify = () => listeners.forEach((fn) => fn(["hosts"]));
+  if (late) await act(async () => { reads[last]!.reject(new Error("HTTP 502")); queueMicrotask(notify); });
+  else { act(notify); await act(async () => { reads[last]!.reject(new Error("HTTP 502")); }); }
+  // Quiet afterwards: the change still gets a current read, and its answer is shown.
+  await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+  expect(reads.length > last + 1).toBe(true);
+  await act(async () => { reads.at(-1)!.resolve({ os: "Current OS" }); });
+  await waitFor(() => expect(value(view.container, "System")).toBe("Current OS"));
+});
+
+it("does not retry a failing read on its own when no change arrives", async () => {
+  setAppLocale("en-US");
+  const host = mapHost({ id: "atlas", name: "Example", color: null, registrationRevision: 1, apiUrl: "https://agent.example.com", enabled: true, status: "online", isEdge: false });
+  let reads = 0;
+  const demo = createDemoAdapter();
+  const adapter = { ...demo, getHostDetails: async () => { reads++; throw new Error("HTTP 502"); } };
+  const view = renderWithApp(<HostCard host={host} system={undefined} stacks={0} containers={0} allIds={["atlas"]} />, adapter as typeof demo);
+  await waitFor(() => expect(reads).toBe(1));
+  await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+  expect(reads).toBe(1);
+  expect(value(view.container, "System")).toBe("Not reported by the agent");
+});

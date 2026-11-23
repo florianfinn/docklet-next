@@ -107,7 +107,7 @@ it("leaves left-out consumers out of the file details and names how many are hid
   const view = renderWithApp(<FileAside {...props} />);
   expect(within(view.container).queryByRole("link", { name: "duplicati" }) !== null).toBe(true);
   act(() => preferencesStore.set((p) => ({ ...p, unraidHidden: ["atlas"] })));
-  await waitFor(() => expect(within(view.container).queryByRole("link", { name: "duplicati" })).toBe(null));
+  await waitFor(() => expect(within(view.container).queryByRole("link", { name: "duplicati" }) === null).toBe(true));
   expect(within(view.container).queryByRole("link", { name: "plain-app" }) !== null).toBe(true);
   expect(view.container.textContent?.includes("1 hidden")).toBe(true);
 });
@@ -117,7 +117,7 @@ it("offers no left-out container in the global search", async () => {
   const view = renderWithApp(<Command shouldFilter={false}><CommandList><AdminSearchGroups query="duplicati" select={() => {}} hostName={(id) => id} pages={[]} actions={[]} stacks={[]} stacksLoading={false} /></CommandList></Command>);
   await waitFor(() => expect(within(view.container).queryByText("duplicati") !== null).toBe(true));
   act(() => preferencesStore.set((p) => ({ ...p, unraidHidden: ["atlas"] })));
-  await waitFor(() => expect(within(view.container).queryByText("duplicati")).toBe(null));
+  await waitFor(() => expect(within(view.container).queryByText("duplicati") === null).toBe(true));
 });
 
 it("lists only shown consumers on the volume overview while the volume stays in use", async () => {
