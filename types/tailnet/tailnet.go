@@ -2,7 +2,7 @@
 // Revision: b4807f4912bc07f3e51abaf552a69f2223cabd27
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original embedded Tailscale route contract for Edge hosts (hub-side DTOs only).
+// Deviations: Original embedded Tailscale route contract for Edge hosts (hub-side DTOs only). M37 T1: absent provider statuses stay off the wire under encoding/json/v2.
 
 // Package tailnet holds the hub-side wire vocabulary of the optional Tailscale route.
 package tailnet
@@ -37,7 +37,7 @@ type Problem struct {
 	Code   string `json:"code" enum:"tailnet.credential-rejected,tailnet.coordination-unreachable,tailnet.not-connected,tailnet.key-mint-failed,tailnet.provider-unavailable,tailnet.mtls-unsupported,tailnet.mint-refused,tailnet.test-cleanup-failed,tailnet.test-running"`
 	Status int    `json:"status"`
 	// ProviderStatus is the HTTP status the Tailscale API answered with, when one was received.
-	ProviderStatus int `json:"providerStatus,omitempty"`
+	ProviderStatus int `json:"providerStatus,omitzero"`
 }
 
 func (p *Problem) Error() string             { return p.Code }
@@ -55,7 +55,7 @@ type Provisioning struct {
 	State string `json:"state" enum:"not-configured,not-applicable,checking,ok,rejected,unavailable"`
 	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.provider-unavailable"`
 	// ProviderStatus is the last rejecting HTTP status from the Tailscale API.
-	ProviderStatus int `json:"providerStatus,omitempty"`
+	ProviderStatus int `json:"providerStatus,omitzero"`
 }
 
 // Status is the redacted hub tailnet status; it never carries keys or peer endpoints.
@@ -120,5 +120,5 @@ type TestCheck struct {
 	ID             string `json:"id" enum:"credential,agent-key,cleanup,hub-joined,hub-tag,hub-address"`
 	State          string `json:"state" enum:"pass,fail,skipped,unknown"`
 	Code           string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.provider-unavailable,tailnet.not-connected,tailnet.mint-refused,tailnet.test-cleanup-failed,tailnet.test-running"`
-	ProviderStatus int    `json:"providerStatus,omitempty"`
+	ProviderStatus int    `json:"providerStatus,omitzero"`
 }
