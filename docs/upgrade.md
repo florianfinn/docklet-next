@@ -141,6 +141,10 @@ hosts; back up the hub first. New optional variables are
 contract 18 to 20 keep working and report a deploy without a restore point with
 the generic hint instead of the first-deploy reason.
 
+Upgrading to 1.5.0: there is no migration and no new environment variable. Update
+every agent to 1.5.0 afterwards. Agents on contract 18 to 21 keep working; their
+candidate scans show no counts until they are updated.
+
 ## Recover a failed in-app update
 
 The helper keeps a per-operation backup beside the interpolation env file:
