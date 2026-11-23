@@ -12,7 +12,7 @@ import type { TailnetSettings, TailnetStatus } from "@/domain/tailnet";
 export type Environment = components["schemas"]["EnvironmentEnvironment"];
 export const at = "2026-11-22T12:00:00Z";
 export function connectedStatus(): TailnetStatus {
-  return { enabled: true, generation: 1, connection: { state: "connected" }, provisioning: { state: "ok" }, mode: "oauth", hostCount: 1, onlineHosts: 1, hubAddress: "192.0.2.10", tailnetName: "example.com", routeAvailable: true };
+  return { enabled: true, generation: 1, credentialRevision: "example-boot:1", connection: { state: "connected" }, provisioning: { state: "ok" }, mode: "oauth", hostCount: 1, onlineHosts: 1, hubAddress: "192.0.2.10", tailnetName: "example.com", routeAvailable: true };
 }
 export const peerHost: Environment = { id: "example-agent", name: "Example agent", apiUrl: "edge://pending", enabled: true, isEdge: true, status: "online", color: null, registrationRevision: 1, networkRoute: "tailnet", tailnet: { state: "online", path: "relay", lastSeen: at, tagged: true, failingLink: "none" } };
 

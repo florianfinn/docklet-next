@@ -39,7 +39,7 @@ var adapterOperationIDs = []string{
 	"listVolumes", "planVolumePrune", "pruneImages", "pruneVolumes", "pullImage",
 	"readFile", "reconnectHost", "recreateContainer", "registerHost", "removeHost",
 	"removeImage", "removeNetwork", "renameEntry", "renameVolume", "restartAgent", "restartService",
-	"restoreRestorePoint", "runContainerCommand", "runScan", "scan-vulnerability-candidates", "get-vulnerability-candidates",
+	"restoreRestorePoint", "runContainerCommand", "runScan", "scan-vulnerability-candidates", "get-vulnerability-candidates", "get-vulnerability-candidate-run",
 	"runStackCommand", "redeployStack", "saveSettings", "saveStackFiles", "setAutoUpdate",
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
@@ -99,7 +99,7 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "access.admin-required"
 			}
-		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan", "ignore-vulnerability", "unignore-vulnerability", "scan-vulnerability-candidates", "get-vulnerability-candidates":
+		case "getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan", "ignore-vulnerability", "unignore-vulnerability", "scan-vulnerability-candidates", "get-vulnerability-candidates", "get-vulnerability-candidate-run":
 			ref := descriptors[i].ResourceRef
 			grant := authz.PermVulnsRead
 			if descriptors[i].OperationID == "ignore-vulnerability" || descriptors[i].OperationID == "unignore-vulnerability" {
