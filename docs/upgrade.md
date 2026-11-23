@@ -131,6 +131,15 @@ they keep the earlier peer stack confirmation. A stack started with an external
 env file becomes readable after the update; deploy it once from Docklet to record
 a new update baseline.
 
+Upgrading to 1.4.0: migration `007_tailnet_route` adds route and node columns to
+hosts; back up the hub first. New optional variables are
+`DOCKLET_BACKUP_VOLUME_NAME` (with the one-release alias
+`ARCANE_BACKUP_VOLUME_NAME`) and the `TAILSCALE_*` settings, all documented in
+`.env.example`; nothing changes until you enable the Tailscale route, which needs
+`EDGE_MTLS_MODE=disabled`. Update every agent to 1.4.0 afterwards. Agents on
+contract 18 to 20 keep working and report a deploy without a restore point with
+the generic hint instead of the first-deploy reason.
+
 ## Recover a failed in-app update
 
 The helper keeps a per-operation backup beside the interpolation env file:

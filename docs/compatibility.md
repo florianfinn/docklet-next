@@ -3,7 +3,7 @@ Source: docklet-next/issues/363
 Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 Retrieved: 2026-11-09
 License: Apache-2.0
-Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472).
+Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472); agent contract 21 (#568).
 -->
 
 # Compatibility
@@ -31,14 +31,14 @@ that external Compose version. Updates require the supported layout described in
 
 | Boundary | This release |
 | --- | --- |
-| Agent contract advertised by hub and agent (`AgentHubVersion`) | `20` |
+| Agent contract advertised by hub and agent (`AgentHubVersion`) | `21` |
 | Minimum accepted agent contract (`MinimumAgentVersion`) | `18` |
 | Edge protocol marker | `edge-protocol/1` |
 | Minimum Edge marker value | `1` |
 
 Contract numbers are wire-contract versions, not product SemVer. Agents with
 contracts older than 18 cannot become compatible hosts; the hub reports
-`update-required` and `agent.update-required`. Contracts 18, 19 and 20 must also have
+`update-required` and `agent.update-required`. Contracts 18 to 21 must also have
 their expected schema fingerprints. Health/version reads and the agent update
 recovery routes remain available with authentication. This is the first release
 compatibility boundary for both Direct and Edge agents.
@@ -54,6 +54,10 @@ Contract 20 adds the confirmation for runtime actions while another stack's
 Compose name cannot be determined. Agents on contract 18 or 19 keep all ordinary
 actions; such an action is refused there with "update the agent" and nothing
 runs. Use **Update agent** to bring the host to the hub's version.
+
+Contract 21 adds the reason code for a deploy without a restore point because
+Docklet has not deployed the stack before. Agents on contract 18 to 20 keep
+reporting the generic reason, and the hub shows the generic hint for them.
 
 Each Edge peer advertises its own protocol marker. A missing, malformed or
 duplicate marker counts as protocol 1. This release records the marker without
