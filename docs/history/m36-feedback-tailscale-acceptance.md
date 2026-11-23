@@ -14,8 +14,9 @@ M36 covers the feedback round of 2026-11-22 (#567–#573) and the CI runner fix
 #536. All steps were pushed to one feature branch as commits, without step PRs.
 CI ran on every pushed head.
 - The Claude main thread planned the milestone, wrote the design notes, built
-  S0, S2a, S3 and S4a, and made every correction after reviews and acceptance
-  runs.
+  S0, S2a and S3, integrated every step, and made every correction after reviews
+  and acceptance runs.
+- A separate Claude worker built S4a (Tailscale backend).
 - Codex workers built S1 (#567), S2b (#568, #570, #572) and S4b (Tailscale UI).
 - Every review came from the other provider than the implementation.
 
@@ -111,5 +112,5 @@ a real Tailscale account; the run removed every device it created.
 - The T3 link-3 method refuses a fresh tunnel. The interruption of an
   established session is backed only by the extra relay-cut evidence.
 - Agents older than contract 21 report a missing baseline with the generic hint.
-- Six tests failed once under load and passed in isolation; they are tracked in
-  #576.
+- Six test-stability follow-up items in #576 record tests that failed under
+  load and passed on isolated reruns.
