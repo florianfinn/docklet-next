@@ -409,6 +409,9 @@ export interface ScheduledJob {
   cadence: string;
 }
 
+/** Samples kept per host metric history; the dashboard chart always shows this many bars. */
+export const METRICS_HISTORY_SAMPLES = 60;
+
 export interface HostMetrics {
   diskUnavailable?: boolean;
   inventory?: InventoryObservation;

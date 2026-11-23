@@ -1,9 +1,9 @@
-import type { ContainerMetrics, Host, HostMetrics, MetricsSnapshot } from "@/domain/model";
+import { METRICS_HISTORY_SAMPLES, type ContainerMetrics, type Host, type HostMetrics, type MetricsSnapshot } from "@/domain/model";
 
 import { BASELINES } from "./fixtures/stacks";
 import { simulationStore } from "./simulation";
 
-const HISTORY = 40;
+const HISTORY = METRICS_HISTORY_SAMPLES;
 const TICK_MS = 2000;
 
 const HOST_BASE: Record<string, { cpu: number; mem: number; disk: number; growth: number }> = {

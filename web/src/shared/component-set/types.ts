@@ -10,6 +10,8 @@ export interface SparklineProps {
   color?: string;
   /** Fixed domain, e.g. [0, 100] for percentages; auto otherwise. */
   domain?: [number, number];
+  /** Bar charts only: fixed bar count; slots without a sample show the mean of the samples in a muted colour. */
+  slots?: number;
   animate?: boolean;
   label?: string;
   className?: string;

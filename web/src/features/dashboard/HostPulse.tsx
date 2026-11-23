@@ -4,7 +4,7 @@ import { useTranslations } from "use-intl";
 import { useMetrics } from "@/data/live";
 import { formatGb } from "@/domain/format";
 import { hostTone } from "@/domain/hosts";
-import type { Host } from "@/domain/model";
+import { METRICS_HISTORY_SAMPLES, type Host } from "@/domain/model";
 import { Sparkline } from "@/shared/component-set/sparkline";
 import { Meter } from "@/shared/components/meter";
 import { ToneBadge, ToneDot } from "@/shared/components/tone";
@@ -50,7 +50,7 @@ export function HostPulse({ host, stacks, containers, className }: { host: Host;
             {t("hostStacks", { count: stacks })} · {t("hostContainers", { count: containers })}
           </div>
         </div>
-        {m && <Sparkline data={smoothHistory(m.cpuHistory)} type="bar" color={offline ? "var(--muted-foreground)" : host.color} domain={[0, 100]} className="h-auto min-h-9 w-[45%] max-w-64 min-w-28 self-stretch" label={t("cpuHistory", { name: host.name })} />}
+        {m && <Sparkline data={smoothHistory(m.cpuHistory)} type="bar" slots={METRICS_HISTORY_SAMPLES} color={offline ? "var(--muted-foreground)" : host.color} domain={[0, 100]} className="h-auto min-h-9 w-[45%] max-w-64 min-w-28 self-stretch" label={t("cpuHistory", { name: host.name })} />}
       </div>
       {pending ? (
         <p className="flex items-center gap-1.5 text-xs text-info">

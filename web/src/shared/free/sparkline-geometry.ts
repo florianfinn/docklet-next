@@ -25,3 +25,14 @@ export function areaPath(points: SparkPoint[]): string {
   if (!first || !last) return "";
   return `${linePath(points)} L${last.x.toFixed(2)} 100 L${first.x.toFixed(2)} 100 Z`;
 }
+
+export interface SparkBar { value: number; placeholder: boolean }
+
+/** Newest samples on the right; with `slots`, the left gap is filled with the mean of the real samples. */
+export function barSlots(data: readonly number[], slots?: number): SparkBar[] {
+  const real = slots ? data.slice(-slots) : data;
+  if (!real.length) return [];
+  const mean = real.reduce((sum, v) => sum + v, 0) / real.length;
+  const gap = slots ? slots - real.length : 0;
+  return [...Array.from({ length: gap }, () => ({ value: mean, placeholder: true })), ...real.map((value) => ({ value, placeholder: false }))];
+}

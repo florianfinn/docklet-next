@@ -2,7 +2,7 @@
 // Revision: 94ff3b632c90da82a96c28db8eefc0184a6adfd7
 // Retrieved: 2026-11-19
 // License: Apache-2.0
-// Deviations: Original statically loaded, modal hub update view and bounded visual estimate.
+// Deviations: Original statically loaded, modal hub update view and bounded visual estimate. M37 #580: wordmark loader while running.
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "use-intl";
@@ -11,6 +11,7 @@ import { useAuthMode } from "@/data/queries";
 import { useAdapter } from "@/data/use-adapter";
 import { selfUpdateCodeKey } from "@/domain/self-update";
 import { openActivity } from "@/features/activity/activity-store";
+import { BrandLoader } from "@/shared/brand/BrandLoader";
 import { BrandLogo } from "@/shared/brand/BrandLogo";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/shared/ui/dialog";
@@ -61,7 +62,7 @@ export function HubUpdateOverlay({ reload = reloadDocument }: { reload?: () => v
       const target = previousFocus.current?.isConnected && previousFocus.current !== document.body ? previousFocus.current : document.querySelector<HTMLElement>("#hub-update button:not(:disabled)") ?? document.querySelector<HTMLElement>("#hub-update h4");
       target?.focus();
     }} onEscapeKeyDown={event => event.preventDefault()} onPointerDownOutside={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()}>
-      <div className={progressing ? "motion-safe:animate-pulse motion-reduce:animate-none" : undefined}><BrandLogo size={48} motion={false} /></div>
+      {progressing ? <BrandLoader size={48} /> : <BrandLogo size={48} motion={false} />}
       <DialogTitle className="max-w-xl text-2xl">{state.phase === "starting" ? t("preparing") : t(state.phase === "running" ? "running" : state.phase, { version: state.target })}</DialogTitle>
       <DialogDescription className="max-w-xl">{state.phase === "signin" ? t(mode.data === "proxy" ? "signinProxy" : "signinHelp", { version: state.versionSeen ?? t("versionUnknown") }) : state.phase === "unknown" ? t("unknownHelp") : progressing ? t("estimate") : state.phase === "done" ? t("doneHelp") : t("failedHelp")}</DialogDescription>
       {progressing && <>

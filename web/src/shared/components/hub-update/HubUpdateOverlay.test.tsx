@@ -2,7 +2,7 @@
 // Revision: 94ff3b632c90da82a96c28db8eefc0184a6adfd7
 // Retrieved: 2026-11-19
 // License: Apache-2.0
-// Deviations: Original modal, threshold, countdown and dismissal interaction regression coverage.
+// Deviations: Original modal, threshold, countdown and dismissal interaction regression coverage. M37 #580: loader per phase.
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -39,6 +39,7 @@ it("B6 modal above a gate and toast traps interaction and cannot escape-dismiss"
   expect(document.querySelector('[data-slot="gate-screen"]')?.closest('[aria-hidden="true"]') !== null).toBe(true);
   expect(screen.queryByRole("button", { name: "Background retry" }) === null).toBe(true);
   expect(dialog.querySelector('[data-slot="brand-logo"] svg') !== null).toBe(true);
+  expect(dialog.querySelector('[data-slot="brand-loader"]') !== null).toBe(true);
   fireEvent.keyDown(dialog, { key: "Escape" }); expect(f.session.get().dismissed).toBe(false); expect(screen.queryByRole("dialog") !== null).toBe(true);
 });
 it("B9 estimate threshold, close threshold and cap stay truthful", async () => {
@@ -53,7 +54,9 @@ it("B9 estimate threshold, close threshold and cap stay truthful", async () => {
 });
 it("B2 done reloads exactly once after ten seconds or a button; clearing cancels it", async () => {
   const f = mount({ phase: "done", target: "1.0.1" });
-  await f.tick(9999); expect(f.reload).not.toHaveBeenCalled(); await f.tick(1); expect(f.reload).toHaveBeenCalledTimes(1);
+  await f.tick(9999); expect(f.reload).not.toHaveBeenCalled();
+  expect(screen.getByRole("dialog").querySelector('[data-slot="brand-logo"]') !== null && screen.getByRole("dialog").querySelector('[data-slot="brand-loader"]') === null).toBe(true);
+  await f.tick(1); expect(f.reload).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole("button", { name: "Open Docklet" })); await f.tick(10_000); expect(f.reload).toHaveBeenCalledTimes(1);
   f.unmount();
   const next = mount({ phase: "done", target: "1.0.2" }); fireEvent.click(screen.getByRole("button", { name: "Open Docklet" })); await next.tick(10_000); expect(next.reload).toHaveBeenCalledTimes(1);

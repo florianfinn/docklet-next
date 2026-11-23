@@ -3,17 +3,19 @@ import { useId } from "react";
 import type { SparklineProps } from "@/shared/component-set/types";
 import { cn } from "@/shared/lib/utils";
 
-import { areaPath, linePath, sparkPoints } from "./sparkline-geometry";
+import { areaPath, barSlots, linePath, sparkPoints } from "./sparkline-geometry";
 
 /**
  * Free sparkline: plain SVG with straight segments, soft fill and a marker on
  * the latest value. The marker is HTML so the stretched viewBox cannot distort it.
  */
-export function Sparkline({ data, type = "line", color = "var(--chart-2)", domain, animate = false, label, className }: SparklineProps) {
+export function Sparkline({ data, type = "line", color = "var(--chart-2)", domain, slots, animate = false, label, className }: SparklineProps) {
   const gradientId = `spark-${useId().replace(/:/g, "")}`;
   const points = sparkPoints(data, domain);
   const last = points.at(-1);
-  const barWidth = data.length ? 100 / data.length : 0;
+  const bars = type === "bar" ? barSlots(data, slots) : [];
+  const barWidth = bars.length ? 100 / bars.length : 0;
+  const barPoints = sparkPoints(bars.map((b) => b.value), domain ?? (bars.length ? [Math.min(...data), Math.max(...data)] : undefined));
 
   return (
     <span role="img" aria-label={label} data-slot="sparkline" className={cn("relative block h-10 w-24", className)}>
@@ -26,8 +28,8 @@ export function Sparkline({ data, type = "line", color = "var(--chart-2)", domai
         </defs>
         <line x1="0" x2="100" y1="100" y2="100" vectorEffect="non-scaling-stroke" className="stroke-border" strokeWidth={1} />
         {type === "bar" ? (
-          points.map((p, i) => (
-            <rect key={i} x={i * barWidth + barWidth * 0.15} width={barWidth * 0.7} y={p.y} height={100 - p.y} rx={1} style={{ fill: color }} opacity={i === points.length - 1 ? 1 : 0.55} />
+          barPoints.map((p, i) => (
+            <rect key={i} data-placeholder={bars[i]?.placeholder || undefined} x={i * barWidth + barWidth * 0.15} width={barWidth * 0.7} y={p.y} height={100 - p.y} rx={1} style={{ fill: bars[i]?.placeholder ? "var(--muted-foreground)" : color }} opacity={bars[i]?.placeholder ? 0.3 : i === barPoints.length - 1 ? 1 : 0.55} />
           ))
         ) : (
           <>

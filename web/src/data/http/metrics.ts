@@ -2,10 +2,10 @@
 // Revision: b15b60e94f1b0bd361d32a03477fdf82647ad108
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Existing per-host stats streams with retained observations. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. Hub treated as a system workload like the agent.
+// Deviations: Existing per-host stats streams with retained observations. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. Hub treated as a system workload like the agent. M37 #582: shared history cap.
 
 import { systemRole } from "@/domain/system";
-import type { Host, HostMetrics, InventoryObservation, MetricsSnapshot } from "@/domain/model";
+import { METRICS_HISTORY_SAMPLES, type Host, type HostMetrics, type InventoryObservation, type MetricsSnapshot } from "@/domain/model";
 import { inventoryId, mapContainer } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 
@@ -30,7 +30,7 @@ export function mapHostMetrics(value: unknown, hostId: string, previous?: HostMe
   if (diskUsed > diskTotal) throw new Error("metrics.invalid-sample");
   return { hostId, cpu, mem, disk: diskTotal ? diskUsed / diskTotal * 100 : 0, diskUnavailable: !diskTotal,
     cpuCores: cores, memTotalGb: total / 1024 ** 3, diskTotalGb: diskTotal / 1024 ** 3,
-    cpuHistory: [...previous?.cpuHistory ?? [], cpu].slice(-60), memHistory: [...previous?.memHistory ?? [], mem].slice(-60), inventory: { stale: false, observedAt: new Date().toISOString() } };
+    cpuHistory: [...previous?.cpuHistory ?? [], cpu].slice(-METRICS_HISTORY_SAMPLES), memHistory: [...previous?.memHistory ?? [], mem].slice(-METRICS_HISTORY_SAMPLES), inventory: { stale: false, observedAt: new Date().toISOString() } };
 }
 
 /** How long an online host's stats socket may stay silent before its metrics count as unavailable. */
