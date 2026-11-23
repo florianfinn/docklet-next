@@ -15,8 +15,14 @@ const AgentHubV19Fingerprint = "cd658728da4e2de1b4d1c625544b9ef2e48bad0bfba685f7
 // AgentHubV20Fingerprint preserves the 1.3.0 agent surface; v21 only adds the deploy.point-no-baseline reason.
 const AgentHubV20Fingerprint = "51489456b62b53b9128a6c61a7d5285c341631dcc5fbedb44c87da8d5e8f54fd"
 
+// AgentHubV21Fingerprint is the 1.4.0 surface; v22 only adds the candidate run read, which v21 agents answer with 404.
+const AgentHubV21Fingerprint = "081a36566f1e1c401e071059756a35b8843e74d52c980a5172e455405f3f793d"
+
 // AgentCompatible rejects older contracts and a changed schema at the same version.
 func AgentCompatible(version int, fingerprint string) bool {
+	if version == 21 {
+		return fingerprint == AgentHubV21Fingerprint
+	}
 	if version == 20 {
 		return fingerprint == AgentHubV20Fingerprint
 	}
@@ -47,5 +53,5 @@ func AgentRecoveryRoute(method, path string) bool {
 func ModuleCompatible(version int, fingerprint string) bool {
 	// Proxy module requests changed in contract 20 (M28: resolvers, certificate check,
 	// operation kind), so v19 agents get update-required for every module request.
-	return (version == 20 && fingerprint == AgentHubV20Fingerprint) || (version >= 21 && fingerprint == AgentHubFingerprint)
+	return (version == 20 && fingerprint == AgentHubV20Fingerprint) || (version == 21 && fingerprint == AgentHubV21Fingerprint) || (version >= 22 && fingerprint == AgentHubFingerprint)
 }

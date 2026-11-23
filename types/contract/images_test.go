@@ -21,7 +21,7 @@ import (
 )
 
 func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
-	body, err := os.ReadFile("testdata/agent-hub-v21.json")
+	body, err := os.ReadFile("testdata/agent-hub-v22.json")
 	require.NoError(t, err)
 	sum := sha256.Sum256(body)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(sum[:]))
@@ -31,7 +31,7 @@ func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
 		ImageSafety struct{ RegistryTestFields, RegistryPublicFields, UpdateInfoFields, PruneFields, ProtectionFields, ErrorCodes, InactiveCapabilities, Capabilities, UpdateStates []string }
 	}
 	require.NoError(t, json.Unmarshal(body, &fixture))
-	require.Equal(t, 21, AgentHubVersion)
+	require.Equal(t, 22, AgentHubVersion)
 	require.Equal(t, 18, MinimumAgentVersion)
 	require.Equal(t, AgentHubVersion, fixture.Version)
 	require.Equal(t, MinimumAgentVersion, fixture.Minimum)

@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["POST /tailnet/test", "test-tailnet"],
+  ["GET /environments/{id}/vulnerabilities/candidates/runs/{activityId}", "get-vulnerability-candidate-run"],
   // Hub-only release list refresh for the explicit update recheck.
   ["POST /system/releases/refresh", "refresh-releases"],
   // M29 first-run claim and stored sign-in policy (#518).

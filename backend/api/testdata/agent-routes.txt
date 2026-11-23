@@ -102,6 +102,7 @@ GET /environments/{id}/volumes/{volumeName}/workspace/file/download
 GET /environments/{id}/vulnerabilities/advisories/{key}
 GET /environments/{id}/vulnerabilities/all
 GET /environments/{id}/vulnerabilities/candidates
+GET /environments/{id}/vulnerabilities/candidates/runs/{activityId}
 GET /environments/{id}/vulnerabilities/export
 GET /environments/{id}/vulnerabilities/ignored
 GET /environments/{id}/vulnerabilities/image-options
