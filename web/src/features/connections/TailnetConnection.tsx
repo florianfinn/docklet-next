@@ -2,7 +2,7 @@
 // Revision: a5836218e8226cbe52e865f29f381b0209c69fa3
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original Tailscale UI and generation-fenced stream consumers.
+// Deviations: Original Tailscale UI and generation-fenced stream consumers. M37 #586: setup steps (policy first, credential, save, test).
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Network } from "lucide-react";
@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { ChoiceCards, TextField } from "@/shared/components/form-field";
 import { ToneBadge } from "@/shared/components/tone";
 import { Button } from "@/shared/ui/button";
+import { CredentialStep, PolicyStep, Step, TestStep } from "./TailnetSetupSteps";
 
 /** One write-only credential form shared by first-run setup and Connections. */
 export function TailnetConnection({ setup = false, onContinue, onSkip }: { setup?: boolean; onContinue?: () => void; onSkip?: () => void }) {
@@ -50,6 +51,7 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
   const connected = status.connection.state === "connected";
   const expanded = setup || open || rejected || !connected;
   const sameMode = mode === settings.mode;
+  const stored = sameMode && settings.secretConfigured;
   const ready = mode === "oauth" ? !!clientId.trim() && (!!secret || sameMode && settings.secretConfigured) : !!secret || sameMode && settings.secretConfigured;
   const response = status.connection.state === "control-unreachable" || status.connection.state === "joining" && status.connection.code === "tailnet.coordination-unreachable" ? "unreachable" : status.connection.state === "connected" && !status.routeAvailable ? "connectedNoRoute" : status.connection.state;
   async function save(enabled: boolean) {
@@ -88,14 +90,15 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
         { value: "oauth", title: t("oauth"), description: t("oauthHint"), badge: <ToneBadge tone="accent">{t("recommended")}</ToneBadge> },
         { value: "manual", title: t("manual"), description: t("manualHint") },
       ]} />
-      <section className="min-w-0"><h4 className="text-sm font-semibold">{t(mode === "oauth" ? "createOAuth" : "createManual")}</h4><p className="mt-1 text-sm text-muted-foreground">{t(mode === "oauth" ? "createOAuthHint" : "createManualHint")}</p>{mode === "oauth" && <Button asChild variant="outline" className="mt-3 min-h-10"><a href="https://login.tailscale.com/admin/settings/oauth" target="_blank" rel="noreferrer">{t("console")}</a></Button>}</section>
-      <section className="min-w-0"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-sm font-semibold">{t("policy")}</h4><Button variant="outline" className="min-h-10" onClick={() => void navigator.clipboard.writeText(settings.policySnippet).then(() => setFeedback(t("copied")), () => setFeedback(t("copyFailed")))}>{t("copy")}</Button></div><p className="my-2 text-xs text-muted-foreground">{t("policyHint")}</p><pre className="max-w-full rounded-lg bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap break-all">{settings.policySnippet}</pre></section>
-      <section className="flex min-w-0 flex-col gap-3"><h4 className="text-sm font-semibold">{t("paste")}</h4>{mode === "oauth" && <TextField id="tailnet-client-id" label={t("clientId")} value={clientId} onChange={setClientId} />}
-        <TextField id="tailnet-secret" type="password" autoComplete="new-password" label={t(mode === "oauth" ? "credentialLabel" : "authKey")} value={secret} onChange={setSecret} description={t(sameMode && settings.secretConfigured ? "stored" : "credentialHint")} />
-      </section>
+      <PolicyStep settings={settings} done={connected && !rejected ? "setUp" : undefined} onCopied={setFeedback} />
+      <CredentialStep settings={settings} mode={mode} done={stored && !rejected ? "setUp" : undefined} onCopied={setFeedback} />
+      <Step title={t("paste")} done={stored && status.enabled ? "setUp" : undefined}>{mode === "oauth" && <TextField id="tailnet-client-id" label={t("clientId")} value={clientId} onChange={setClientId} />}
+        <TextField id="tailnet-secret" type="password" autoComplete="new-password" label={t(mode === "oauth" ? "credentialLabel" : "authKey")} value={secret} onChange={setSecret} description={t(stored ? "stored" : "credentialHint")} />
+      </Step>
       <Button className="min-h-10 self-start" disabled={!ready || busy || mtls || settings.customControl && mode === "oauth"} onClick={() => void save(true)}>{t(setup || !status.enabled ? "connect" : "save")}</Button>
     </fieldset>}
     {feedback && <p role="status" className="px-4 pb-4 text-sm">{feedback}</p>}
+    {status.enabled && <div className="border-t p-4"><TestStep api={api} saved={!!settings.secretConfigured} /></div>}
     <footer className="flex flex-wrap items-center gap-2 border-t p-4">
       {onSkip && !status.enabled && <Button variant="outline" className="min-h-10" onClick={onSkip}>{t("skip")}</Button>}
       {setup && status.enabled && <Button className="min-h-10" onClick={onContinue}>{t("continue")}</Button>}

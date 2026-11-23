@@ -2,7 +2,7 @@
 // Revision: a5836218e8226cbe52e865f29f381b0209c69fa3
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original Tailscale UI and generation-fenced stream consumers.
+// Deviations: Original Tailscale UI and generation-fenced stream consumers. M37 #586: policy parts for the form alternative.
 
 import type { components } from "@/api/generated/schema";
 import type { Host } from "./model";
@@ -52,4 +52,16 @@ export function tailnetChain(host: Host, status?: TailnetStatus): { link: ChainL
   const first = status ? (status.connection.state !== "connected" ? "hub" : host.tailnet?.state === "offline" ? "peer" : tailnetHostDown(host) ? "tunnel" : "none") : reported;
   const failed = links.indexOf(first as ChainLink);
   return links.map((link, index) => ({ link, state: first === undefined ? "unknown" : failed === -1 || index < failed ? "ok" : index === failed ? "failed" : "unknown" }));
+}
+
+/** The pasted policy names the tags, owner and grant; the form alternative shows the same values field by field. */
+export function policyParts(snippet: string): { tags: string[]; owner: string; src: string; dst: string; port: string } | undefined {
+  try {
+    const policy = JSON.parse(snippet) as { tagOwners?: Record<string, string[]>; grants?: { src?: string[]; dst?: string[]; ip?: string[] }[] };
+    const tags = Object.keys(policy.tagOwners ?? {});
+    const grant = policy.grants?.[0];
+    const owner = tags.length ? policy.tagOwners![tags[0]!]?.[0] : undefined;
+    if (!tags.length || !owner || !grant?.src?.[0] || !grant.dst?.[0] || !grant.ip?.[0]) return undefined;
+    return { tags, owner, src: grant.src[0], dst: grant.dst[0], port: grant.ip[0] };
+  } catch { return undefined; }
 }

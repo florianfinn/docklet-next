@@ -73,7 +73,8 @@ it("copies the exact producer policy and keeps manual keys distinct", async () =
   await user.click(await screen.findByRole("button", { name: "Copy policy" }));
   expect(copied).toHaveBeenCalledWith(f.state.settings.policySnippet);
   await user.click(screen.getByRole("radio", { name: /Manual keys/ }));
-  expect(screen.queryByRole("link", { name: "Open admin console" }) === null).toBe(true);
+  // The manual path links to the auth key page instead of the OAuth credentials.
+  expect(screen.getByRole("link", { name: "Open admin console" }).getAttribute("href")).toBe("https://login.tailscale.com/admin/settings/keys");
   await user.type(screen.getByLabelText("Hub auth key"), "tskey-auth-example-hub");
   await user.click(screen.getByRole("button", { name: "Connect" }));
   await waitFor(() => expect(f.writes[0]?.body).toEqual({ enabled: true, mode: "manual", authKey: "tskey-auth-example-hub" }));

@@ -79,6 +79,7 @@ export const uiLiteralExceptions = [
   {"file": "src/features/volumes/VolumePage.tsx", "lineSha256": "0043ab0b4b7536e1df540444802e9963d54277c737c2ba822cae09c127d16275", "count": 1, "reason": "Technical notation: ro read-only mount flag."},
   {"file": "src/features/volumes/files/FileAside.tsx", "lineSha256": "462e090aeacad854164822065bacaf357916ca66369e669f5323b1bccbed4310", "count": 1, "reason": "Technical notation: ro read-only mount flag."},
   {"file": "src/shared/brand/BrandLogo.tsx", "lineSha256": "797ba4d90e3480be864e3981f5e0c7629e0e353559bfbe389a51e06452bef611", "count": 1, "reason": "Technical notation: Docklet Next product name."},
+  {"file": "src/shared/brand/BrandLoader.tsx", "lineSha256": "7a679a3dfdb86a2b4f0f7da7b8d4f9f05f4e49b61c0e1b2bb7a3df95c2ca5677", "count": 1, "reason": "Technical notation: Docklet Next product name."},
   {"file": "src/shared/free/bulk-action-bar.tsx", "lineSha256": "fcf449ec4f3b5cff99a5dc9905bbeeb05b8ec42f85bba4513ba71f903b2a1ff9", "count": 1, "reason": "Technical notation: Esc keyboard key."},
   {"file": "src/shared/lib/tar.ts", "lineSha256": "bea7314e73ba8ce62dfaee0d787aa5c4303e82ae2818bb10c8b26ca77f4d259b", "count": 1, "reason": "Technical notation: tar encoder invariant diagnostic, never interface copy."},
   {"file": "src/shared/ui/chart.tsx", "lineSha256": "f7b9ddd4f9391d1cb88524e43d05af0baaf43fe3e7880b6727c9c55e73c9b010", "count": 1, "reason": "Technical notation: chart-provider invariant diagnostic, never interface copy."},

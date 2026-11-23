@@ -31,3 +31,13 @@ export async function tailnetState(field: "connection" | "provisioning" | "peer"
   await screen.findByText(field === "connection" ? de("tailnetContract.connection.control-unreachable") : field === "provisioning" ? de("tailnetContract.provisioning.rejected") : de("tailnetContract.peer.unknown"));
   return view.container.textContent ?? "";
 }
+
+/** Runs the setup test through the real HTTP adapter and returns the rendered check rows (a failed agent key with its code). */
+export async function tailnetTest() {
+  const f = tailnetFixture(connectedStatus());
+  f.state.test = () => new Response(JSON.stringify({ success: true, data: { credentialRevision: f.state.status.credentialRevision, stale: false, checks: [{ id: "credential", state: "pass" }, { id: "agent-key", state: "fail", code: "tailnet.mint-refused", providerStatus: 403 }, { id: "cleanup", state: "skipped" }, { id: "hub-joined", state: "pass" }, { id: "hub-tag", state: "pass" }, { id: "hub-address", state: "pass" }] } }), { headers: { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") } });
+  renderWithApp(<TailnetConnection />, f.adapter);
+  (await screen.findByRole("button", { name: de("connections.steps.testRun") })).click();
+  const list = await screen.findByRole("list", { name: de("connections.steps.testTitle") });
+  return list.textContent ?? "";
+}

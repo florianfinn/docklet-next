@@ -28,8 +28,19 @@ class Source {
   }
 }
 
+// Exact text of backend tailnet.PolicySnippet() (HubTag, AgentTag, IngressPort 3552).
+export const PRODUCER_POLICY = `{
+  "tagOwners": {
+    "tag:docklet-hub": ["autogroup:admin"],
+    "tag:docklet-agent": ["autogroup:admin"]
+  },
+  "grants": [
+    {"src": ["tag:docklet-agent"], "dst": ["tag:docklet-hub"], "ip": ["tcp:3552"]}
+  ]
+}`;
+
 export function tailnetFixture(initial: TailnetStatus = connectedStatus(), admin = true) {
-  const state = { status: initial, rows: [peerHost], settings: { enabled: initial.enabled, mode: initial.mode, clientId: "example-client", secretConfigured: true, hostname: "docklet-hub", customControl: false, policySnippet: '{"grants":[{"src":["tag:docklet-agent"],"dst":["tag:docklet-hub"],"ip":["tcp:3552"]}]}' } as TailnetSettings, admin };
+  const state = { status: initial, rows: [peerHost], settings: { enabled: initial.enabled, mode: initial.mode, clientId: "example-client", secretConfigured: true, hostname: "docklet-hub", customControl: false, policySnippet: PRODUCER_POLICY } as TailnetSettings, admin, test: undefined as undefined | (() => Response | Promise<Response>) };
   const sources: Source[] = [];
   const writes: { path: string; body: Record<string, unknown> }[] = [];
   const requests: string[] = [];
@@ -52,6 +63,7 @@ export function tailnetFixture(initial: TailnetStatus = connectedStatus(), admin
         if (!kept) state.status = { ...state.status, generation: state.status.generation + 1, enabled: body.enabled === true, connection: { state: body.enabled ? "joining" : "off" }, routeAvailable: false };
         return json(state.settings);
       }
+      if (path === "/api/tailnet/test") return state.test ? state.test() : json({ credentialRevision: state.status.credentialRevision, stale: false, checks: [{ id: "credential", state: "pass" }, { id: "agent-key", state: "pass" }, { id: "cleanup", state: "pass" }, { id: "hub-joined", state: "pass" }, { id: "hub-tag", state: "pass" }, { id: "hub-address", state: "pass" }] });
       if (path === "/api/tailnet/reset") { state.status = { ...state.status, generation: state.status.generation + 1, enabled: false, connection: { state: "off" }, routeAvailable: false }; return json(state.status); }
       if (path === "/api/environments") {
         const row = { ...peerHost, status: "pending", apiKey: "example", tailnetAuthKey: body.tailnetAuthKey ?? "tskey-auth-example-once", tailnetManagerUrl: "http://192.0.2.10:3552" };

@@ -6,7 +6,7 @@
 
 import {PROXY_STATE_KEYS,PROXY_REASON_KEYS} from "./wire-catalogue-proxy";
 import { MODULE_CODE_KEYS } from "./wire-catalogue-modules";
-import { TAILNET_CODE_KEYS, TAILNET_CONNECTION_KEYS, TAILNET_PROVISIONING_KEYS, TAILNET_PEER_KEYS } from "./wire-catalogue-tailnet";
+import { TAILNET_CODE_KEYS, TAILNET_CONNECTION_KEYS, TAILNET_PROVISIONING_KEYS, TAILNET_PEER_KEYS, TAILNET_TEST_STATE_KEYS } from "./wire-catalogue-tailnet";
 import { RECOVERY_OUTCOME_KEYS } from "./wire-catalogue-update";
 import { ADVISORY_USAGE_CODE_KEYS, REQUEST_CODE_KEYS, IMAGE_ERROR_KEYS, CONTAINER_CODE_KEYS, HOST_CODE_KEYS, ACCESS_CODE_KEYS, NETWORK_CODE_KEYS, WIDGET_CODE_KEYS } from "./wire-catalogue-errors";
 import { BACKUP_CODE_KEYS, BACKUP_REASON_KEYS, VOLUME_COMMAND_KEYS } from "./wire-catalogue-backup";
@@ -20,7 +20,8 @@ export const GUARDED_WIRE_ENUMS = [
 {name:"PROXY_STATE_KEYS",keys:PROXY_STATE_KEYS,properties:["ProxyOperation.state"]},
 {name:"PROXY_REASON_KEYS",keys:PROXY_REASON_KEYS,properties:["ProxyProblem.code"]},
 
- { name: "TAILNET_CODE_KEYS", keys: TAILNET_CODE_KEYS, properties: ["TailnetProblem.code", "TailnetConnection.code", "TailnetProvisioning.code"] },
+ { name: "TAILNET_CODE_KEYS", keys: TAILNET_CODE_KEYS, properties: ["TailnetProblem.code", "TailnetConnection.code", "TailnetProvisioning.code", "TailnetTestCheck.code"] },
+  { name: "TAILNET_TEST_STATE_KEYS", keys: TAILNET_TEST_STATE_KEYS, properties: ["TailnetTestCheck.state"] },
   { name: "TAILNET_CONNECTION_KEYS", keys: TAILNET_CONNECTION_KEYS, properties: ["TailnetConnection.state"] },
   { name: "TAILNET_PROVISIONING_KEYS", keys: TAILNET_PROVISIONING_KEYS, properties: ["TailnetProvisioning.state"] },
   { name: "TAILNET_PEER_KEYS", keys: TAILNET_PEER_KEYS, properties: ["TailnetHostPeer.state"] },
@@ -62,7 +63,6 @@ export const GUARDED_WIRE_ENUMS = [
 ] as const;
 
 export const EXEMPT_WIRE_ENUMS = [
- ...["TailnetTestCheck.state", "TailnetTestCheck.code"].map((property) => ({ property, reason: "S1 setup-test contract foundation has no rendered check consumer; S6 owns the setup stepper and its render proofs. The HTTP decoder validates every state and code." })),
  { property: "ImageRuntimeIdentityPeer.reason", reason: "Validated by runtime-blocker.ts and rendered through common.runtimePeers reason texts by the confirmation dialog and audit mapper; runtime-peer-confirmation.test.tsx exercises both locales." },
  { property: "ProjectDetails.definitionReason", reason: "Rendered by use-stack-definition-hint.ts through common.runtimePeers reason texts; runtime identity marker and repair proofs retain the existing coverage limit." },
  ...["ProxyOperation.phase", "ProxyInstance.kind", "ProxyDiscovery.kind", "ProxyCreateInstanceRequest.kind", "ProxySource.kind", "ProxyReference.kind"].map((property) => ({ property, reason: "S2 contract foundation has no production proxy page; S5 owns these rendered consumers and their render proofs. Total typed bilingual maps are frozen in wire-catalogue-proxy.ts. Outcome state/reason consumers already have guarded render proofs." })),
