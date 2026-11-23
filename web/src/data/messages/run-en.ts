@@ -33,6 +33,7 @@ export const enRunMessages = {
     "notificationWake": "Schedule notification delivery",
     "imagePolling": "Check image versions",
     "updateWindow": "Scheduled update",
+    "containerShell": "Container shell",
     "systemBackup": "System backup",
     "volumeBackup": "Volume backup",
     "connectionCheck": "Connection check",

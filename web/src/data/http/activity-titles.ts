@@ -67,6 +67,7 @@ export const JOB_TITLES: Readonly<Record<string, string>> = {
 };
 
 export const JOB_PREFIX_TITLES: Readonly<Record<string, string>> = {
+  "environment-health:": "hostAvailability",
   "update-window:": "updateWindow",
   "system-backup:": "systemBackup",
   "volume-backup:": "volumeBackup",
@@ -103,6 +104,10 @@ export const ACTION_TITLES: Readonly<Record<string, string>> = {
   "decline": "requestDecline",
 };
 
+/** Resource actions without an action discriminator: a structured operation or the resource kind names them. */
+export const OPERATION_TITLES: Readonly<Record<string, string>> = { "container.shell": "containerShell" };
+export const RESOURCE_TITLES: Readonly<Record<string, string>> = { "system_backup": "systemBackup" };
+
 const title = (key: string, params: MessageCode["params"] = {}): MessageCode => ({ code: key.startsWith("activity.") ? key : `runMessages.activityTitles.${key}`, params });
 const readable = (name: string) => name.replace(/[_.:-]+/g, " ").trim();
 const fallback = (name: string) => title("fallback", { name: readable(name) });
@@ -114,7 +119,10 @@ export function activityTitle(run: Activity): MessageCode {
   }
   if (run.type === "resource_action") {
     const action = typeof run.metadata?.action === "string" ? run.metadata.action : "";
-    return action ? ACTION_TITLES[action] ? title(ACTION_TITLES[action]) : fallback(action) : title("action");
+    if (action) return ACTION_TITLES[action] ? title(ACTION_TITLES[action]) : fallback(action);
+    const operation = typeof run.metadata?.operation === "string" ? run.metadata.operation : "";
+    const key = OPERATION_TITLES[operation] ?? (run.resourceType ? RESOURCE_TITLES[run.resourceType] : undefined);
+    return key ? title(key) : title("action");
   }
   if (run.type === "job_run") {
     const job = typeof run.metadata?.jobId === "string" ? run.metadata.jobId : run.resourceId ?? "";

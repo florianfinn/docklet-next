@@ -2,7 +2,7 @@
 // Revision: cf5aa27a8ca449d95c66dcd253f7a1a2e114f0f5
 // Retrieved: 2026-10-27
 // License: Apache-2.0
-// Deviations: Original live vulnerability UI and contract regressions for issue #262. M37 #584: truthful activity titles, host targets and scan counts.
+// Deviations: Original live vulnerability UI and contract regressions for issue #262. M37 #584: truthful activity titles, host targets and scan counts; counts kept across list refreshes.
 
 import { useScanCounts } from "@/features/activity/scan-counts";
 import { useRunTarget } from "@/features/activity/use-run-target";
@@ -19,11 +19,14 @@ import { isHostVisible } from "@/domain/hosts";
 
 function ActiveScan({ run, progress, label }: { run: ActionRun; progress?: number; label: string }) {
   const { hostId = "0", id } = run;
-  const counts = useScanCounts(run), target = useRunTarget(run);
   const adapter = useAdapter(), t = useTranslations("security"), client = useQueryClient();
+  // List summaries carry no counters; the box keeps the counts its own detail observation read for this run.
+  const [observed, setObserved] = useState<ActionRun["scan"]>();
+  const counts = useScanCounts(run.scan || !observed ? run : { ...run, scan: observed }), target = useRunTarget(run);
   const cancel = useCapability("cancelScan", { kind: "host", id: hostId });
   const [error, setError] = useState(false), [cancelling, setCancelling] = useState(false);
   useEffect(() => adapter.observeActionDetail?.(hostId, id, (state) => {
+    if (state.status === "ready" && state.run.scan) setObserved(state.run.scan);
     if (state.status === "ready" && !["running", "queued"].includes(state.run.status)) {
       void client.invalidateQueries({ queryKey: ["security"] });
       void client.invalidateQueries({ queryKey: ["images"] });

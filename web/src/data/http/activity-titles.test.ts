@@ -9,7 +9,7 @@ import { join, relative, resolve as resolvePath } from "node:path";
 import { expect, it } from "vitest";
 import { renderRun } from "../message-code";
 import { mapActivityDetail } from "./map-dto";
-import { ACTION_TITLES, JOB_PREFIX_TITLES, JOB_TITLES, TYPE_TITLES } from "./activity-titles";
+import { OPERATION_TITLES, RESOURCE_TITLES, ACTION_TITLES, JOB_PREFIX_TITLES, JOB_TITLES, TYPE_TITLES } from "./activity-titles";
 
 const root = resolvePath(process.cwd(), "..");
 function sources(dir: string): string[] {
@@ -84,6 +84,16 @@ it("explicitly maps every action discriminator in resource-action producer files
   expect([...actions].filter((action) => !Object.hasOwn(ACTION_TITLES, action))).toEqual([]);
 });
 
+it("names every resource-action producer without an action by a mapped operation or resource kind", () => {
+  const unnamed: string[] = [];
+  for (const { path, text } of backend.filter((s) => s.text.includes("TypeResourceAction") && !s.text.includes('"action":'))) {
+    const operations = [...text.matchAll(/"operation":\s*"([^"]+)"/g)].map((m) => m[1]!);
+    const kinds = [...text.matchAll(/ResourceType:\s*(?:new\()?"([^"]+)"/g)].map((m) => m[1]!);
+    if (!operations.some((o) => Object.hasOwn(OPERATION_TITLES, o)) && !kinds.some((k) => Object.hasOwn(RESOURCE_TITLES, k))) unnamed.push(path);
+  }
+  expect(unnamed).toEqual([]);
+});
+
 const at = "2026-11-23T10:00:00Z";
 function mapped(type: string, metadata: Record<string, unknown> = {}, resourceType = "environment") {
   return mapActivityDetail({ activity: { id: "example", environmentId: "0", type, status: "success", startedAt: at, createdAt: at, metadata, resourceType, resourceId: "0" }, messages: [], stepTrace: [], output: [], outputTruncated: false });
@@ -94,6 +104,8 @@ it.each([
   ["vulnerability.candidate-scan", {}, "Scan of new images", "Scan neuer Images"],
   ["resource_action", { action: "check_environment_connection" }, "Connection check", "Verbindungsprüfung"],
   ["resource_action", {}, "Action", "Aktion"],
+  ["resource_action", { operation: "container.shell" }, "Container shell", "Container-Shell"],
+  ["job_run", { jobId: "environment-health:example" }, "Check host availability", "Host-Verfügbarkeit prüfen"],
   ["future_operation", {}, "Action: future operation", "Aktion: future operation"],
   ["job_run", { jobId: "future-job" }, "Action: future job", "Aktion: future job"],
   ["resource_action", { action: "future_action" }, "Action: future action", "Aktion: future action"],
@@ -133,4 +145,10 @@ it("has complete renderable EN/DE entries for every explicit operation mapping",
     expect(value).not.toMatch(/^(runMessages|activity)\./);
     expect(value).not.toMatch(/^(Activity|Aktivität)$/);
   }
+});
+
+it("titles a system backup resource action from its producer shape in both locales", () => {
+  const run = mapped("resource_action", {}, "system_backup");
+  expect(renderRun(run, "en-US").title).toBe("System backup");
+  expect(renderRun(run, "de").title).toBe("Systemsicherung");
 });

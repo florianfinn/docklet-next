@@ -33,6 +33,7 @@ export const deRunMessages = {
     "notificationWake": "Benachrichtigungszustellung planen",
     "imagePolling": "Image-Versionen prüfen",
     "updateWindow": "Geplantes Update",
+    "containerShell": "Container-Shell",
     "systemBackup": "Systemsicherung",
     "volumeBackup": "Volume-Sicherung",
     "connectionCheck": "Verbindungsprüfung",
