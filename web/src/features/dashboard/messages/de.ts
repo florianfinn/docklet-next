@@ -77,7 +77,6 @@ export const deDashboard: typeof enDashboard = {
       running: "Läuft {count}",
       update: "Updates {count}",
     },
-    showUnraid: "Unraid-Container anzeigen",
     roleDescription: "Stackring",
     segment: "{name} auf {host}: {state}",
     popupLabel: "Details zu {name}",

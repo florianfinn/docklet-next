@@ -1,10 +1,6 @@
-import { Checkbox } from "@/shared/ui/checkbox";
-import { Field, FieldLabel } from "@/shared/ui/field";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "use-intl";
-
-import { setPreference, usePreference } from "@/shared/preferences/preferences-store";
 
 import type { Host } from "@/domain/model";
 
@@ -27,25 +23,10 @@ interface FleetRingProps {
   size?: number;
   /** Hovered or focused segment moves outward; the info card opens on that side when there is room. */
   fan?: boolean;
-  /** Per-host rings share one toggle rendered by their parent. */
-  unraidToggle?: boolean;
   /** Chip filter: other segments are dimmed. */
   highlight?: FleetFilter | null;
 }
 
-
-/** Personal preference: Unraid units are hidden from the ring by default. */
-export function UnraidRingToggle() {
-  const t = useTranslations("dashboard.ring");
-  const showUnraid = usePreference("showUnraidRing");
-  const uid = useId().replace(/:/g, "");
-  return (
-    <Field orientation="horizontal" className="justify-center">
-      <Checkbox id={`${uid}-unraid`} checked={showUnraid} onCheckedChange={(value) => setPreference("showUnraidRing", value === true)} />
-      <FieldLabel htmlFor={`${uid}-unraid`}>{t("showUnraid")}</FieldLabel>
-    </Field>
-  );
-}
 
 /**
  * Every stack (and each origin group of containers outside Compose) as one
@@ -61,10 +42,9 @@ export function UnraidRingToggle() {
  * Pointer input lands on a static hit cell per segment that covers both the
  * resting and the fanned position, so the target never slips away mid-move.
  */
-export function FleetRing({ hosts, units, label, center, size = 220, fan = true, unraidToggle = true, highlight = null }: FleetRingProps) {
+export function FleetRing({ hosts, units, label, center, size = 220, fan = true, highlight = null }: FleetRingProps) {
   const t = useTranslations("dashboard.ring");
-  const showUnraid = usePreference("showUnraidRing");
-  const visibleUnits = showUnraid ? units : units.filter((unit) => unit.origin !== "unraid");
+  const visibleUnits = units;
   const ts = useTranslations("common.status");
   const unitName = useUnitName();
   const uid = useId().replace(/:/g, "");
@@ -283,7 +263,6 @@ export function FleetRing({ hosts, units, label, center, size = 220, fan = true,
           document.body,
         )}
     </div>
-      {unraidToggle && <UnraidRingToggle />}
     </div>
   );
 }

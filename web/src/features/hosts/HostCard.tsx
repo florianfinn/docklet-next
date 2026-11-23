@@ -16,15 +16,17 @@ import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { ToneBadge, ToneDot } from "@/shared/components/tone";
 import { useAdapterText } from "@/data/use-adapter-text";
 import { cn } from "@/shared/lib/utils";
-import { setPreference, useHostSelection } from "@/shared/preferences/preferences-store";
+import { setPreference, useHostSelection, usePreference } from "@/shared/preferences/preferences-store";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
+import { Switch } from "@/shared/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 import { SystemMetadata } from "./SystemMetadata";
 import { AgentReportSection } from "./AgentReportSection";
 import { HostSettingsDialog } from "./HostSettingsDialog";
 import { useHostAction, useHostCommands } from "./use-host-commands";
+import { useHostDetails } from "./use-host-details";
 
 function Row({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
   return (
@@ -65,17 +67,35 @@ function SystemSection({ component }: { component: SystemComponent | undefined }
   );
 }
 
+/** Per-user choice whether this host's Unraid-managed containers count; shown only where Unraid was detected or a choice is remembered. */
+function UnraidSwitch({ hostId, count }: { hostId: string; count: number | undefined }) {
+  const t = useTranslations("hosts.card");
+  const hidden = usePreference("unraidHidden");
+  const excluded = hidden.includes(hostId);
+  const id = `unraid-${hostId}`;
+  if (!excluded && !count) return null;
+  return (
+    <div data-slot="unraid-switch" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      <Switch id={id} checked={!excluded} onCheckedChange={(on) => setPreference("unraidHidden", on ? hidden.filter((h) => h !== hostId) : [...hidden, hostId])} />
+      <label htmlFor={id}>{t("unraidInclude")}</label>
+      {!!count && <span className="text-xs text-muted-foreground">{t("unraidCount", { count })}</span>}
+    </div>
+  );
+}
+
 interface HostCardProps {
   host: Host;
   system: SystemComponent | undefined;
   stacks?: number;
   containers?: number;
+  /** Unraid-managed containers of this host in the current inventory. */
+  unraid?: number;
   allIds: string[];
   onFiles?: (host: Host) => void;
 }
 
 /** One host with connection, directories, file IDs and actions; filter state stays visible. */
-export function HostCard({ host, system, stacks, containers, allIds, onFiles }: HostCardProps) {
+export function HostCard({ host, system, stacks, containers, unraid, allIds, onFiles }: HostCardProps) {
   const t = useTranslations("hosts");
   const tn = useTranslations("connections");
   const tc = useTranslations("common.host");
@@ -94,6 +114,10 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
   const pending = host.status === "pending";
   const connect = useHostAction(host.id, "onboard", () => cmd.connect(host.id));
   const check = useHostAction(host.id, "reconnect", () => cmd.reconnect(host.id));
+  const details = useHostDetails(host);
+  const os = details?.os || host.os, dockerVersion = details?.dockerVersion || host.dockerVersion;
+  // The hub knows its own project directory from its settings; agents report theirs.
+  const projectDir = local ? details?.projectDir : host.projectDir;
 
   return (
     <Card
@@ -132,24 +156,24 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       </header>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
         <Row label={t("card.connection")}>{host.networkRoute === "tailnet" ? tn("tailnet") : t(local ? "mode.localLong" : `mode.${host.connection}Long`)}</Row>
-        <Row label={t("card.address")} mono>
+        <Row label={t(local ? "card.hubAddress" : "card.address")} mono>
           {host.networkRoute === "tailnet" ? tn("routeHint") : dt(host.address) || t(host.connection === "edge" ? "card.addressNotRequired" : "card.addressNotConfigured")}
         </Row>
         <Row label={t("card.projectDir")} mono>
-          {host.projectDir || t("card.unavailable")}
+          {projectDir || t("card.unavailable")}
         </Row>
-        <Row label={t("card.installDir")} mono>
+        {!local && <Row label={t("card.installDir")} mono>
           {host.installDir || t("card.unavailable")}
-        </Row>
-        {!host.agentReport && (
+        </Row>}
+        {!local && !host.agentReport && (
           <Row label={t("card.fileIds")} mono>
             {host.fileOwner ? `${host.fileOwner.uid}:${host.fileOwner.gid}` : t("card.fileIdsAuto")}
           </Row>
         )}
-        <Row label={t(host.dockerVersion ? "card.versions" : "card.agentVersion")} mono>
-          {[host.agentVersion === "dev" ? t("card.development") : host.agentVersion, host.dockerVersion].filter(Boolean).join(" / ") || t("card.unavailable")}
-        </Row>
-        <Row label={t("card.system")}>{host.os || t("card.unavailable")}</Row>
+        {local ? <Row label={t("card.docker")} mono>{dockerVersion || t("card.unavailable")}</Row> : <Row label={t(dockerVersion ? "card.versions" : "card.agentVersion")} mono>
+          {[host.agentVersion === "dev" ? t("card.development") : host.agentVersion, dockerVersion].filter(Boolean).join(" / ") || t("card.unavailable")}
+        </Row>}
+        <Row label={t("card.system")}>{os || t("card.unavailable")}</Row>
         <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : host.lastSeen ? formatRelative(host.lastSeen) : t("card.neverContacted")}{host.tailnet && ["direct", "relay", "idle"].includes(host.tailnet.path) && <> · {tn(`path.${host.tailnet.path as "direct" | "relay" | "idle"}`)}</>}</Row>
       </dl>
       <TailnetHostCause host={host} />
@@ -157,6 +181,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       {!local && <AgentReportSection host={host} />}
       {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents" resourceRef={{ kind: "host", id: host.id }}><SystemSection component={system} /></CapabilityGate>}
       <p className="text-xs text-muted-foreground">{stacks === undefined || containers === undefined ? t("card.usageUnknown") : t("card.usage", { stacks, containers })}</p>
+      <UnraidSwitch hostId={host.id} count={unraid} />
       <footer className="flex flex-wrap gap-2 border-t pt-3">
         {pending ? (
           <BusyButton size="sm" disabled={!connection.available} title={connection.reason} busy={connect.busy} busyLabel={t("card.connecting")} icon={<PlugZap data-icon="inline-start" />} onClick={() => void connect.run()}>

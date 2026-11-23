@@ -184,6 +184,8 @@ export const deCommon: typeof enCommon = {
     restoredToast: "{name} wieder eingeblendet",
     undo: "Rückgängig",
     badge: "Aus Übersicht ausgeblendet",
+    unraid: "{count, plural, one {# Unraid-Container ausgeblendet} other {# Unraid-Container ausgeblendet}}",
+    unraidLink: "Auf der Hosts-Seite ändern",
   },
   query: {
     maintenance: "Die Hub-Wartung läuft. Die Daten werden danach geladen.", unavailableTitle: "Diese Funktion ist nicht verfügbar",

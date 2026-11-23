@@ -29,6 +29,7 @@ export default function HostsPage() {
   const count = (hostId: string) => ({
     stacks: stacks.data && !stacks.isError ? stacks.data.filter((s) => s.hostId === hostId).length : undefined,
     containers: containers.data && !containers.isError ? containers.data.filter((c) => c.hostId === hostId).length : undefined,
+    unraid: containers.data && !containers.isError ? containers.data.filter((c) => c.hostId === hostId && c.origin === "unraid").length : undefined,
   });
 
   return (

@@ -12,6 +12,7 @@ export const queryKeys = {
   connectedSettings: ["connected-settings"],
   hosts: ["hosts"],
   systemComponents: ["system-components"],
+  hostDetails: ["host-details"],
   stacks: ["stacks"],
   stackRoot: ["stack"],
   stack: (id: string) => ["stack", id],

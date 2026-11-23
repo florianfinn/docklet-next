@@ -195,6 +195,11 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       if (simulationStore.get().failArea === "hosts") throw new Error("Simulierter Fehler beim Laden (hosts)");
       return clone(db.hosts);
     },
+    async getHostDetails(hostId) {
+      const host = db.host(hostId);
+      if (!host || host.status !== "online") throw new Error("Simulierter Fehler beim Laden (host details)");
+      return { os: host.os || undefined, dockerVersion: host.dockerVersion || undefined, ...(hostId === "0" ? { projectDir: host.projectDir || undefined } : {}) };
+    },
     listStacks: () => simulateRead("stacks", () => (empty() ? [] : clone(withoutSystem(db.discoveredStacks())))),
     getStack: (id) =>
       simulateRead("stacks", (): CodedStackDetail => {

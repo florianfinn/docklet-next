@@ -4,7 +4,7 @@ import { useContainers, useHosts, useStacks } from "@/data/queries";
 import { inventoryHostsPending } from "@/data/inventory-recovery";
 import { filterByHosts, isHostVisible, sortHosts } from "@/domain/hosts";
 import type { Host } from "@/domain/model";
-import { useHostSelection } from "@/shared/preferences/preferences-store";
+import { usePreference, useHostSelection } from "@/shared/preferences/preferences-store";
 
 const NO_HOSTS: Host[] = [];
 
@@ -37,10 +37,17 @@ export function useVisibleStacks() {
   return { ...stacks, visible, hostsPending };
 }
 
+/** Containers in the host filter, without the Unraid-managed ones of hosts the user excluded (one decision point for ring, counts and lists). */
 export function useVisibleContainers() {
   const containers = useContainers();
   const selection = useHostSelection();
-  const visible = useMemo(() => filterByHosts(containers.data ?? [], selection), [containers.data, selection]);
+  const unraidHidden = usePreference("unraidHidden");
+  const { visible, hiddenUnraid } = useMemo(() => {
+    const scoped = filterByHosts(containers.data ?? [], selection);
+    const hidden = new Set(unraidHidden);
+    const kept = scoped.filter((c) => !(c.origin === "unraid" && hidden.has(c.hostId)));
+    return { visible: kept, hiddenUnraid: scoped.length - kept.length };
+  }, [containers.data, selection, unraidHidden]);
   const hostsPending = useHostsPending(containers.data);
-  return { ...containers, visible, hostsPending };
+  return { ...containers, visible, hiddenUnraid, hostsPending };
 }

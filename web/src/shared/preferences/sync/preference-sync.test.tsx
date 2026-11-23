@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original break-map tests PF1–PF4 and PF9 of the profile preference sync for issue #339.
+// Deviations: Original break-map tests PF1–PF4 and PF9 of the profile preference sync for issue #339. M37 #581: per-host Unraid choice sync.
 
 import { act, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -280,5 +280,35 @@ describe("favourite clear representation (PF9)", () => {
     start(h.api).setIdentity("a");
     await flush();
     expect(favoriteStore.get()).toBeNull();
+  });
+});
+
+describe("per-host Unraid choice in the views section (M37 #581)", () => {
+  it("round-trips per user, ignores the old ring flag and documents last-write-wins from an old tab", async () => {
+    const h = hub();
+    await h.server("a").putUiPreference("views", { ...DEFAULT_PREFERENCES, showUnraidRing: true, unraidHidden: ["atlas", "atlas", "", 7, "x".repeat(200), "orion"] });
+    const s = start(h.api);
+    h.signIn("a");
+    s.setIdentity("a");
+    await flush();
+    expect(preferencesStore.get().unraidHidden).toEqual(["atlas", "orion"]);
+    expect("showUnraidRing" in preferencesStore.get()).toBe(false);
+
+    // Another user starts with the default (every host included).
+    s.setIdentity(null);
+    h.signIn("b");
+    s.setIdentity("b");
+    await flush();
+    expect(preferencesStore.get().unraidHidden).toEqual([]);
+    preferencesStore.set((p) => ({ ...p, unraidHidden: ["vega"] }));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect((h.server("b").document().sections.views as { unraidHidden?: string[] }).unraidHidden).toEqual(["vega"]);
+
+    // An already open old tab replaces the section without the field: the last write wins and the field decodes to the default.
+    await h.server("b").putUiPreference("views", { ...DEFAULT_PREFERENCES, unraidHidden: undefined });
+    s.setIdentity(null);
+    s.setIdentity("b");
+    await flush();
+    expect(preferencesStore.get().unraidHidden).toEqual([]);
   });
 });

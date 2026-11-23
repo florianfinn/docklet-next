@@ -183,6 +183,8 @@ export const enCommon = {
     restoredToast: "{name} shown again",
     undo: "Undo",
     badge: "Hidden from overview",
+    unraid: "{count, plural, one {# Unraid container hidden} other {# Unraid containers hidden}}",
+    unraidLink: "Change on the Hosts page",
   },
   query: {
     maintenance: "Hub maintenance is running. The data loads when it ends.", unavailableTitle: "This feature is unavailable",

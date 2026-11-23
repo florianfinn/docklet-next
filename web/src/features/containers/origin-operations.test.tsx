@@ -2,7 +2,7 @@
 // Revision: 1e13c0e4d6fc576a464fa92b145063016c27a1c2
 // Retrieved: 2026-10-31
 // License: Apache-2.0
-// Deviations: Original W1/W2 real-gesture and backend authority regression tests.
+// Deviations: Original W1/W2 real-gesture and backend authority regression tests. M37 #581: ring shows Unraid units.
 
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -11,8 +11,7 @@ import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { STANDALONE } from "@/data/demo/fixtures/containers";
 import { HOSTS } from "@/data/demo/fixtures/hosts";
 import { mapContainer, type ContainerRow } from "@/data/http/inventory-mapping";
-import { createStore, mergeKnown } from "@/shared/lib/store";
-import { DEFAULT_PREFERENCES, preferencesStore } from "@/shared/preferences/preferences-store";
+import { preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderWithApp } from "@/test/render";
 import { OriginBadge } from "./OriginBadge";
 import { ContainerProvenance } from "./ContainerProvenance";
@@ -29,22 +28,12 @@ it("W1 uses the backend origin and source, with unknown as an older-data fallbac
   expect(mapContainer({ ...row, origin: undefined, originSource: undefined } as unknown as ContainerRow, "0", [], observation).origin).toBe("unknown");
 });
 
-it("W1 hides Unraid ring segments by default and persists the personal toggle", async () => {
+it("W1 the ring shows Unraid units like any other container (M37 #581 moved the choice to the host card)", () => {
   const host = HOSTS.find((item) => item.status === "online")!;
   const units = fleetUnits([host], [], [{ ...base, id: "unraid", hostId: host.id, origin: "unraid" }]);
-  const view = () => <FleetRing hosts={[host]} units={units} label="Fleet" center={{ value: "1", caption: "" }} />;
-  const rendered = renderWithApp(view());
-  expect(preferencesStore.get().showUnraidRing).toBe(false);
-  expect(rendered.container.querySelectorAll("path[data-runtime]").length).toBe(0);
-  await userEvent.click(screen.getByRole("checkbox", { name: "Unraid-Container anzeigen" }));
+  const rendered = renderWithApp(<FleetRing hosts={[host]} units={units} label="Fleet" center={{ value: "1", caption: "" }} />);
   expect(rendered.container.querySelectorAll("path[data-runtime]").length).toBe(1);
-  const stored = JSON.parse(localStorage.getItem("docklet-react-opus.preferences") ?? "null");
-  expect(stored?.data?.showUnraidRing).toBe(true);
-  const reloaded = createStore(DEFAULT_PREFERENCES, { key: "docklet-react-opus.preferences", version: 1, merge: mergeKnown });
-  expect(reloaded.get().showUnraidRing).toBe(true);
-  rendered.unmount();
-  const again = renderWithApp(view());
-  expect(again.container.querySelectorAll("path[data-runtime]").length).toBe(1);
+  expect(screen.queryByRole("checkbox") === null).toBe(true);
 });
 
 it("W2 excludes standalone for any partial Compose label and confirms the current target", async () => {

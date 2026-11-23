@@ -2,7 +2,7 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability. M19 web consumer integration. #410 process zone and user zone reads; optional-module foundation (#472).
+// Deviations: Original core settings mapping for setup and connected hub sections. M14 host maintenance and availability. M19 web consumer integration. #410 process zone and user zone reads; optional-module foundation (#472). M37 #579: settings list reader shared with host details.
 
 import { moduleSettingValues } from "./modules";
 import { moduleProblem } from "../module-error";
@@ -163,7 +163,7 @@ export async function readHubTimeZone(baseUrl: string, client: CsrfClient): Prom
   return validZone((await readSettingsList(baseUrl, client)).effectiveTimeZone) ?? "UTC";
 }
 
-async function readSettingsList(baseUrl: string, client: CsrfClient): Promise<Record<string, string>> {
+export async function readSettingsList(baseUrl: string, client: CsrfClient): Promise<Record<string, string>> {
   const response = await client.fetch(`${baseUrl}/environments/0/settings`, { headers: { Accept: "application/json" } });
   if (!response.ok) { const refused = maintenanceOutcome(response); discardResponse(response); throw refused ?? new Error(`settings.read.${response.status}`); }
   const items: unknown = await response.json();

@@ -163,6 +163,7 @@ export interface DockletAdapter extends VulnerabilityCandidatesApi, Vulnerabilit
   restartService(stackId: string, service: string): Promise<string>;
   importSource(request: ImportRequest): Promise<ImportResult>;
   getImageMetadata?(id: string): Promise<{ architecture: string; os: string; layers: number }>;
+  getHostDetails?(hostId: string, signal?: AbortSignal): Promise<import("@/domain/model").HostDetails>;
   admitRuntimeCommand?(request: RuntimeCommandRequest, options?: { quiet?: boolean }): Promise<RuntimeAdmission>;
   convertDockerRun(hostId: string, command: string): Promise<DockerRunConversion>;
 

@@ -23,7 +23,7 @@ import { createAppQueryClient } from "./app-query-client";
 import { refresh } from "./refresh-owner";
 
 const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
-  hosts: [queryKeys.hosts, queryKeys.systemComponents],
+  hosts: [queryKeys.hosts, queryKeys.systemComponents, queryKeys.hostDetails],
   // Images derive their consumers from containers, so container and stack changes refresh them too.
   stacks: [queryKeys.stacks, queryKeys.stackRoot, queryKeys.images, queryKeys.navInventory],
   containers: [queryKeys.containers, queryKeys.images, queryKeys.navInventory, ["container"]],
@@ -33,7 +33,7 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   dashboardEvents: [queryKeys.dashboardEvents],
   schedule: [queryKeys.schedule],
   volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot, ["backup-overviews"], ["backup-overview"], ["backup-repository"]],
-  settings: [["module-states"], ["module-management"], queryKeys.settings, queryKeys.connectedSettings, ["backup-targets"], ["backup-repository"], ["backup-overviews"], ["backup-overview"]],
+  settings: [queryKeys.hostDetails, ["module-states"], ["module-management"], queryKeys.settings, queryKeys.connectedSettings, ["backup-targets"], ["backup-repository"], ["backup-overviews"], ["backup-overview"]],
   images: [queryKeys.images],
   registries: [["registries"]],
 };

@@ -19,7 +19,8 @@ export interface Preferences {
   imagesLayout: OverviewLayout;
   workspaceAside: WorkspaceAside;
   sidebarHostsOpen: boolean;
-  showUnraidRing: boolean;
+  /** Hosts whose Unraid-managed containers this user leaves out of the ring, counts and container lists. */
+  unraidHidden: string[];
 }
 
 /** Overview modes come from the shipped design; host selection and the sidebar state are per browser only. */
@@ -27,7 +28,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   hostSelection: [],
   ...SHIPPED_DESIGN.overview,
   sidebarHostsOpen: true,
-  showUnraidRing: false,
+  unraidHidden: [],
 };
 
 const CHOICES = {
@@ -40,11 +41,17 @@ const CHOICES = {
   workspaceAside: ["off", "details", "split"],
 } as const satisfies Partial<Record<keyof Preferences, readonly string[]>>;
 
+/** Unique, bounded host IDs; anything else falls back to the default. */
+function hostIds(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return fallback;
+  return [...new Set(value.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 128))].slice(0, 64);
+}
+
 /** Total decoder for stored and synced values: wrong types fall back field by field. */
 export function decodePreferences(stored: unknown, defaults: Preferences = DEFAULT_PREFERENCES): Preferences {
   const s = (stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {}) as Partial<Record<keyof Preferences, unknown>>;
   const choice = <K extends keyof typeof CHOICES>(key: K): Preferences[K] => ((CHOICES[key] as readonly unknown[]).includes(s[key]) ? s[key] : defaults[key]) as Preferences[K];
-  const flag = (key: "sidebarHostsOpen" | "showUnraidRing") => (typeof s[key] === "boolean" ? (s[key] as boolean) : defaults[key]);
+  const flag = (key: "sidebarHostsOpen") => (typeof s[key] === "boolean" ? (s[key] as boolean) : defaults[key]);
   return {
     hostSelection: Array.isArray(s.hostSelection) ? [...new Set(s.hostSelection.filter((x): x is string => typeof x === "string" && x.length > 0))] : defaults.hostSelection,
     stacksMode: choice("stacksMode"),
@@ -55,7 +62,7 @@ export function decodePreferences(stored: unknown, defaults: Preferences = DEFAU
     imagesLayout: choice("imagesLayout"),
     workspaceAside: choice("workspaceAside"),
     sidebarHostsOpen: flag("sidebarHostsOpen"),
-    showUnraidRing: flag("showUnraidRing"),
+    unraidHidden: hostIds(s.unraidHidden, defaults.unraidHidden),
   };
 }
 

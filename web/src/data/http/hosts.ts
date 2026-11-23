@@ -2,7 +2,7 @@
 // Revision: 6310cbbb69b086b7dd8e68a2d3431e01b89afbb2
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original host read projection; persisted colour and palette defaults. M14 host maintenance and availability.
+// Deviations: Original host read projection; persisted colour and palette defaults. M14 host maintenance and availability. M37 #579: non-secret host identity.
 
 import type { components } from "@/api/generated/schema";
 import type { AgentReport, Host, HostStatus } from "@/domain/model";
@@ -51,6 +51,7 @@ export function mapHost(row: Environment): Host {
     ...(row.networkRoute ? { networkRoute: row.networkRoute } : {}),
     ...(row.tailnet ? { tailnet: row.tailnet } : {}),
     id: row.id, name: row.name || row.id, color: row.color ?? defaultHostColor(row.id),
+    identity: [row.registrationRevision, row.edgeSessionId ?? "", row.edgeAgentInstance ?? "", row.connectedAt ?? ""].join("|"),
     status: row.enabled ? status : "offline",
     connection: row.isEdge ? "edge" : "direct", address: row.isEdge ? "" : row.apiUrl,
     agentVersion: row.agentReport?.version.currentVersion ?? "",

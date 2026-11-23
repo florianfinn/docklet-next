@@ -11,8 +11,12 @@ admission. Shared contract and migration items are in
   per container; uncertain origin is restricted; Unraid permits status, logs,
   shell, usage and start/stop/restart but not editor or recreate. Standalone
   containers get Arcane management, editor and recreate with a warning.
-- Unraid is its own origin with badge and filter. Its dashboard ring segment is
-  off by default and can be shown per personal preference.
+- Unraid is its own origin with badge and filter. Its containers count in the
+  dashboard ring, counts and container lists like any other container. Each user
+  can leave out one host's Unraid containers with a switch on that host card; the
+  switch appears only where Unraid containers were detected or a choice is
+  remembered, and a hint names the hidden count (M37, #581; replaced the global
+  ring toggle).
 - After an external recreate or name reuse, a manual origin needs confirmation
   again.
 - Unknown containers with partial Compose labels (any `com.docker.compose.*`

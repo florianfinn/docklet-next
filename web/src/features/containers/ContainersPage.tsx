@@ -15,6 +15,7 @@ import { ToneBadge } from "@/shared/components/tone";
 import { splitHidden, useHiddenIds } from "@/shared/preferences/hidden-store";
 import { BulkActionBar } from "@/shared/component-set/bulk-action-bar";
 import { StatStrip } from "@/shared/component-set/stat-strip";
+import { UnraidHiddenHint } from "@/shared/components/unraid-hidden-hint";
 import { useMetrics } from "@/data/live";
 import { HostBlocks } from "@/shared/components/host-blocks";
 import { LoadMetricToggle, LoadSortHead } from "@/shared/components/overview/load-sort";
@@ -166,6 +167,7 @@ export default function ContainersPage() {
     <>
       <PageHeader compact title={t("title")} description={t("description", { scope })} />
       <InventoryNotice hosts={hosts.visible} items={containers.visible} />
+      <UnraidHiddenHint count={containers.hiddenUnraid} />
       <StatStrip compact
         items={[
           { label: t("strip.total"), value: totalsPending ? "–" : containers.visible.length, icon: <Boxes /> },

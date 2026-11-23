@@ -29,7 +29,7 @@ describe("stored lab preferences", () => {
       // Older records acquire the new personal toggle and the default deepwave pattern, and drop
       // the former per-browser widget connections (now on the hub) without rewriting the fixture.
       const { services: _services, ...dashboard } = stored as Record<string, unknown>;
-      const expected = suffix === "preferences" ? { ...stored, showUnraidRing: false } : suffix === "visual-style" ? { ...stored, dotPattern: "deepwave" } : suffix === "dashboard" ? dashboard : stored;
+      const expected = suffix === "preferences" ? { ...stored, unraidHidden: [] } : suffix === "visual-style" ? { ...stored, dotPattern: "deepwave" } : suffix === "dashboard" ? dashboard : stored;
       expect(store.get()).toEqual(expected);
     }
   });

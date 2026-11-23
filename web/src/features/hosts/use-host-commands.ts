@@ -45,7 +45,8 @@ export function useHostCommands() {
       guard(async () => {
         await adapter.removeHost(hostId);
         // A filter that only listed the removed host would hide everything.
-        preferencesStore.set((p) => ({ ...p, hostSelection: p.hostSelection.filter((id) => id !== hostId) }));
+        // A confirmed removal is the only time a remembered Unraid choice for the host is dropped.
+        preferencesStore.set((p) => ({ ...p, hostSelection: p.hostSelection.filter((id) => id !== hostId), unraidHidden: p.unraidHidden.filter((id) => id !== hostId) }));
         return true;
       }),
     token: (hostId: string) => guard(() => adapter.issueAgentToken(hostId)),

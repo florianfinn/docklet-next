@@ -11,6 +11,7 @@ import { inventoryReadBudget } from "./host-read-deadline";
 import { skipReason, skipsReads } from "./host-read-policy";
 import { inventoryId } from "./inventory-mapping";
 import { createImageMetadata } from "./image-metadata";
+import { createHostDetails } from "./host-details";
 import { createStackImport } from "./stack-import";
 import { createScheduleReader } from "./inventory-schedule";
 import { createInventoryOwner } from "./inventory-owner";
@@ -886,7 +887,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
         return { ...entry, backups: history ?? [], backupUnavailable: !history || decorated[0]?.backupUnavailable };
       });
     },
-    ...createImageMetadata(baseUrl, fetcher), ...createStackImport(baseUrl, client, () => lifetimeGeneration, getCapability),
+    ...createImageMetadata(baseUrl, fetcher), ...createHostDetails(baseUrl, client), ...createStackImport(baseUrl, client, () => lifetimeGeneration, getCapability),
     ...createImageCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["images"])); } }),
     ...createRegistryCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["registries"])); } }),
     ...createProjectWorkspace({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),

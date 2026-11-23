@@ -19,8 +19,9 @@ import { FleetChips } from "./FleetChips";
 import { orderHosts, useFleetView, type HostAreaSize } from "./fleet-view-store";
 import { FleetLine } from "./FleetLine";
 import { ConditionFeed } from "./ConditionFeed";
-import { FleetRing, UnraidRingToggle } from "./FleetRing";
-import { usePreference } from "@/shared/preferences/preferences-store";
+import { FleetRing } from "./FleetRing";
+import { UnraidHiddenHint } from "@/shared/components/unraid-hidden-hint";
+import { useVisibleContainers } from "@/shared/hooks/use-host-scope";
 import { HostCards } from "./HostCards";
 
 function PulseChip({ tone, icon, children, to, onClick }: { tone: Tone; icon: ReactNode; children: ReactNode; to?: string; onClick?: () => void }) {
@@ -158,7 +159,8 @@ function FleetVisual({ hosts, units, label, center }: { hosts: Host[]; units: Fl
   const [pinned, setPinned] = useState<FleetFilter | null>(null);
   const [hovered, setHovered] = useState<FleetFilter | null>(null);
   const highlight = hovered ?? pinned;
-  if (view.mode === "line") return <FleetLine hosts={hosts} units={units} label={label} />;
+  const hint = <UnraidHiddenHint count={useVisibleContainers().hiddenUnraid} />;
+  if (view.mode === "line") return <div className="flex flex-col items-center gap-3"><FleetLine hosts={hosts} units={units} label={label} />{hint}</div>;
   const chips = <FleetChips units={units} pinned={pinned} onPin={setPinned} onHover={setHovered} />;
   if (view.mode === "perHost") {
     const size = Math.round(Math.max(130, view.ringSize * 0.66));
@@ -168,10 +170,10 @@ function FleetVisual({ hosts, units, label, center }: { hosts: Host[]; units: Fl
           {hosts.map((h) => {
             const own = units.filter((u) => u.hostId === h.id);
             const running = own.filter((u) => u.state === "running" || u.state === "starting").length;
-            return <FleetRing key={h.id} hosts={[h]} units={own} size={size} fan={view.fan} unraidToggle={false} highlight={highlight} label={t("hostRingLabel", { host: h.name, running, total: own.length })} center={{ value: `${running}/${own.length}`, caption: h.name }} />;
+            return <FleetRing key={h.id} hosts={[h]} units={own} size={size} fan={view.fan} highlight={highlight} label={t("hostRingLabel", { host: h.name, running, total: own.length })} center={{ value: `${running}/${own.length}`, caption: h.name }} />;
           })}
-          <div className="basis-full"><UnraidRingToggle /></div>
         </div>
+        {hint}
         {chips}
         <ConditionFeed />
       </div>
@@ -180,6 +182,7 @@ function FleetVisual({ hosts, units, label, center }: { hosts: Host[]; units: Fl
   return (
     <div className="flex flex-col items-center gap-3">
       <FleetRing hosts={hosts} units={units} label={label} center={center} size={view.ringSize} fan={view.fan} highlight={highlight} />
+      {hint}
       {chips}
       <ConditionFeed />
     </div>
@@ -197,9 +200,8 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
   const hosts = orderHosts(byName, view.hostOrder);
   const units = fleetUnits(hosts, stacks, containers);
   const breakdown = fleetBreakdown(hosts, units);
-  // The ring and its centre count only what the ring shows; the verdict keeps every unit.
-  const showUnraid = usePreference("showUnraidRing");
-  const ringUnits = showUnraid ? units : units.filter((unit) => unit.origin !== "unraid");
+  // Unraid containers of hosts the user excluded are already left out of `containers` (useVisibleContainers).
+  const ringUnits = units;
   const ringBreakdown = fleetBreakdown(hosts, ringUnits);
   const ringRunning = ringBreakdown.running;
   const running = breakdown.running;
