@@ -158,7 +158,7 @@ func TestManualModeDoesNotAdvertiseTags(t *testing.T) {
 // The raw TAILSCALE_CONTROL_URL decides configuredness and installer use: whitespace anywhere (incl. Unicode spaces) withholds it.
 func TestRawControlURLDecidesInstallerUse(t *testing.T) {
 	initCrypto(t)
-	for _, raw := range []string{" https://control.example.com", "https://control.example.com\n", "https://control.example.com/a\u00a0b", "https://control.example.com/\ufeff", " "} {
+	for _, raw := range []string{" https://control.example.com", "https://control.example.com\n", "https://control.example.com/a\u00a0b", "https://control.example.com/\ufeff", " ", "https://:443", "http://:3552"} {
 		service := tailnet.NewService(&config.Config{TailscaleControlURL: raw, EdgeMTLSMode: "disabled", TailscaleStateDir: t.TempDir()}, &memorySettings{values: map[string]string{}})
 		settings, err := service.Settings(t.Context())
 		require.NoError(t, err)

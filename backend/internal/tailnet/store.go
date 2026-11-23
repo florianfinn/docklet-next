@@ -124,7 +124,7 @@ func InstallerControlURL(raw string) (string, bool) {
 		return "", false
 	}
 	parsed, err := url.Parse(raw)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil {
 		return "", false
 	}
 	return raw, true
