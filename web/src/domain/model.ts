@@ -281,6 +281,8 @@ export interface ActionRun {
   kind: ActionKind;
   title: string;
   target: string;
+  /** Resolve the display target from the current host list, never a raw environment ID. */
+  hostScoped?: boolean;
   hostId?: string;
   stackId?: string;
   containerId?: string;
@@ -294,6 +296,8 @@ export interface ActionRun {
   progress: number;
   /** Live vulnerability run counters; absent when the run read is unavailable. */
   scanProgress?: number;
+  scan?: { targets: number; done: number; failed: number };
+  candidateScan?: { targets: number; scanned: number; cached: number; deferred: number; failed: number };
   startedAt: string;
   finishedAt?: string;
   error?: string;

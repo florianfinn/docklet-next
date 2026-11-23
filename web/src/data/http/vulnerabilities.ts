@@ -2,7 +2,7 @@
 // Revision: cf5aa27a8ca449d95c66dcd253f7a1a2e114f0f5
 // Retrieved: 2026-10-27
 // License: Apache-2.0
-// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #389: security fan-out reads are skippable background reads.
+// Deviations: Original live vulnerability UI and contract regressions for issue #262. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. C2 #271: recover transient stale-success host batches without discarding snapshot rows. M23 #389: security fan-out reads are skippable background reads. M37 #584: truthful activity titles, host targets and scan counts.
 
 import { freshFrom } from "../refresh-owner";
 import { inventoryRecovery } from "../inventory-recovery";
@@ -53,7 +53,8 @@ function activeImages(hostId: string, body: unknown): ActiveScannedImage[] {
 export async function readScanProgress(request: ReturnType<typeof vulnerabilityTransport>, host: string, activity: string, signal?: AbortSignal) {
   const r = run(object(await request(`/environments/${encodeURIComponent(host)}/vulnerabilities/runs/${encodeURIComponent(activity)}`, "GET", undefined, true, signal)).data);
   if (r.activityId !== activity || r.environmentId !== "0") invalid();
-  return r.targets ? Math.min(100, Math.round(100 * (r.scanned + r.failed + r.skipped) / r.targets)) : undefined;
+  const done = r.scanned + r.failed + r.skipped;
+  return { targets: r.targets, done, failed: r.failed };
 }
 /** Reads one stored candidate run; retention misses never borrow a newer run's counts. */
 export async function readCandidateRun(request: ReturnType<typeof vulnerabilityTransport>, host: string, activityId: string, signal?: AbortSignal) {

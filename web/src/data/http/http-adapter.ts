@@ -17,7 +17,8 @@ import { createScheduleReader } from "./inventory-schedule";
 import { createInventoryOwner } from "./inventory-owner";
 import { freshFrom } from "../refresh-owner";
 import { vulnerabilityTransport } from "./vulnerability-transport";
-import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
+import { createVulnerabilities } from "./vulnerabilities";
+import { readActivityScanCounts } from "@/features/activity/read-scan-counts";
 import { refFor } from "./operation-resource";
 import { createTailnet } from "./tailnet";
 import { createUpdateSettings } from "./update-settings";
@@ -491,13 +492,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
           } catch (error) { if (isCancelledError(error)) throw error; }
           if (!["running", "queued"].includes(run.status)) backupChanged();
         }
-        if (run.kind === "scan" && dto.activity.resourceType === "environment") {
-          try {
-            const capability = await getCapability("getSecurity", { kind: "host", id: host });
-            if (!capability.available) throw unavailable("getSecurity", capability.resourceRef, capability.disabledReasonCode);
-            run.scanProgress = await readScanProgress(scanRequest, host, id, signal);
-          } catch (error) { if (isCancelledError(error)) throw error; }
-        }
+        await readActivityScanCounts(run, { request: scanRequest, host, id, signal, hostScan: dto.activity.resourceType === "environment", hosts: listHosts,
+          capability: () => getCapability("getSecurity", { kind: "host", id: host }), registration: () => environmentState });
         // Invalidate before publishing terminal status: progress consumers may unmount immediately.
         if ((run.kind === "scan" || run.sourceOperation === "vulnerability.candidate-scan") && !["running", "queued"].includes(run.status)) securityChanged();
         return run;

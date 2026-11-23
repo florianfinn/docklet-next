@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: None; byte-identical L4 snapshot. See web/PROVENANCE.md. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #126 console count and duration use existing catalogue keys. #126 R1: distinct dialog state keys and truthful permission, admission and retained outcome presentation. M9 D1: show command rejections inline, preserve dialog drafts and clear feedback on edits. M24 S6: recovery evidence in every detail design. List summaries and owned detail reads with bounded recovery (#225, #223). Simple-user management, assigned-stack access and mode-aware self-service.
 
+import { useRunTarget } from "./use-run-target";
 import { useIsUser } from "@/data/use-principal";
 import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
 import { JobUpdateOutcomes } from "@/shared/components/updates/job-update-outcomes";
@@ -143,6 +144,7 @@ function ActionDialogContent({ run, waiting, feedback }: { run: ActionRun; waiti
   const design = useUiStyle("actionDialogDesign");
   const now = useNow(run.status === "running");
   const expanded = useOutputOpen(run, OUTPUT_OPEN[design]);
+  const target = useRunTarget(run);
   const Body = BODIES[design];
   const Icon = RUN_ICON[run.status];
   // Captured before the dialog takes focus.
@@ -169,7 +171,7 @@ function ActionDialogContent({ run, waiting, feedback }: { run: ActionRun; waiti
         <div className="min-w-0 flex-1">
           <DialogTitle className="line-clamp-2 text-base leading-snug [overflow-wrap:anywhere]">{run.title}</DialogTitle>
           <DialogDescription className="truncate text-xs">
-            {t(`runKind.${run.kind}`)} · {run.target}
+            {run.title}{target ? ` · ${target}` : ""}
           </DialogDescription>
         </div>
         <RunBadge status={run.status} className="mt-1 shrink-0">

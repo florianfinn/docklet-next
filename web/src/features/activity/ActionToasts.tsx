@@ -25,6 +25,8 @@ import { actionDialogStore, offerActionDialog, openActionDialog } from "./action
 import { isMajorAction } from "./action-policy";
 import { openActivity } from "./activity-store";
 import { ActionToastView } from "./ActionToastView";
+import { ActionDetail } from "./ActionDetail";
+import type { ActionRun } from "@/domain/model";
 import { useNow } from "./run-phase";
 import { runtimePresentation } from "./runtime-presentation";
 import { hasPresentationIntent, notifiesOnFirstObservation, presentationStore, RunToastCoordinator } from "./run-presentation";
@@ -37,9 +39,9 @@ function ActionToast({ id, toastId }: { id: string; toastId: string | number }) 
   const now = useNow(run?.status === "running");
   if (!run) return null;
   const major = isMajorAction(run);
-  return (
+  const view = (observed: ActionRun) => (
     <ActionToastView
-      run={run}
+      run={observed}
       design={design}
       detail={toastDetail(scale)}
       now={now}
@@ -49,6 +51,9 @@ function ActionToast({ id, toastId }: { id: string; toastId: string | number }) 
       onOpen={() => (major || user ? openActionDialog(run.id) : openActivity(run.id))}
     />
   );
+  // Visible scan toasts own their counters even after the Security page unmounts.
+  return run.kind === "scan" || run.sourceOperation === "vulnerability.candidate-scan"
+    ? <ActionDetail run={run} fallback={view(run)}>{view}</ActionDetail> : view(run);
 }
 
 /**

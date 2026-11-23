@@ -1,3 +1,5 @@
+import { useRunTarget } from "./use-run-target";
+import { useScanCounts } from "./scan-counts";
 import { useDeployProgress } from "./deploy-progress";
 import { History, X } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
@@ -35,17 +37,19 @@ function useToastFacts(run: ActionRun, now: number) {
   const t = useTranslations("activity");
   const { index, step } = runPhase(run);
   const seconds = elapsedSeconds(run, now);
+  const target = useRunTarget(run), scan = useScanCounts(run);
   const done = run.steps.filter((s) => s.state === "done").length;
   const state = runtimeState(run);
-  const progress = useDeployProgress(run);
+  const deploy = useDeployProgress(run);
+  const progress = scan ?? deploy;
   const status = state ? t(`runtime.${state}`) : progress ?? (
     run.status === "running" && step
       ? t("phase", { current: index + 1, total: run.steps.length, label: step.label })
       : run.status === "failed" && step?.label.trim()
         ? t("failedAt", { label: step.label })
         : run.status === "succeeded" ? t("done", { seconds }) : t(`status.${run.status}`));
-  const line = state ? t(`runtime.${state}Body`) : run.status === "failed" ? (run.error ?? t("toast.unknownError")) : run.status === "running" ? (step?.detail ?? run.target) : run.target;
-  return { status, line, progress, seconds, done, total: run.steps.length };
+  const line = state ? t(`runtime.${state}Body`) : run.status === "failed" ? (run.error ?? t("toast.unknownError")) : run.status === "running" ? (scan ?? step?.detail ?? target) : scan ?? target;
+  return { status, line, progress, target, seconds, done, total: run.steps.length };
 }
 
 type Facts = ReturnType<typeof useToastFacts>;
@@ -133,7 +137,7 @@ function Meta({ run, facts }: { run: ActionRun; facts: Facts }) {
     <dl className="flex h-4 min-w-0 items-center gap-x-4 overflow-hidden text-xs whitespace-nowrap text-muted-foreground" data-slot="toast-meta">
       <div className="flex min-w-16 gap-1">
         <dt className="sr-only">{t("target")}</dt>
-        <dd className="truncate text-foreground/90">{run.target}</dd>
+        <dd className="truncate text-foreground/90">{facts.target}</dd>
       </div>
       <div className="flex shrink-0 gap-1">
         <dt>{t("progress")}</dt>
@@ -211,12 +215,13 @@ function CompactDesign(props: DesignProps) {
             {run.status === "failed" ? facts.line : facts.status}
           </div>
         </div>
-        <span className="shrink-0 text-right text-xs font-medium text-(--tone) tabular-nums">{facts.progress ? "" : run.outcomeState === "unknown" || ((run.kind === "deploy" || run.kind === "redeploy") && run.status === "running") ? "–" : t("toast.percent", { value: run.progress })}</span>
+        <span className="shrink-0 text-right text-xs font-medium text-(--tone) tabular-nums">{facts.progress ? "" : run.outcomeState === "unknown" || run.steps.length === 0 || ((run.kind === "deploy" || run.kind === "redeploy") && run.status === "running") ? "–" : t("toast.percent", { value: run.progress })}</span>
         <CloseButton onClose={onClose} />
       </div>
       <div className="px-3 pb-2" data-slot="toast-track">
         <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} thin />
       </div>
+      {facts.progress && run.status === "failed" && <p className="px-3 pb-2 text-xs text-muted-foreground" data-slot="toast-scan-counts">{facts.progress}</p>}
       <LifeBar run={run} onEnd={onClose} />
     </div>
   );
@@ -233,7 +238,7 @@ function EdgeDesign(props: DesignProps) {
           <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-(--tone) uppercase">
             <span className={cn("size-1.5 shrink-0 rounded-full bg-(--tone)", run.status === "running" && "animate-breathe")} aria-hidden />
             <span className="truncate">
-              {t(`runKind.${run.kind}`)} · {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)}
+              {run.title} · {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)}
             </span>
           </div>
           <OpenTitle {...props} className="mt-0.5 text-[15px] leading-snug" />

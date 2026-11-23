@@ -2,8 +2,9 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps. M24 S6: observed recovery and update UI follow-ups. Validated atomic deploy observations.
+// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps. M24 S6: observed recovery and update UI follow-ups. Validated atomic deploy observations. M37 #584: truthful activity titles, host targets and scan counts.
 
+import { activityTitle } from "./activity-titles";
 import type { DeployProgress } from "@/features/activity/deploy-progress";
 import { runtimePeerAudit } from "./runtime-peer-audit";
 import { operationReasonKey } from "../operation-reason";
@@ -274,6 +275,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   };
   if (lifecycle) { const l = record(lifecycle); id(l.runId); bool(l.verified); if (bool(l.volumeDataIncluded)) throw new Error("dto.invalid-lifecycle"); }
   const target = run.resourceName || run.resourceId || run.sourceEnvironmentName || run.type;
+  const hostScoped = run.resourceType === "environment" || run.resourceType === "system" || target === run.environmentId;
   const peerAudit = (detail.messages ?? []).map((item) => runtimePeerAudit(item.code, item.payload)).find((item) => item !== undefined);
   const output = (detail.output ?? []).map((line) => {
     required(line.timestamp, "output-timestamp");
@@ -293,8 +295,9 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     ...(updateRecovery ? { updateRecovery } : {}),
     ...(job && typeof run.metadata?.jobId === "string" && /^update-window:/.test(run.metadata.jobId) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
     kind, sourceOperation: run.type,
-    title: { code: `activity.runKind.${kind}`, params: {} },
-    target: jobKind(run) ? { code: `activity.runKind.${kind}`, params: {} } as MessageCode : { code: "runMessages.value", params: { value: target } },
+    title: repositoryCheck ? { code: `activity.runKind.${kind}`, params: {} } : activityTitle(run),
+    hostScoped,
+    target: !hostScoped && jobKind(run) ? { code: `activity.runKind.${kind}`, params: {} } as MessageCode : { code: "runMessages.value", params: { value: hostScoped ? "" : target } },
     hostId: run.environmentId,
     ...((run.resourceType === "project" || run.resourceType === "stack") && run.resourceId ? { stackId: inventoryId(run.environmentId, run.resourceId) } : {}),
     ...(run.resourceType === "container" && run.resourceId ? { containerId: inventoryId(run.environmentId, run.resourceId) } : {}),

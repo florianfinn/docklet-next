@@ -1,3 +1,4 @@
+import { useRunTarget } from "./use-run-target";
 import { useDeployProgress } from "./deploy-progress";
 import { useConnectedSettings } from "@/data/queries";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
@@ -39,6 +40,15 @@ import { RunOutput } from "./RunOutput";
 /** Shared list tones; notifications.css turns the running "accent" into the brand run tone inside the action centre. */
 const TONE = { queued: "gray", running: "accent", succeeded: "ok", failed: "err", cancelled: "gray" } as const;
 const LEVEL_TONE: Record<EventLevel, "err" | "warn" | "ok" | "info"> = { error: "err", warn: "warn", ok: "ok", info: "info" };
+
+function RunDescription({ run }: { run: ActionRun }) {
+  const t = useTranslations("activity"), target = useRunTarget(run);
+  return <span className={cn(run.status === "failed" && "text-destructive")}>
+    {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)}{target ? ` · ${target}` : ""}
+    {run.error ? ` · ${run.error}` : ""}
+    <DeployProgressLine run={run} />
+  </span>;
+}
 
 function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean }) {
   const t = useTranslations("activity");
@@ -141,7 +151,7 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
           const Icon = run.status === "queued" ? History : run.status === "running" ? Loader2 : run.status === "succeeded" ? CheckCircle2 : run.status === "cancelled" ? History : XCircle;
           return {
             id: run.id,
-            unknown: run.outcomeState === "unknown",
+            unknown: run.outcomeState === "unknown" || (run.status !== "running" && run.status !== "queued" && run.steps.length === 0),
             tone: TONE[run.status],
             progress: run.outcomeState === "unknown" ? 0 : run.status === "failed" ? Math.max(run.progress, 8) : run.progress,
             highlighted: run.id === focusRunId,
@@ -156,13 +166,7 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
                 <span className="shrink-0 text-[11px] font-normal text-muted-foreground">{formatTime(run.startedAt)}</span>
               </span>
             ),
-            description: (
-              <span className={cn(run.status === "failed" && "text-destructive")}>
-                {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)} · {run.target}
-                {run.error ? ` · ${run.error}` : ""}
-                <DeployProgressLine run={run} />
-              </span>
-            ),
+            description: <RunDescription run={run} />,
             body: <RunBody run={run} defaultOpen={run.id === focusRunId} />,
           };
         })}

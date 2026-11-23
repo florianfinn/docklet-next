@@ -1,3 +1,5 @@
+import { useRunTarget } from "./use-run-target";
+import { useScanCounts } from "./scan-counts";
 import { useDeployProgress } from "./deploy-progress";
 import { useRepositoryCheckText } from "./repository-check-presentation";
 import { JobUpdateOutcomes } from "@/shared/components/updates/job-update-outcomes";
@@ -35,13 +37,14 @@ export function RunStatusLine({ run, className }: { run: ActionRun; className?: 
 export function RunFacts({ run, now, className }: { run: ActionRun; now: number; className?: string }) {
   const t = useTranslations("activity.dialog");
   const deploy = useDeployProgress(run), check = useRepositoryCheckText(run, String);
+  const target = useRunTarget(run), scan = useScanCounts(run);
   const done = run.steps.filter((s) => s.state === "done").length;
   // A repository check has no fixed stage count, so its cell shows the stage or result, never a ratio.
-  const progress = deploy ?? (run.kind === "repository-check" ? check ?? "–" : undefined);
+  const progress = scan ?? deploy ?? (run.kind === "repository-check" ? check ?? "–" : undefined);
   const items = [
     ["progress", t("progress"), progress ?? (run.outcomeState === "unknown" || run.steps.length === 0 || !summaryStepsAvailable(run) ? "–" : `${done}/${run.steps.length} · ${withPercent(run.progress)}`)],
     ["elapsed", t("elapsed"), `${elapsedSeconds(run, now)} s`],
-    ["target", t("target"), run.target],
+    ["target", t("target"), target],
     ["services", t("services"), run.services.join(", ") || t("none")],
   ] as const;
   return (
@@ -77,6 +80,7 @@ export function RunErrorBox({ run }: { run: ActionRun }) {
  */
 export function RunFocusBody({ run, now, fill = false, outputOpen = false, className }: { run: ActionRun; now: number; fill?: boolean; outputOpen?: boolean; className?: string }) {
   const { step } = runPhase(run);
+  const target = useRunTarget(run);
   const Icon = RUN_ICON[run.status];
   return (
     <div className={cn("flex flex-col gap-4", fill && "min-h-0 flex-1", className)} data-slot="run-focus" data-run={run.id} data-status={run.status}>
@@ -88,7 +92,7 @@ export function RunFocusBody({ run, now, fill = false, outputOpen = false, class
         <RunStatusLine run={run} className="max-w-full text-base" />
         <p className="h-4 max-w-full truncate text-xs text-muted-foreground" title={step?.detail}>
           {/* The status line above already names the result. */}
-          {run.status === "running" ? (step?.detail ?? run.target) : run.target}
+          {run.status === "running" ? (step?.detail ?? target) : target}
         </p>
       </div>
       <div className="shrink-0">

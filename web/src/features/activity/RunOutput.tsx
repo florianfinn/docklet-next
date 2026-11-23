@@ -68,6 +68,8 @@ export function RunOutput({ run, defaultOpen = false, fill = false, className }:
     if (el && view.open && stick.current) el.scrollTop = el.scrollHeight;
   }, [view.open, shown.length, last?.line]);
 
+  if (run.status !== "running" && run.status !== "queued" && run.output.length === 0 && !run.outputTruncated) return null;
+
   return (
     <Collapsible
       open={view.open}

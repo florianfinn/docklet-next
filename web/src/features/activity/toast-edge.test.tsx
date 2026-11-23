@@ -1,4 +1,7 @@
-import { render } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { AdapterProvider } from "@/data/AdapterProvider";
+import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { render as bareRender } from "@testing-library/react";
 import { IntlProvider } from "use-intl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -74,3 +77,5 @@ describe("edge light layers", () => {
     stop();
   });
 });
+
+function render(ui: ReactNode) { return bareRender(<AdapterProvider adapter={createDemoAdapter()}>{ui}</AdapterProvider>); }

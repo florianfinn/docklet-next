@@ -2,9 +2,12 @@
 // Revision: 2cec9701d8c73f3185eef046b6f890dc79c6f0f6
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Original user run-copy guard (M15 smoke DEF-2).
+// Deviations: Original user run-copy guard (M15 smoke DEF-2). M37 #584: truthful activity titles, host targets and scan counts.
 
-import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { AdapterProvider } from "@/data/AdapterProvider";
+import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { render as bareRender, screen } from "@testing-library/react";
 import { IntlProvider } from "use-intl";
 import { expect, it } from "vitest";
 
@@ -23,3 +26,5 @@ it.each([false, true])("labels a minor toast by what it opens (opensDialog=%s)",
   expect(label.startsWith(opensDialog ? "Ablauf öffnen" : "Im Aktionszentrum öffnen")).toBe(true);
   expect(screen.queryAllByText(run.title).length > 0).toBe(true);
 });
+
+function render(ui: ReactNode) { return bareRender(<AdapterProvider adapter={createDemoAdapter()}>{ui}</AdapterProvider>); }

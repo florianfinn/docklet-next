@@ -2,7 +2,7 @@
 // Revision: 86876feed1c0f8ad66d9a3eb54da6c4be5c3ebbc
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original list-only discovery, bounded reads and demand regression coverage (#225, #223).
+// Deviations: Original list-only discovery, bounded reads and demand regression coverage (#225, #223). M37 #584: truthful activity titles, host targets and scan counts.
 
 import { RecreateResultLink } from "@/features/containers/RecreateRun";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -15,7 +15,7 @@ import type { ActionRun } from "@/domain/model";
 import { QueryError } from "@/shared/components/page";
 
 /** Only a mounted detail body owns history. Summary updates cannot erase it. */
-export function ActionDetail({ run, children }: { run: ActionRun; children: (run: ActionRun) => ReactNode }) {
+export function ActionDetail({ run, children, fallback }: { run: ActionRun; children: (run: ActionRun) => ReactNode; fallback?: ReactNode }) {
   const adapter = useAdapter();
   const lifetime = identityLifetime(adapter);
   const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
@@ -34,6 +34,6 @@ export function ActionDetail({ run, children }: { run: ActionRun; children: (run
   const state = view?.key === key ? view.state : undefined;
   const full = state?.status === "ready" || state?.status === "error" ? state.run : undefined;
   if (full) return <>{children(renderRun(full, locale))}<RecreateResultLink run={renderRun(full, locale)} />{state?.status === "error" ? <QueryError compact error={state.error} /> : state?.status === "ready" && state.refreshing ? <p role="status" className="text-sm text-muted-foreground">{t("detailLoading")}</p> : null}</>;
-  if (state?.status === "error") return <QueryError compact error={state.error} />;
-  return <p role="status" className="p-3 text-sm text-muted-foreground">{t("detailLoading")}</p>;
+  if (state?.status === "error") return fallback ?? <QueryError compact error={state.error} />;
+  return fallback ?? <p role="status" className="p-3 text-sm text-muted-foreground">{t("detailLoading")}</p>;
 }

@@ -2,9 +2,12 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original executor-owned deploy progress observation and behavioural coverage.
+// Deviations: Original executor-owned deploy progress observation and behavioural coverage. M37 #584: truthful activity titles, host targets and scan counts.
 
-import { render } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { AdapterProvider } from "@/data/AdapterProvider";
+import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { render as bareRender } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { IntlProvider } from "use-intl";
 import { expect, it, vi } from "vitest";
@@ -130,3 +133,5 @@ it("shows large pull byte counts in readable units", () => {
     expect(view.container.querySelector('[data-fact="progress"] dd')?.textContent).toBe("Pull · 1/3 layers · 39 MB / 298 MB");
   } finally { view.unmount(); }
 });
+
+function render(ui: ReactNode) { return bareRender(<AdapterProvider adapter={createDemoAdapter()}>{ui}</AdapterProvider>); }
