@@ -2,7 +2,7 @@
 // Revision: 5f56262875af9a8ec0fe9007cb889bd3a513085d
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Original measured security table, compact filters and labelled card fields; accessible header help in every view. M21 #437: advisory detail. M24 S6: observed recovery and update UI follow-ups. M26 #449: tap help composition. M37 #585: bounded page summary and focus-preserving page measurement.
+// Deviations: Original measured security table, compact filters and labelled card fields; accessible header help in every view. M21 #437: advisory detail. M24 S6: observed recovery and update UI follow-ups. M26 #449: tap help composition. M37 #585: bounded page summary and focus-preserving page measurement. M37 #585 R1: one page announcement.
 
 import type { CSSProperties, ReactNode } from "react";
 import { useTranslations } from "use-intl";
@@ -139,6 +139,6 @@ export function SecurityTable<T, K extends string>({ label, fitKey, columns, con
         </TableBody>
       </BareTable>}
     </div>
-    {paging && <Pager {...paging} />}
+    {paging && <Pager {...paging} announce={false} />}
   </Card>;
 }

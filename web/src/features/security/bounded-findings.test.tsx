@@ -21,7 +21,7 @@ const findings: Finding[] = Array.from({ length: 10_000 }, (_, i) => ({
   hostId: "example", cvss: 8.123456, severity: "high", title: "Example finding",
 }));
 const hosts = new Map();
-const key = (i: number) => { const f = findings[i]!; return JSON.stringify([f.hostId, f.image, f.id, f.pkg, f.installed]); };
+const key = (i: number) => { const f = findings[i]!; return JSON.stringify([f.hostId, f.image, f.id, f.pkg, f.installed, "", ""]); };
 const rows = () => [...document.querySelectorAll<HTMLElement>("[data-security-row]")];
 const selected = () => rows().filter((row) => row.dataset.state === "selected");
 const page = () => screen.getByRole("navigation", { name: "Pagination" }).textContent;
@@ -36,7 +36,7 @@ describe("bounded finding pages", () => {
     renderWithApp(<FindingsTab {...props} />);
     expect(rows().length).toBe(100);
     expect(page()).toContain("Page 1 of 100");
-    expect(screen.getByText("1–100 of 10000") !== null).toBe(true);
+    expect(screen.getByText("1–100 of 10,000") !== null).toBe(true);
   });
 
   it("jumps to a late occurrence without prefix expansion and highlights only it", () => {
@@ -72,7 +72,7 @@ describe("bounded finding pages", () => {
     fireEvent.change(input, { target: { value: "pkg-000" } });
     expect(rows().length).toBe(100);
     expect(rows().every((r) => r.textContent?.includes("pkg-000"))).toBe(true);
-    expect(screen.getByText("1–100 of 100 · 1000 in total") !== null).toBe(true);
+    expect(screen.getByText("1–100 of 100 · 1,000 in total") !== null).toBe(true);
   });
 
   it("keeps a target across sort/filter changes, resets an excluded target and restores it", () => {

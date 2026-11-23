@@ -149,8 +149,9 @@ const byValue = <T,>(rows: T[], dir: SortState<string>["dir"], value: (r: T) => 
     return dir === "asc" ? c : -c;
   });
 
-// JSON preserves boundaries when image names or package versions contain separators.
-const findingOccurrence = (f: Finding) => JSON.stringify([f.hostId, f.imageId ?? f.image, f.id, f.pkg, f.installed]);
+// JSON preserves boundaries when image names or package versions contain separators; class and type tell an OS
+// package from a language package with the same name and version (the occurrence identity of the advisory sheet).
+const findingOccurrence = (f: Finding) => JSON.stringify([f.hostId, f.imageId ?? f.image, f.id, f.pkg, f.installed, (f as { class?: string }).class ?? "", (f as { type?: string }).type ?? ""]);
 
 const worst = (i: ScannedImage) => SEVERITIES.find((s) => (i.counts[s.key] ?? 0) > 0)?.color ?? "var(--border)";
 
@@ -197,12 +198,15 @@ export function FindingsTab({ findings, hosts, highlight, onOpen }: Pick<Data, "
     ? f.id === advisory && (!urlOccurrence || occurrenceSelectionKey({ host: f.hostId, imageId: f.imageId ?? "", package: f.pkg, installed: f.installed, class: (f as { class?: string }).class ?? "", type: (f as { type?: string }).type ?? "" }) === urlOccurrence)
     : findingOccurrence(f) === highlight || f.id === highlight) : undefined;
   // Resolve advisory links once; retain the occurrence across sort/filter and sheet dismissal.
-  const [target, setTarget] = useState(() => ({ source, key: match ? findingOccurrence(match) : undefined, fromUrl: !!urlFinding }));
-  const dismissed = target.fromUrl && source === null;
+  // A closed sheet keeps its row as target until the overview names another finding.
+  const [target, setTarget] = useState(() => ({ source, key: match ? findingOccurrence(match) : undefined, fromUrl: !!urlFinding, highlight }));
+  const dismissed = target.fromUrl && !urlFinding && highlight === target.highlight;
   const sameTarget = target.source === source || dismissed;
   const targetKey = sameTarget && target.key ? target.key : match ? findingOccurrence(match) : source ?? undefined;
-  if ((!sameTarget || (!target.key && match))) setTarget({ source, key: match ? findingOccurrence(match) : undefined, fromUrl: !!urlFinding });
+  if ((!sameTarget || (!target.key && match))) setTarget({ source, key: match ? findingOccurrence(match) : undefined, fromUrl: !!urlFinding, highlight });
   const paging = usePagedRows(rows, 100, { targetKey, resetKey: JSON.stringify([sort, values]) });
+  // Only a finding that exists but is excluded by the filters is "hidden"; a fixed, removed or not yet loaded one is not.
+  const targetFiltered = paging.targetHidden && targetKey !== undefined && ordered.some((f) => findingOccurrence(f) === targetKey);
   const columns = FINDING_COLUMNS.map((c) => ({ id: c, label: t(`columns.${c}`) }));
   const visibleRows = paging.visible.map(({ finding: f, key, ordinal }) => {
     const sev = SEVERITIES.find((s) => s.key === f.severity);
@@ -241,7 +245,7 @@ export function FindingsTab({ findings, hosts, highlight, onOpen }: Pick<Data, "
       condensed={FINDING_GROUPS}
       rows={visibleRows}
       paging={paging}
-      targetHidden={paging.targetHidden}
+      targetHidden={targetFiltered}
       columns={columns}
       filters={filters}
       values={values}
