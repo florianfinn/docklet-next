@@ -2,7 +2,7 @@
 // Revision: 09d1e632cb3a14bd48b87232acaf991b9d12145e
 // Retrieved: 2026-10-23
 // License: Apache-2.0
-// Deviations: Accessible usage indicator; preserve built-in and Compose protection when usage is unknown.
+// Deviations: Accessible usage indicator; preserve built-in and Compose protection when usage is unknown. M37 #581: hidden members keep the network in use.
 
 import { CircleDashed, CircleHelp, Link2, Shield } from "lucide-react";
 import { useTranslations } from "use-intl";
@@ -14,13 +14,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 export type NetworkMember = Pick<ContainerInfo, "id" | "name" | "state">;
 
 /** Attachments count even when a stopped container has no address or inventory detail. */
-export function NetworkUsage({ network, members }: { network: TopologyNetwork; members: NetworkMember[] }) {
+/** `hidden` counts members the user left out (Unraid per host): they still use the network, so it never reads as unused. */
+export function NetworkUsage({ network, members, hidden = 0 }: { network: TopologyNetwork; members: NetworkMember[]; hidden?: number }) {
   const t = useTranslations("networks.usage");
   const owner = networkComposeOwner(network);
   const unknown = network.detailUnavailable || network.inventory?.stale;
   const protection = network.builtIn ? t("builtin") : owner ? t("stack", { name: owner }) : undefined;
-  const state = network.builtIn ? "builtin" : unknown ? "unknown" : members.length ? "used" : "unused";
-  const Icon = network.builtIn || (unknown && owner) ? Shield : unknown ? CircleHelp : members.length ? Link2 : CircleDashed;
+  const used = members.length + hidden > 0;
+  const state = network.builtIn ? "builtin" : unknown ? "unknown" : used ? "used" : "unused";
+  const Icon = network.builtIn || (unknown && owner) ? Shield : unknown ? CircleHelp : used ? Link2 : CircleDashed;
   return (
     <Tooltip>
       <TooltipTrigger asChild>

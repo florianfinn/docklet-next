@@ -2,6 +2,7 @@ import { useCapability } from "@/data/use-capability";
 import { Archive, Box, Database, File, FolderInput, Layers, Loader2 } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
+import { useHiddenUnraidIds } from "@/shared/hooks/use-host-scope";
 
 import { formatRelative } from "@/domain/format";
 import { backupAccess, type Volume } from "@/domain/volumes";
@@ -62,9 +63,13 @@ export function BackupBadge({ volume }: { volume: Pick<Volume, "backup" | "lastB
 /** Consumer links: stack services open their stack page, others the container inspector. */
 export function ConsumerChips({ volume, max = 3, className }: { volume: Pick<Volume, "consumers">; max?: number; className?: string }) {
   const t = useTranslations("volumes");
-  if (!volume.consumers.length) return <span className="text-xs text-muted-foreground">{t("unused")}</span>;
-  const shown = volume.consumers.slice(0, max);
-  const rest = volume.consumers.length - shown.length;
+  const th = useTranslations("common.hidden");
+  const hidden = useHiddenUnraidIds();
+  const consumers = hidden.size ? volume.consumers.filter((c) => !hidden.has(c.containerId)) : volume.consumers;
+  // Hidden references still use the volume: never present them as unused.
+  if (!consumers.length) return <span className="text-xs text-muted-foreground">{volume.consumers.length ? th("count", { count: volume.consumers.length }) : t("unused")}</span>;
+  const shown = consumers.slice(0, max);
+  const rest = consumers.length - shown.length;
   return (
     <span className={cn("flex flex-wrap items-center gap-1", className)}>
       {shown.map((c) => (

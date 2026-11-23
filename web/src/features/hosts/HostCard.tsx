@@ -27,6 +27,7 @@ import { AgentReportSection } from "./AgentReportSection";
 import { HostSettingsDialog } from "./HostSettingsDialog";
 import { useHostAction, useHostCommands } from "./use-host-commands";
 import { useHostDetails } from "./use-host-details";
+import { unraidDetected } from "./unraid-detection";
 
 function Row({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
   return (
@@ -73,7 +74,7 @@ function UnraidSwitch({ hostId, count }: { hostId: string; count: number | undef
   const hidden = usePreference("unraidHidden");
   const excluded = hidden.includes(hostId);
   const id = `unraid-${hostId}`;
-  if (!excluded && !count) return null;
+  if (!unraidDetected(hostId, count) && !excluded) return null;
   return (
     <div data-slot="unraid-switch" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       <Switch id={id} checked={!excluded} onCheckedChange={(on) => setPreference("unraidHidden", on ? hidden.filter((h) => h !== hostId) : [...hidden, hostId])} />
@@ -88,7 +89,7 @@ interface HostCardProps {
   system: SystemComponent | undefined;
   stacks?: number;
   containers?: number;
-  /** Unraid-managed containers of this host in the current inventory. */
+  /** Unraid-managed containers from a fresh, complete inventory of this host; undefined while unknown. */
   unraid?: number;
   allIds: string[];
   onFiles?: (host: Host) => void;

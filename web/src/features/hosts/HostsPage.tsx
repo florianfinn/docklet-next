@@ -7,6 +7,7 @@ import { useTranslations } from "use-intl";
 
 import { useCapability } from "@/data/use-capability";
 import { useContainers, useStacks, useSystemComponents } from "@/data/queries";
+import { inventoryHostsPending } from "@/data/inventory-recovery";
 import type { Host } from "@/domain/model";
 import { StatStrip } from "@/shared/component-set/stat-strip";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
@@ -26,10 +27,15 @@ export default function HostsPage() {
   const system = useSystemComponents();
   const [filesFor, setFilesFor] = useState<Host | null>(null);
   const ids = hosts.all.map((h) => h.id);
+  // A failed, partial or stale read says nothing about Unraid on that host.
+  const inventoryComplete = (hostId: string) => {
+    const host = hosts.byId.get(hostId);
+    return !!containers.data && !containers.isError && !!host && isHostAvailable(host) && !host.inventory?.stale && !inventoryHostsPending(containers.data, [hostId]);
+  };
   const count = (hostId: string) => ({
     stacks: stacks.data && !stacks.isError ? stacks.data.filter((s) => s.hostId === hostId).length : undefined,
     containers: containers.data && !containers.isError ? containers.data.filter((c) => c.hostId === hostId).length : undefined,
-    unraid: containers.data && !containers.isError ? containers.data.filter((c) => c.hostId === hostId && c.origin === "unraid").length : undefined,
+    unraid: inventoryComplete(hostId) ? containers.data!.filter((c) => c.hostId === hostId && c.origin === "unraid").length : undefined,
   });
 
   return (

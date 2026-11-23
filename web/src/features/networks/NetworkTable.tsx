@@ -3,6 +3,7 @@ import { useNetworkCapabilities } from "./use-network-capabilities";
 import { Boxes, Crosshair, Link2, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslations } from "use-intl";
+import { useHiddenUnraidIds } from "@/shared/hooks/use-host-scope";
 
 import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
 import { NETWORK_GROUPS, networkComposeOwner, networkGroup, removeBlock, type NetworkGroup } from "@/domain/networks";
@@ -65,17 +66,21 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
   const connect = useNetworkCapabilities("connectNetwork", networks.map((n) => n.id));
   const remove = useNetworkCapabilities("removeNetwork", networks.map((n) => n.id));
   const online = isHostAvailable(host);
-  const members = useMemo(() => {
+  const hidden = useHiddenUnraidIds();
+  const { members, hiddenCounts } = useMemo(() => {
     const byId = new Map(containers.map((c) => [c.id, c]));
     const out = new Map<string, NetworkMember[]>();
+    const hiddenCounts = new Map<string, number>();
     for (const a of topology.attachments) {
+      // Left-out Unraid containers are not listed; removal guards read the raw topology.
+      if (hidden.has(a.containerId)) { hiddenCounts.set(a.networkId, (hiddenCounts.get(a.networkId) ?? 0) + 1); continue; }
       const member = byId.get(a.containerId) ?? { id: a.containerId, name: a.containerId, state: "unknown" as const };
       const group = out.get(a.networkId) ?? [];
       if (!group.some((c) => c.id === member.id)) group.push(member);
       out.set(a.networkId, group);
     }
-    return out;
-  }, [containers, topology.attachments]);
+    return { members: out, hiddenCounts };
+  }, [containers, topology.attachments, hidden]);
   const memberNames = useMemo(() => {
     const names = new Map(containers.map((c) => [c.id, [c.name, c.serviceName ?? "", c.stackName ?? c.stackId ?? ""]]));
     const out = new Map<string, string[]>();
@@ -190,7 +195,7 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
                         <span className="text-muted-foreground">–</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right tabular"><NetworkUsage network={n} members={members.get(n.id) ?? []} /></TableCell>
+                    <TableCell className="text-right tabular"><NetworkUsage network={n} members={members.get(n.id) ?? []} hidden={hiddenCounts.get(n.id) ?? 0} /></TableCell>
                     <TableCell className="pr-2 text-right">
                       <ActionsMenu groups={groups} label={t("table.more", { name: n.name })} />
                     </TableCell>

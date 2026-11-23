@@ -4,8 +4,9 @@
 // License: Apache-2.0
 // Deviations: Original per-host detail query for M37 #579.
 
-import { useQuery } from "@tanstack/react-query";
+import { CancelledError, useQuery } from "@tanstack/react-query";
 
+import { hostDetailsEpoch } from "@/data/host-details-source";
 import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
 import { isHostAvailable } from "@/domain/hosts";
@@ -17,7 +18,13 @@ export function useHostDetails(host: Host): HostDetails | undefined {
   const available = isHostAvailable(host);
   const query = useQuery({
     queryKey: [...queryKeys.hostDetails, host.id, host.identity ?? ""],
-    queryFn: ({ signal }) => adapter.getHostDetails!(host.id, signal),
+    // A hosts or settings change during the read fences it; the refresh owner then reads again instead of publishing it.
+    queryFn: async ({ signal }) => {
+      const epoch = hostDetailsEpoch();
+      const details = await adapter.getHostDetails!(host.id, signal);
+      if (epoch !== hostDetailsEpoch()) throw new CancelledError({ silent: true });
+      return details;
+    },
     enabled: available && !!adapter.getHostDetails,
     retry: false,
   });

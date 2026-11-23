@@ -22,6 +22,7 @@ import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
 import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { ToneBadge, ToneDot } from "@/shared/components/tone";
 import { useHostScope, useVisibleContainers } from "@/shared/hooks/use-host-scope";
+import { UnraidHiddenHint } from "@/shared/components/unraid-hidden-hint";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/shared/ui/input-group";
@@ -409,6 +410,7 @@ function useSource(): (Source & { isPending: boolean; isError: boolean; error?: 
 }
 
 function TopologySection() {
+  const hiddenUnraid = useVisibleContainers().hiddenUnraid;
   const t = useTranslations("networks");
   const source = useSource();
   const [creating, setCreating] = useState<string | null>(null);
@@ -433,7 +435,7 @@ function TopologySection() {
     const partialHosts = hosts.filter((host) => isHostAvailable(host) && partialNetworkRead(source.topology, host.id));
     const partialIds = new Set(partialHosts.map((host) => host.id));
     const inventoryHosts = hosts.filter((host) => !partialIds.has(host.id)).map((host) => ({ ...host, inventory: source.topology.inventory?.[host.id] ?? host.inventory }));
-    content = <><InventoryNotice hosts={inventoryHosts} items={source.topology.networks} />{partialHosts.map((host) => <p key={host.id} aria-live="polite" className="mb-3 text-sm text-warning">{t("partial.host", { name: host.name })}</p>)}<Canvas source={source} onCreate={setCreating} /></>;
+    content = <><InventoryNotice hosts={inventoryHosts} items={source.topology.networks} /><UnraidHiddenHint count={hiddenUnraid} />{partialHosts.map((host) => <p key={host.id} aria-live="polite" className="mb-3 text-sm text-warning">{t("partial.host", { name: host.name })}</p>)}<Canvas source={source} onCreate={setCreating} /></>;
   }
   return <>{content}{creating && <CreateNetworkDialog
     open

@@ -21,6 +21,7 @@ import { queryKeys } from "./query-keys";
 import { useCurrentUser } from "./queries";
 import { createAppQueryClient } from "./app-query-client";
 import { refresh } from "./refresh-owner";
+import { noteHostDetailsChange } from "./host-details-source";
 
 const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   hosts: [queryKeys.hosts, queryKeys.systemComponents, queryKeys.hostDetails],
@@ -57,6 +58,8 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
       // One notification refreshes each matching query once and never aborts a read in flight (refresh-owner.ts).
       const offChanges = adapter.subscribeChanges((topics) => {
         const capability = topics.some((topic) => topic === "containers" || topic === "stacks" || topic === "hosts") ? [["capability"]] : [];
+        // Host details read before this change (old settings, previous connection) are fenced before the refresh starts new reads, then read again (use-host-details).
+        if (topics.some((topic) => topic === "hosts" || topic === "settings")) noteHostDetailsChange();
         refresh(client, [...capability, ...[...new Set(topics)].flatMap((topic) => TOPIC_KEYS[topic])]);
       });
       return () => { offDemand(); offRecent(); offChanges(); offStacks?.(); };

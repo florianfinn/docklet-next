@@ -98,7 +98,7 @@ export function BrandLoader({ size = 48, motion = true, label = "Docklet Next", 
       <span ref={host} aria-hidden data-slot="brand-logo" className="brand-logo" style={{ "--brand-logo-size": `${size}px` } as React.CSSProperties} dangerouslySetInnerHTML={markup} />
       {animated && (
         <span aria-hidden className="relative block h-0.5 w-40 overflow-hidden rounded-full bg-muted">
-          <i ref={bar} className="absolute inset-0 w-2/5 -translate-x-full bg-gradient-to-r from-transparent via-primary to-transparent" />
+          <i ref={bar} className="brand-loader-bar absolute inset-0 w-2/5 -translate-x-full" />
         </span>
       )}
     </span>

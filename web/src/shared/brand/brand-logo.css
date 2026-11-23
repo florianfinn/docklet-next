@@ -18,6 +18,15 @@
   --docklet-logo-secondary: #00d3f2;
 }
 
+/* Loader shimmer: same fixed brand roles as the logo, independent of personal themes. */
+.brand-loader-bar {
+  background: linear-gradient(90deg, transparent, #7f22fe, #0092b8, transparent);
+}
+
+.dark .brand-loader-bar {
+  background: linear-gradient(90deg, transparent, #8e51ff, #00d3f2, transparent);
+}
+
 .brand-logo > .dln-logo {
   display: block;
   width: auto;

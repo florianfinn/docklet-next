@@ -4,6 +4,7 @@ import { Layers, Package, ShieldAlert } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
+import { useHiddenUnraidIds } from "@/shared/hooks/use-host-scope";
 
 import { formatMem, formatRelative } from "@/domain/format";
 import { imageReference, imageUsage, type DockerImage } from "@/domain/images";
@@ -39,8 +40,12 @@ export function ImageName({ image, className }: { image: DockerImage; className?
 
 export function ConsumerLinks({ image, limit = 3 }: { image: DockerImage; limit?: number }) {
   const t = useTranslations("images");
-  if (!image.consumers.length) return <span className="text-xs text-muted-foreground">{t("consumersNone")}</span>;
-  const shown = image.consumers.slice(0, limit);
+  const hidden = useHiddenUnraidIds();
+  const consumers = hidden.size ? image.consumers.filter((c) => !hidden.has(c.containerId)) : image.consumers;
+  const th = useTranslations("common.hidden");
+  // Hidden references still use the image: never present them as unused.
+  if (!consumers.length) return <span className="text-xs text-muted-foreground">{image.consumers.length ? th("count", { count: image.consumers.length }) : t("consumersNone")}</span>;
+  const shown = consumers.slice(0, limit);
   return (
     <span className="flex flex-wrap items-center gap-1">
       {shown.map((c) =>
@@ -59,7 +64,7 @@ export function ConsumerLinks({ image, limit = 3 }: { image: DockerImage; limit?
           </Link>
         ),
       )}
-      {image.consumers.length > limit && <span className="text-xs text-muted-foreground">{t("consumersMore", { count: image.consumers.length - limit })}</span>}
+      {consumers.length > limit && <span className="text-xs text-muted-foreground">{t("consumersMore", { count: consumers.length - limit })}</span>}
     </span>
   );
 }

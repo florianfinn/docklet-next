@@ -74,3 +74,60 @@ it("drops a remembered choice only when the host removal is confirmed", async ()
   expect(preferencesStore.get().unraidHidden).toEqual(["orion"]);
   ok.unmount();
 });
+
+it("hides left-out Unraid references in image, volume and network displays without making anything look unused", async () => {
+  setAppLocale("en-US");
+  const { ConsumerLinks } = await import("@/features/images/ImageRow");
+  const { ConsumerChips } = await import("@/features/volumes/storage-visuals");
+  const { NetworkTable } = await import("@/features/networks/NetworkTable");
+  const { TOPOLOGY } = await import("@/data/demo/fixtures/topology");
+  const { HOSTS } = await import("@/data/demo/fixtures/hosts");
+  const image = { id: "atlas~img", consumers: [{ containerId: "c-duplicati", name: "duplicati", hostId: "atlas", state: "running" }, { containerId: "c-plain", name: "plain-app", hostId: "atlas", state: "running" }] } as unknown as import("@/domain/images").DockerImage;
+  const only = { ...image, consumers: [image.consumers[0]!] } as typeof image;
+  const volume = { consumers: [{ containerId: "c-krusader", containerName: "krusader", target: "/data", readOnly: false, running: true }] } as unknown as import("@/domain/volumes").Volume;
+  const atlas = HOSTS.find((h) => h.id === "atlas")!;
+  const br0 = TOPOLOGY.networks.find((n) => n.id === "n-atlas-br0")!;
+  const view = renderWithApp(<>
+    <div data-testid="image"><ConsumerLinks image={image} /></div>
+    <div data-testid="only"><ConsumerLinks image={only} /></div>
+    <div data-testid="volume"><ConsumerChips volume={volume} /></div>
+    <NetworkTable host={atlas} networks={[br0]} topology={TOPOLOGY} containers={[]} focus={null} query="" onClearQuery={() => {}} onFocus={() => {}} onConnect={() => {}} onRemove={() => {}} />
+  </>);
+  const text = (id: string) => view.getByTestId(id).textContent ?? "";
+  const usage = () => view.container.querySelector<HTMLElement>('button[aria-label^="br0:"]')?.getAttribute("aria-label") ?? "";
+  await waitFor(() => expect(usage().includes("1 container")).toBe(true));
+  expect(text("image").includes("duplicati")).toBe(true);
+  expect(text("volume").includes("krusader")).toBe(true);
+
+  act(() => preferencesStore.set((p) => ({ ...p, unraidHidden: ["atlas"] })));
+  await waitFor(() => expect(text("image").includes("duplicati")).toBe(false));
+  expect(text("image").includes("plain-app")).toBe(true);
+  expect(text("only")).toBe("1 hidden");
+  expect(text("volume")).toBe("1 hidden");
+  expect(usage()).toBe("br0: In use, 0 containers");
+});
+
+it("keeps a detected Unraid switch while the inventory is unknown and drops it only on a fresh empty result", async () => {
+  const { unraidDetected, resetUnraidDetection } = await import("./unraid-detection");
+  resetUnraidDetection();
+  expect(unraidDetected("atlas", undefined)).toBe(false);
+  expect(unraidDetected("atlas", 2)).toBe(true);
+  expect(unraidDetected("atlas", undefined)).toBe(true);
+  expect(unraidDetected("atlas", undefined)).toBe(true);
+  expect(unraidDetected("atlas", 0)).toBe(false);
+  expect(unraidDetected("atlas", undefined)).toBe(false);
+  resetUnraidDetection();
+});
+
+it("never prunes a remembered choice from a failed or partial host list", async () => {
+  setAppLocale("en-US");
+  preferencesStore.set((p) => ({ ...p, unraidHidden: ["atlas", "gone"] }));
+  const adapter = createDemoAdapter();
+  const partial = renderWithApp(<HostsPage />, { ...adapter, listHosts: async () => (await adapter.listHosts()).filter((h) => h.id !== "atlas") });
+  await waitFor(() => expect(partial.container.querySelectorAll("[data-host]").length > 0).toBe(true));
+  expect(preferencesStore.get().unraidHidden).toEqual(["atlas", "gone"]);
+  partial.unmount();
+  const failed = renderWithApp(<HostsPage />, { ...adapter, listHosts: async () => { throw new Error("read failed"); } });
+  await waitFor(() => expect(failed.container.textContent?.length).toBeGreaterThan(0));
+  expect(preferencesStore.get().unraidHidden).toEqual(["atlas", "gone"]);
+});

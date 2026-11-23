@@ -18,7 +18,8 @@ import { OverviewViewControls } from "@/shared/components/overview-mode-toggle";
 import { OverviewTable, type OverviewColumn, type TableView } from "@/shared/components/overview/overview-table";
 import { OverviewSkeleton } from "@/shared/components/overview-skeleton";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
-import { useHostScope, useHostsPending } from "@/shared/hooks/use-host-scope";
+import { useHostScope, useHostsPending, useVisibleContainers } from "@/shared/hooks/use-host-scope";
+import { UnraidHiddenHint } from "@/shared/components/unraid-hidden-hint";
 import { nextSort, type SortDir } from "@/shared/lib/table-sort";
 import { setPreference, useHostSelection, usePreference } from "@/shared/preferences/preferences-store";
 import { Button } from "@/shared/ui/button";
@@ -32,6 +33,7 @@ import { DEFAULT_VOLUME_SORT, filterVolumes, sortVolumes, volumeSortDefaultDir, 
 import { VolumeRow } from "./VolumeRow";
 
 export default function VolumesPage() {
+  const hiddenUnraid = useVisibleContainers().hiddenUnraid;
   const t = useTranslations("volumes");
   const ts = useTranslations("stacks");
   const tc = useTranslations("common.host");
@@ -133,6 +135,7 @@ export default function VolumesPage() {
         }
       />
       <InventoryNotice hosts={hosts.visible} items={visible} />
+      <UnraidHiddenHint count={hiddenUnraid} />
       <StatStrip compact
         className="md:grid-cols-5"
         items={[

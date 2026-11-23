@@ -10,6 +10,7 @@ import { ArrowRight, Download, Package, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
+import { useHiddenUnraidIds } from "@/shared/hooks/use-host-scope";
 
 import { formatDateTime, formatMem, formatRelative } from "@/domain/format";
 import { imageReference, imageUsage, shortDigest, imageRemovalBlocked, type DockerImage } from "@/domain/images";
@@ -68,6 +69,11 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
   const metadataText = (value: string | number | undefined) => metadata.isFetching && !detail ? td("metadataLoading") : metadata.isError ? td("metadataError") : value ?? td("unknown");
   // Where an update is installed: the first user workload of this image (never the agent).
   const user = image?.consumers.find((c) => !c.system);
+  const hiddenIds = useHiddenUnraidIds();
+  const th = useTranslations("common.hidden");
+  // Display only: hidden Unraid consumers still block removal below.
+  const consumers = image ? image.consumers.filter((c) => !hiddenIds.has(c.containerId)) : [];
+  const hiddenConsumers = image ? image.consumers.length - consumers.length : 0;
   return (
     <Sheet open={!!id} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full gap-0 p-0 sm:max-w-xl" data-surface="image-details">
@@ -130,9 +136,10 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                 {metadata.isError && <QueryError error={metadata.error} onRetry={() => void metadata.refetch()} />}
                 <Separator />
                 <Section title={td("consumers")}>
-                  {image.consumers.length ? (
+                  {hiddenConsumers > 0 && <p className="text-xs text-muted-foreground">{th("count", { count: hiddenConsumers })}</p>}
+                  {consumers.length ? (
                     <ul className="flex flex-col gap-1.5" data-slot="image-consumers">
-                      {image.consumers.map((c) => (
+                      {consumers.map((c) => (
                         <li key={c.containerId} className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 px-2.5 py-1.5 text-sm">
                           <span className="min-w-0 flex-1 font-medium [overflow-wrap:anywhere]">{c.system ? t("system") : c.name}</span>
                           {c.state !== "running" && <ToneBadge tone="gray">{td("stopped")}</ToneBadge>}
@@ -147,7 +154,7 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                         </li>
                       ))}
                     </ul>
-                  ) : (
+                  ) : hiddenConsumers ? null : (
                     <p className="text-sm text-muted-foreground">{td("consumersNone")}</p>
                   )}
                 </Section>

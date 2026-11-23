@@ -20,7 +20,8 @@ import { OverviewSkeleton } from "@/shared/components/overview-skeleton";
 import { OverviewTable, type TableView } from "@/shared/components/overview/overview-table";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
-import { useHostScope, useHostsPending } from "@/shared/hooks/use-host-scope";
+import { useHostScope, useHostsPending, useVisibleContainers } from "@/shared/hooks/use-host-scope";
+import { UnraidHiddenHint } from "@/shared/components/unraid-hidden-hint";
 import { nextSort, type SortDir } from "@/shared/lib/table-sort";
 import { setPreference, useHostSelection, usePreference } from "@/shared/preferences/preferences-store";
 import { Button } from "@/shared/ui/button";
@@ -41,6 +42,7 @@ const USAGES = ["all", "in-use", "unused", "dangling", "unknown"] as const;
  * links from containers and the security page land on the right entry.
  */
 export default function ImagesPage() {
+  const hiddenUnraid = useVisibleContainers().hiddenUnraid;
   const t = useTranslations("images");
   const ts = useTranslations("stacks");
   const tc = useTranslations("common.host");
@@ -122,6 +124,7 @@ export default function ImagesPage() {
         }
       />
       <InventoryNotice hosts={hosts.visible} items={visible} />
+      <UnraidHiddenHint count={hiddenUnraid} />
       <StatStrip compact
         className="md:grid-cols-5"
         items={[

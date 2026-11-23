@@ -7,6 +7,18 @@ import type { Host } from "@/domain/model";
 import { usePreference, useHostSelection } from "@/shared/preferences/preferences-store";
 
 const NO_HOSTS: Host[] = [];
+const NO_IDS: ReadonlySet<string> = new Set();
+
+/** IDs of Unraid-managed containers the user left out for their host; references to them are hidden for display only (never for safety checks). */
+export function useHiddenUnraidIds(): ReadonlySet<string> {
+  const containers = useContainers();
+  const unraidHidden = usePreference("unraidHidden");
+  return useMemo(() => {
+    if (!unraidHidden.length) return NO_IDS;
+    const hosts = new Set(unraidHidden);
+    return new Set((containers.data ?? []).filter((c) => c.origin === "unraid" && hosts.has(c.hostId)).map((c) => c.id));
+  }, [containers.data, unraidHidden]);
+}
 
 /** All hosts sorted by name, the visible subset of the sidebar filter and a lookup map. */
 export function useHostScope() {
