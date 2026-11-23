@@ -29,6 +29,7 @@ type Module struct {
 
 func NewModule(service *Service) *Module { return &Module{service: service} }
 
+type testOutput = handlerutil.Out[tailnettypes.TestResult]
 type statusOutput = handlerutil.Out[tailnettypes.Status]
 type settingsOutput = handlerutil.Out[tailnettypes.Settings]
 type emptyInput struct{}
@@ -49,6 +50,7 @@ func (m *Module) RegisterRoutes(api huma.API) {
 		{huma.Operation{OperationID: "get-tailnet-settings", Method: http.MethodGet, Path: "/settings/connections/tailnet", Summary: "Tailnet route settings"}, authz.PermSettingsRead},
 		{huma.Operation{OperationID: "update-tailnet-settings", Method: http.MethodPut, Path: "/settings/connections/tailnet", Summary: "Replace the tailnet credential"}, authz.PermSettingsWrite},
 		{huma.Operation{OperationID: "reset-tailnet", Method: http.MethodPost, Path: "/tailnet/reset", Summary: "Delete the hub's local tailnet identity"}, authz.PermSettingsWrite},
+		{huma.Operation{OperationID: "test-tailnet", Method: http.MethodPost, Path: "/tailnet/test", Summary: "Test tailnet setup"}, authz.PermSettingsWrite},
 	}
 	for i := range ops {
 		ops[i].op.Tags = tags
@@ -59,6 +61,8 @@ func (m *Module) RegisterRoutes(api huma.API) {
 	middleware.RegisterWithPermission(api, ops[1].op, ops[1].perm, m.settings)
 	middleware.RegisterWithPermission(api, ops[2].op, ops[2].perm, m.update)
 	middleware.RegisterWithPermission(api, ops[3].op, ops[3].perm, m.reset)
+	middleware.RegisterWithPermission(api, ops[4].op, ops[4].perm, m.test)
+	ProblemResponses(api, api.OpenAPI().Paths["/tailnet/test"].Post)
 	ProblemResponses(api, api.OpenAPI().Paths["/settings/connections/tailnet"].Put, "422")
 }
 
@@ -128,4 +132,15 @@ func (m *Module) reset(ctx context.Context, _ *emptyInput) (*statusOutput, error
 		return nil, huma.Error500InternalServerError("Tailnet reset failed")
 	}
 	return &statusOutput{Body: base.ApiResponse[tailnettypes.Status]{Success: true, Data: out}}, nil
+}
+
+func (m *Module) test(ctx context.Context, _ *emptyInput) (*testOutput, error) {
+	if err := m.unavailable(); err != nil {
+		return nil, err
+	}
+	out, err := m.service.manager.Test(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &testOutput{Body: base.ApiResponse[tailnettypes.TestResult]{Success: true, Data: out}}, nil
 }

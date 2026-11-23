@@ -8,6 +8,8 @@ import type { components } from "@/api/generated/schema";
 import type { Host } from "./model";
 
 export type TailnetStatus = components["schemas"]["TailnetStatus"];
+export type TestResult = components["schemas"]["TailnetTestResult"];
+export type TestCheck = components["schemas"]["TailnetTestCheck"];
 export type TailnetSettings = components["schemas"]["TailnetSettings"];
 export type TailnetUpdate = components["schemas"]["TailnetSettingsUpdate"];
 export type TailnetPeer = components["schemas"]["TailnetHostPeer"];
@@ -22,6 +24,10 @@ export interface TailnetApi {
   settings: () => Promise<TailnetSettings>;
   save: (input: TailnetUpdate) => Promise<TailnetSettings>;
   reset: () => Promise<void>;
+  test: () => Promise<TestResult>;
+  /** Capture these before a test; writes and reconnects fence results without fencing ordinary status observations. */
+  testEpoch: () => number;
+  testSequence: () => number;
 }
 
 /** Admission is independent of the existing node's connection and honours the server's mTLS refusal. */

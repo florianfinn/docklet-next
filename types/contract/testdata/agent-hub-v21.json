@@ -311,6 +311,7 @@
       {"method":"GET","path":"/environments/{id}/vulnerabilities/advisories/{key}","operationId":"get-vulnerability-advisory","sha256":"941a20c97f3fa0ea74ecf7b093be00d7ad27ae8449a67d23984927c1ca2f8874"},
       {"method":"GET","path":"/environments/{id}/vulnerabilities/all","operationId":"list-environment-vulnerabilities","sha256":"9ddd290cd41dac04cd7702bdf5ab2622cb2d0864ed9dd89b7b8cf65591451ca9"},
       {"method":"GET","path":"/environments/{id}/vulnerabilities/candidates","operationId":"get-vulnerability-candidates","sha256":"16f9ce25c8b36ed73c10d166d6d4e6deabc7b183fce5966451d845c9d16904f6"},
+      {"method":"GET","path":"/environments/{id}/vulnerabilities/candidates/runs/{activityId}","operationId":"get-vulnerability-candidate-run","sha256":"682917010d7b0e1a0954705ca560d5da961ff00871dfb2d9fc93719d9698e1a0"},
       {"method":"POST","path":"/environments/{id}/vulnerabilities/candidates/scan","operationId":"scan-vulnerability-candidates","sha256":"b6ccda78e9fc19e43cbd350cfac207ae8ecf9a337da701d92f5f8007a4445b1f"},
       {"method":"GET","path":"/environments/{id}/vulnerabilities/export","operationId":"export-environment-vulnerabilities","sha256":"4fa2da815e86838d6438058b786bc420e61b956cc5af33be29368d7ed9220e66"},
       {"method":"POST","path":"/environments/{id}/vulnerabilities/ignore","operationId":"ignore-vulnerability","sha256":"a16db1bdc4fdb14fea6bf10b8f0875cdba4224f2e4d27b7d675810b73fe9e377"},
@@ -371,6 +372,7 @@
       "VulnerabilityCandidateProof": {"sha256":"e7a904836a1174131ef848a5857756e2e32536934ac0ed717d6fadf51ba25ce2"},
       "VulnerabilityCandidateVerdict": {"sha256":"bf739430609b01887a24fefed885df80fc3892acfb316b346c42f3e2924f7214"},
       "VulnerabilityCandidateRun": {"sha256":"fae41a5f6a3a85b21c67da93de44f30b5ea3fe38df0d42e664263b19bcaab8d7"},
+      "BaseApiResponseVulnerabilityCandidateRun": {"sha256":"6b0887167beb2f7cc8e7bd7a01937be58ecec93ee31ad2f48ee8a7c24fa73f37"},
       "VulnerabilityCandidateRequest": {"sha256":"6c48d2211399aa27910e466345ae8184e103b55924146bd03fede02cfcd7aead"},
       "VulnerabilityIgnorePayload": {"sha256":"96439c76769c2d35251743df6ced1f2652ee06b888e6707057a4eda7cd972724"},
       "BaseApiResponseVulnerabilityIgnoredVulnerability": {"sha256":"bc97b904dbdf0ff029105eac0d1a0fedddbd4a734b1c374ad10ceda7f59105d9"},
@@ -402,6 +404,7 @@
       "VulnerabilityEnvironmentVulnerabilitySummary": {"sha256":"4c38983c29c00ff59f33f7336c8556f8f250a610a448d09c368391d5a85f6e8d"}
     },
     "edgeRoutes": [
+      {"method":"GET","path":"/api/environments/{id}/vulnerabilities/candidates/runs/{activityId}","command":"vulnerability.candidate_run"},
       {"method":"POST","path":"/api/environments/{id}/vulnerabilities/candidates/scan","command":"vulnerability.candidate_scan"},
       {"method":"GET","path":"/api/environments/{id}/vulnerabilities/candidates","command":"vulnerability.candidates"},
       {"method":"GET","path":"/api/environments/{id}/vulnerabilities/advisories/{key}","command":"vulnerability.advisory"},

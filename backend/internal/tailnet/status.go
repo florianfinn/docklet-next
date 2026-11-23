@@ -28,10 +28,11 @@ func (m *Manager) Status() tailnettypes.Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := tailnettypes.Status{
-		Enabled:      m.enabled,
-		Connection:   m.conn,
-		Provisioning: m.prov,
-		Generation:   m.gen,
+		Enabled:            m.enabled,
+		Connection:         m.conn,
+		Provisioning:       m.prov,
+		Generation:         m.gen,
+		CredentialRevision: m.credentialRevisionLocked(),
 	}
 	if m.enabled {
 		out.Mode = m.cred.Mode

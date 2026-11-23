@@ -16,7 +16,7 @@ import { imageReference } from "@/domain/images";
 import type { ActiveScannedImage, Finding, Host, InventoryObservation, ScannedImage, SecurityOverview } from "@/domain/model";
 import { ScanAdmissionError, type ScanAdmission } from "@/domain/security";
 import { splitInventoryId } from "./inventory-mapping";
-import { array, count, counts, finding, id, invalid, object, run, string, summaries } from "./vulnerability-decoders";
+import { array, choice, count, counts, finding, id, invalid, object, run, string, summaries } from "./vulnerability-decoders";
 import { createSecuritySettings, settingsValues } from "./security-settings";
 import { vulnerabilityTransport, VulnerabilityFailure } from "./vulnerability-transport";
 import type { CsrfClient } from "./csrf-client";
@@ -55,6 +55,19 @@ export async function readScanProgress(request: ReturnType<typeof vulnerabilityT
   if (r.activityId !== activity || r.environmentId !== "0") invalid();
   return r.targets ? Math.min(100, Math.round(100 * (r.scanned + r.failed + r.skipped) / r.targets)) : undefined;
 }
+/** Reads one stored candidate run; retention misses never borrow a newer run's counts. */
+export async function readCandidateRun(request: ReturnType<typeof vulnerabilityTransport>, host: string, activityId: string, signal?: AbortSignal) {
+  let body: unknown;
+  try { body = await request(`/environments/${encodeURIComponent(host)}/vulnerabilities/candidates/runs/${encodeURIComponent(activityId)}`, "GET", undefined, true, signal); }
+  catch (error) { if (error instanceof VulnerabilityFailure && error.code === "vulnerability.run-not-found") return undefined; throw error; }
+  const r = object(object(body).data);
+  if (r.activityId !== activityId) invalid();
+  return { activityId: id(r.activityId), trigger: choice(r.trigger, ["manual", "automatic"]),
+    status: choice(r.status, ["running", "completed", "partial", "failed", "cancelled", "interrupted"]),
+    startedAt: string(r.startedAt, 64), completedAt: r.completedAt === undefined ? undefined : string(r.completedAt, 64),
+    targets: count(r.targets), scanned: count(r.scanned), cached: count(r.cached), failed: count(r.failed), deferred: count(r.deferred) };
+}
+
 export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecurity" | "getActiveSecurity" | "runScan" | "setScanEnabled" | "getScanSettings" | "saveScanSettings" | "cancelScan"> {
   const request = vulnerabilityTransport(o.baseUrl, o.client, o.generation);
   const settings = createSecuritySettings(request, o.capability, o.changed);

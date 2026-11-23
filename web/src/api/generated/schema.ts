@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 048aa3bb08c3995e36e13403d102c7ff3ead9c64309c41cd9cf2f22ed77600f2
+// Revision: b30bd247ec9f0d49fcc5a9fc9548c99a65e0676b64df719838da0d928de8ac17
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4519,6 +4519,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/vulnerabilities/candidates/runs/{activityId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a retained candidate run */
+        get: operations["get-vulnerability-candidate-run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/vulnerabilities/candidates/scan": {
         parameters: {
             query?: never;
@@ -5390,6 +5407,23 @@ export interface paths {
         get: operations["get-tailnet-status"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tailnet/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test tailnet setup */
+        post: operations["test-tailnet"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7943,6 +7977,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseTailnetTestResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseTailnetTestResult.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["TailnetTestResult"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseUpdaterAutoUpdatePolicy: {
             /**
              * Format: uri
@@ -8228,6 +8274,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["VulnerabilityCandidateResults"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseVulnerabilityCandidateRun: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVulnerabilityCandidateRun.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VulnerabilityCandidateRun"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -13491,7 +13549,7 @@ export interface components {
         };
         TailnetProblem: {
             /** @enum {string} */
-            code: "tailnet.credential-rejected" | "tailnet.coordination-unreachable" | "tailnet.not-connected" | "tailnet.key-mint-failed" | "tailnet.mtls-unsupported";
+            code: "tailnet.credential-rejected" | "tailnet.coordination-unreachable" | "tailnet.not-connected" | "tailnet.key-mint-failed" | "tailnet.provider-unavailable" | "tailnet.mtls-unsupported" | "tailnet.mint-refused" | "tailnet.test-cleanup-failed" | "tailnet.test-running";
             /** Format: int64 */
             providerStatus?: number;
             /** Format: int64 */
@@ -13534,6 +13592,7 @@ export interface components {
         };
         TailnetStatus: {
             connection: components["schemas"]["TailnetConnection"];
+            credentialRevision: string;
             enabled: boolean;
             /** Format: int64 */
             generation: number;
@@ -13550,6 +13609,21 @@ export interface components {
             /** @description tailnet.* refusal code */
             routeCode?: string;
             tailnetName?: string;
+        };
+        TailnetTestCheck: {
+            /** @enum {string} */
+            code?: "tailnet.credential-rejected" | "tailnet.provider-unavailable" | "tailnet.not-connected" | "tailnet.mint-refused" | "tailnet.test-cleanup-failed" | "tailnet.test-running";
+            /** @enum {string} */
+            id: "credential" | "agent-key" | "cleanup" | "hub-joined" | "hub-tag" | "hub-address";
+            /** Format: int64 */
+            providerStatus?: number;
+            /** @enum {string} */
+            state: "pass" | "fail" | "skipped" | "unknown";
+        };
+        TailnetTestResult: {
+            checks: components["schemas"]["TailnetTestCheck"][];
+            credentialRevision: string;
+            stale: boolean;
         };
         UlimitsConfig: {
             /** Format: int64 */
@@ -36362,6 +36436,120 @@ export interface operations {
             };
         };
     };
+    "get-vulnerability-candidate-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                activityId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityCandidateRun"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "scan-vulnerability-candidates": {
         parameters: {
             query?: never;
@@ -40176,6 +40364,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseTailnetStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "test-tailnet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseTailnetTestResult"];
+                };
+            };
+            /** @description Tailnet or framework refusal */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["TailnetProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Tailnet or framework refusal */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["TailnetProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */

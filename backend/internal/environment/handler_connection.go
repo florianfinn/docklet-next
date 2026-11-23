@@ -42,7 +42,7 @@ func (h *EnvironmentHandler) TestConnection(ctx context.Context, input *TestConn
 	var runID string
 	if h.activityService != nil {
 		actor, _ := userctx.CurrentUserFromContext(ctx)
-		run, err := h.activityService.StartActivity(ctx, activitylib.StartRequest{EnvironmentID: input.ID, Type: activityDTO.TypeResourceAction, ResourceType: new("environment"), ResourceID: new(input.ID), StartedBy: actor, Step: "checking", MessageCode: string(activityDTO.CodeEventEnvironmentConnect)})
+		run, err := h.activityService.StartActivity(ctx, activitylib.StartRequest{EnvironmentID: input.ID, Type: activityDTO.TypeResourceAction, ResourceType: new("environment"), ResourceID: new(input.ID), StartedBy: actor, Step: "checking", Metadata: map[string]any{"action": "check_environment_connection"}, MessageCode: string(activityDTO.CodeEventEnvironmentConnect)})
 		if err != nil {
 			return nil, huma.Error503ServiceUnavailable("Connection check activity unavailable")
 		}

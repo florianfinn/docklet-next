@@ -5,6 +5,9 @@
 // Deviations: Original Tailscale UI and generation-fenced stream consumers.
 
 export const deConnections = {
+  "mint-refused": "Die Zugangsdaten dürfen möglicherweise keine Agent-Schlüssel erstellen. Prüfe den Bereich Auth keys: write und das Tag tag:docklet-agent.",
+  "test-cleanup-failed": "Der Testschlüssel konnte nicht gelöscht werden. Er läuft nach fünf Minuten ab.",
+  "test-running": "Ein Einrichtungstest läuft bereits. Warte, bis er abgeschlossen ist.",
   "installerUnavailable": "Der Host wurde angelegt, aber sein einmaliger Installer-Schlüssel oder die Hub-Adresse ist nicht verfügbar. Entferne den Host und füge ihn erneut hinzu, um einen vollständigen Installer zu erhalten.",
   "continue": "Weiter",
   "title": "Verbindungen",

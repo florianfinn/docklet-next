@@ -5,6 +5,9 @@
 // Deviations: Original Tailscale UI and generation-fenced stream consumers.
 
 export const enConnections = {
+  "mint-refused": "The credential may not create agent keys. Check the scope Auth keys: write and the tag tag:docklet-agent.",
+  "test-cleanup-failed": "The test key could not be deleted. It expires after five minutes.",
+  "test-running": "A setup test is already running. Wait for it to finish.",
   "installerUnavailable": "The host was created, but its one-use installer key or hub address is unavailable. Remove and re-add the host to create a complete installer.",
   "continue": "Continue",
   "title": "Connections",

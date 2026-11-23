@@ -630,3 +630,26 @@ None. Field naming follows the maintainer ("only IP and domain matter").
 
 #### Revision v1 (design verify R7, AUTO in phase 0)
 `containerDetection` is `container` | `unknown`; `none` is dropped because a missing container ID does not prove bare metal (cgroup probes fail the same way). `unknown` never offers interface addresses.
+
+### Setup test codes
+
+The administrator-only `POST /tailnet/test` checks the saved credential independently
+of hub membership. OAuth mode creates a non-reusable, non-ephemeral agent-tagged
+key with a requested lifetime of 300 seconds, without preauthorization, and deletes
+it immediately. A mint pass proves permission to create that tagged key; it does
+not prove the tailnet access policy. Manual mode skips the provider checks.
+
+- `tailnet.mint-refused`: the provider refused minting after token validation;
+  check Auth keys: write and permission to use `tag:docklet-agent`.
+- `tailnet.test-cleanup-failed`: the test key could not be deleted or its ID was
+  missing. The requested expiry is five minutes.
+- `tailnet.test-running`: another setup test owns the hub's single test slot (409).
+- `tailnet.credential-rejected`: the provider rejected the credential.
+- `tailnet.provider-unavailable`: provider transport or response failure. An
+  ambiguous mint leaves cleanup unknown; the test never retries a mint.
+- `tailnet.not-connected`: the observed hub membership, tag or address check failed.
+
+Results carry a process-unique credential revision. Replacement, reset and disable
+fence earlier results; stale results skip hub checks. Cleanup always uses the
+starting token and key ID, including after client cancellation. Results and test
+keys are never persisted.

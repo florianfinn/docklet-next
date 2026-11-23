@@ -8,11 +8,14 @@ package tailnet
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -87,6 +90,9 @@ func (c *ManagerConfig) defaults() {
 type Manager struct {
 	cfg ManagerConfig
 
+	testMu       sync.Mutex
+	bootID       string
+	credCounter  uint64
 	mu           sync.Mutex
 	gen          int64
 	enabled      bool
@@ -119,6 +125,7 @@ func NewManager(cfg ManagerConfig) *Manager {
 	cfg.defaults()
 	return &Manager{
 		cfg:       cfg,
+		bootID:    newBootID(),
 		conn:      tailnettypes.Connection{State: "off"},
 		prov:      tailnettypes.Provisioning{State: "not-configured"},
 		listeners: map[int]func(){},
@@ -169,6 +176,9 @@ func (m *Manager) Apply(ctx context.Context, enabled bool, cred Credential) {
 		return
 	}
 	m.mu.Lock()
+	if m.cred != cred || m.enabled != enabled || !enabled {
+		m.credCounter++
+	}
 	m.gen++
 	gen := m.gen
 	old := m.run
@@ -226,6 +236,7 @@ func (m *Manager) updateCredential(enabled bool, cred Credential) bool {
 		return false
 	}
 	m.cred = cred
+	m.credCounter++
 	m.provApplied = m.provSeq
 	m.prov = initialProvisioning(true, cred)
 	gen := m.gen
@@ -471,4 +482,16 @@ func (m *Manager) serve(ctx context.Context, r *run, node Node) {
 	}
 	m.mu.Unlock()
 	m.watch(ctx, r.gen, node)
+}
+
+func newBootID() string {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		panic("tailnet boot identity unavailable")
+	}
+	return hex.EncodeToString(id[:])
+}
+
+func (m *Manager) credentialRevisionLocked() string {
+	return m.bootID + ":" + strconv.FormatUint(m.credCounter, 10)
 }
