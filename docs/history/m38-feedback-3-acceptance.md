@@ -30,7 +30,7 @@ every pushed head.
 | all | Agent contract 23 | Failed with 2 blockers: the container check route was missing, and the refused-tag pattern applied to the list instead of its items. Fixed; the verify passed. |
 | #592 | Proxy adoption | Failed with 2 blockers. Fixed; the verify passed. |
 | #599, #598, #601 | Tailscale setup, refused tags, masked secrets, tailnet host details | Failed with 1 blocker, then 1 more: an identical save during the token wait was overwritten. Fixed; the third round passed. |
-| #595, #594, #597 | Update checks and refusal explanations | The first part failed with 2 blockers, the per-host check with 1 and the fixes with 1 more: an unknown admission of a host check was kept and never resent. A combined verify passed. |
+| #595, #594, #597 | Update checks and refusal explanations | The first part failed with 2 blockers. Its correction review found stale refusal predictions after a failed eligibility read. The per-host review found that an unknown admission was kept and never resent. A combined verify passed. |
 | #596, #593, #469 | Dashboard filter, menu entry, schedule reads, job targets | Passed. |
 | all | Acceptance fixes | The first failed with 1 blocker (stale candidates on build-only projects); fixed and passed. Partial counts passed. |
 | all | Closing integration (#603) | Round 1 failed: eligibility offered an update beside an unchanged `${VAR:-…}` sidecar that admission refused. Round 2 failed on unrelated YAML anchors and round 3 on multi-line sidecars and the cost on a 256-service stack. Eligibility was rebuilt on the writer's own read-only validation; one parse brought the dense 256-service stack from 84 s to 3.3 s. Round 4 passed without findings. |
@@ -49,8 +49,9 @@ the final test-only commit.
 ## Findings during acceptance
 
 - **Candidate, U2.** A project whose services are all built locally made the
-  per-host check partial, because it reported no registry images. Fixed in
-  `93948bfe`: such a check is an empty observation and clears stale candidates.
+  per-host check partial, because it reported no registry images. Fixed in `93948bfe` so build-only checks succeed. Review then found that this
+  shortcut retained stale candidates; `e7329a87` treats the result as an empty
+  observation and clears them.
 - **Candidate, U3.** The build service's explanation disappeared once its peer
   became selectable. Fixed in `93948bfe`: the notice explains every current
   binding again.
@@ -62,9 +63,10 @@ the final test-only commit.
   for a refused agent key (T1B) was still active. After the restore, delta 2
   passed.
 - **Delta 1, U2.** The all-hosts check ended partial on targets whose image
-  exists only locally and showed only an error. By maintainer decision a partial
-  check now reports its counts, says how many targets could not be checked and
-  links to the run. Local-only images are a follow-up (#604). One more delta 1
+  exists only locally and showed only an error. By maintainer decision a partial check now reports its update
+  counts and links to the run. It gives a failed-target count when target
+  details are readable; the all-hosts check says that some targets could not be
+  checked. Local-only images are a follow-up (#604). One more delta 1
   failure came from a sandbox registry relay that kept dead connections; it was
   diagnosed and repaired in the kit and was not a product defect.
 
