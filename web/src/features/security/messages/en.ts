@@ -105,7 +105,7 @@ export const enSecurity = {
   strip: {
     critical: "Critical findings", high: "High findings", fixable: "Findings with a fix", fixableSub: "of {total} findings have a fix",
     reported: "Reported findings", onlyFixable: "Only fixable findings are reported", scanSettings: "Scan settings",
-    images: "Images scanned", imagesValue: "{count} of {total} images",
+    images: "Images scanned", imagesValue: "{count} of {total, plural, one {# image} other {# images}}",
   },
   top: "Top findings",
   perImage: "Findings per image / stack",

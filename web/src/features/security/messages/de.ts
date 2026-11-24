@@ -104,9 +104,9 @@ export const deSecurity: typeof enSecurity = {
   trend: { title: "Befunde je Scan", runs: "{count} Scans · ▲ manuell", label: "Befunde je Scan" },
   share: { severity: "Befunde nach Schweregrad", exposure: "Nutzung der betroffenen Images", running: "Laufend", stopped: "Gestoppt", unused: "Ungenutzt" },
   strip: {
-    critical: "Kritische Befunde", high: "Befunde mit hohem Schweregrad", fixable: "Befunde mit Fix", fixableSub: "von {total} Befunden haben einen Fix",
+    critical: "Kritische Befunde", high: "Hohe Befunde", fixable: "Befunde mit Fix", fixableSub: "von {total} Befunden haben einen Fix",
     reported: "Gemeldete Befunde", onlyFixable: "Es werden nur Befunde mit Fix gemeldet", scanSettings: "Scan-Einstellungen",
-    images: "Images gescannt", imagesValue: "{count} von {total} Images",
+    images: "Images gescannt", imagesValue: "{count} von {total, plural, one {# Image} other {# Images}}",
   },
   top: "Wichtigste Befunde",
   perImage: "Befunde je Image / Stack",

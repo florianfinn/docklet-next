@@ -82,6 +82,18 @@ describe.each(["en-US", "de"] as const)("overview counts in %s", (locale) => {
     expect(scanned.textContent?.includes(formatRelative(f.data.images[0]!.scannedAt))).toBe(true);
   });
 
+  it("counts only readable images in the scanned total and uses the singular for one image", async () => {
+    const f = await overviewFixture();
+    setAppLocale(locale);
+    const stale = { ...f.data.images[0]!, id: "0~sha256:stale", unavailable: true };
+    const view = renderWithApp(overview({ ...f.data, images: [...f.data.images, stale] }), f.adapter);
+    expect(metric(t.strip.images).querySelector("dd > span")?.textContent).toBe(locale === "de" ? "4 von 5 Images" : "4 of 5 images");
+    view.unmount();
+    const one = f.data.images.filter((image) => image.scannedAt).slice(0, 1);
+    renderWithApp(overview({ ...f.data, images: one }), f.adapter);
+    expect(metric(t.strip.images).querySelector("dd > span")?.textContent).toBe(locale === "de" ? "1 von 1 Image" : "1 of 1 image");
+  });
+
   it("explains fixable-only reporting and links to the existing scan settings section", async () => {
     const f = await overviewFixture();
     setAppLocale(locale);

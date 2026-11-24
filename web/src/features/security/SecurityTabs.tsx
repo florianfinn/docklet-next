@@ -89,7 +89,7 @@ export function OverviewTab({ images: allImages, findings, history, stacks, host
           { label: t(ignoreUnfixed === true ? "strip.reported" : "strip.fixable"), value: ignoreUnfixed === true ? findings.length : fixable, sub: ignoreUnfixed === true
             ? <>{t("strip.onlyFixable")} <Link to="/settings/security" className="underline underline-offset-2">{t("strip.scanSettings")}</Link></>
             : ignoreUnfixed === false ? t("strip.fixableSub", { total: findings.length }) : undefined },
-          { label: t("strip.images"), value: t("strip.imagesValue", { count: images.length, total: allImages.length }), sub: images[0] ? formatRelative(images[0].scannedAt) : undefined },
+          { label: t("strip.images"), value: t("strip.imagesValue", { count: images.length, total: allImages.filter((i) => !i.unavailable).length }), sub: images[0] ? formatRelative(images[0].scannedAt) : undefined },
         ]}
       />
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
