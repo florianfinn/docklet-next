@@ -36,19 +36,26 @@ function mount(locale: Locale = "en-US", value = check, options: { allowed?: boo
 for (const locale of ["en-US", "de"] as const) {
   it.each(Object.keys(SELF_UPDATE_STATE_KEYS) as Array<SelfUpdateCheck["eligibility"]["state"]>)(`UI-a ${locale} renders %s eligibility and copyable commands`, async state => {
     const f = mount(locale, { ...check, eligibility: { ...check.eligibility, state } });
-    await waitFor(() => expect(screen.queryByText(f.t("settings.updates.selfUpdate.currentVersion", { version: "1.0.0" })) !== null).toBe(true));
-    expect(screen.queryByText(f.t(SELF_UPDATE_STATE_KEYS[state])) !== null).toBe(true);
+    await waitFor(() => expect(screen.queryByText(state === "current" ? f.t("common.versionBadge.current", { version: "1.0.0" }) : "1.0.0") !== null).toBe(true));
+    // Current and available read from the badges; every other state keeps its state line.
+    expect(screen.queryByText(f.t(SELF_UPDATE_STATE_KEYS[state])) !== null).toBe(state !== "current" && state !== "available");
     expect((screen.getByRole("button", { name: f.t("settings.updates.selfUpdate.hub") }) as HTMLButtonElement).disabled).toBe(state !== "available");
+    const user = userEvent.setup();
+    const opened = state === "not-eligible" || state === "unavailable";
+    expect(screen.queryByText(check.eligibility.manual![0]!) !== null).toBe(opened);
+    if (!opened) await user.click(screen.getByRole("button", { name: f.t("settings.updates.selfUpdate.manualCommands", { count: 2 }) }));
     expect(screen.getByText(check.eligibility.manual![0]!) !== null).toBe(true);
-    const user = userEvent.setup(); const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+    const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     await user.click(screen.getAllByRole("button", { name: locale === "de" ? "Kopieren" : "Copy" })[0]!);
     expect(clipboard).toHaveBeenCalledWith(check.eligibility.manual![0]); clipboard.mockRestore();
-    expect(screen.getByText(f.t("settings.updates.selfUpdate.targetVersion", { version: "1.0.1" })) !== null).toBe(true);
+    expect(screen.queryByText(f.t("common.versionBadge.available", { version: "1.0.1" })) !== null).toBe(state === "available");
   });
   it.each(Object.entries(SELF_UPDATE_CODE_KEYS))(`UI-a ${locale} renders reason %s with disabled action`, async (code, key) => {
     const f = mount(locale, { ...check, eligibility: { ...check.eligibility, state: "not-eligible", code: code as NonNullable<SelfUpdateCheck["eligibility"]["code"]> } });
     await waitFor(() => expect(screen.queryByText(f.t(key)) !== null).toBe(true));
     expect((screen.getByRole("button", { name: f.t("settings.updates.selfUpdate.hub") }) as HTMLButtonElement).disabled).toBe(true);
+    // A busy host runs an update already; its commands stay collapsed.
+    if (code === "host.busy") await userEvent.setup().click(screen.getByRole("button", { name: f.t("settings.updates.selfUpdate.manualCommands", { count: 2 }) }));
     expect(screen.getByText(check.eligibility.manual![1]!) !== null).toBe(true);
   });
   it(`UI-c ${locale} hides the update and check actions for non-admins`, async () => {
@@ -141,14 +148,14 @@ for (const locale of ["en-US", "de"] as const) {
     let release!: (value: SelfUpdateCheck) => void;
     const getSelfUpdate = vi.fn(async (_host: string, options?: { refresh?: boolean }) => options?.refresh ? new Promise<SelfUpdateCheck>(resolve => { release = resolve; }) : current);
     const f = mount(locale, current, { overrides: { getSelfUpdate } }); const user = userEvent.setup();
-    await waitFor(() => expect(screen.queryByText(f.t(SELF_UPDATE_STATE_KEYS.current)) !== null).toBe(true));
+    await waitFor(() => expect(screen.queryByText(f.t("common.versionBadge.current", { version: "1.0.0" })) !== null).toBe(true));
     const button = screen.getByRole("button", { name: f.t("settings.updates.selfUpdate.check") }) as HTMLButtonElement;
     await user.click(button);
     expect(getSelfUpdate).toHaveBeenLastCalledWith("0", { refresh: true });
     await waitFor(() => expect(button.disabled).toBe(true));
     expect(button.querySelector("[data-icon='inline-start']") !== null).toBe(true);
     await act(async () => { release(check); });
-    await waitFor(() => expect(screen.queryByText(f.t("settings.updates.selfUpdate.targetVersion", { version: "1.0.1" })) !== null).toBe(true));
+    await waitFor(() => expect(screen.queryByText(f.t("common.versionBadge.available", { version: "1.0.1" })) !== null).toBe(true));
     expect(button.disabled).toBe(false);
     expect(screen.getByRole("status").textContent?.includes(locale === "de" ? "zuletzt geprüft" : "last checked")).toBe(true);
   });

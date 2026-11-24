@@ -21,6 +21,7 @@ export function VersionBadges({ model, variant, link, className }: { model: Vers
     {model.target && (link
       ? <ToneBadge tone="orange" className={cn(size, "font-mono font-semibold")} asChild><Link to={link.href} aria-label={t("targetLabel", { name: link.name, version: model.target })} data-slot="target-version">{t(variant === "card" ? "target" : "available", { version: model.target })}</Link></ToneBadge>
       : <ToneBadge tone="orange" className={cn(size, "font-mono font-semibold")} data-slot="target-version">{t(variant === "card" ? "target" : "available", { version: model.target })}</ToneBadge>)}
-    {model.reason && <span className="sr-only" data-slot="version-reason">{t(`reasons.${model.reason}`)}</span>}
+    {/* The panel states its reason in its own status line. */}
+    {variant === "card" && model.reason && <span className="sr-only" data-slot="version-reason">{t(`reasons.${model.reason}`)}</span>}
   </span>;
 }
