@@ -40,9 +40,8 @@ it.each([false, true])("list and detail retain checked service state after a rea
   expect(initial.services).toHaveLength(1); expect(initial.services[0]!.update.state).toBe("unchecked");
   const view = renderWithApp(<DetailHeader />, f.adapter);
   await screen.findByRole("heading", { name: "Example" });
-  await userEvent.click(screen.getByRole("button", { name: catalogs["en-US"].stacks.detail.redeployMenu }));
-  const check = await screen.findByRole("menuitem", { name: catalogs["en-US"].stacks.detail.actions.check });
-  await waitFor(() => expect(check.getAttribute("aria-disabled") === "true").toBe(false)); await userEvent.click(check);
+  const check = await screen.findByRole("button", { name: catalogs["en-US"].containers.updateCheck.check });
+  await waitFor(() => expect(check.hasAttribute("disabled")).toBe(false)); await userEvent.click(check);
   await screen.findByRole("button", { name: /Update status.*1 update/i });
   const listed = await f.adapter.listStacks(), detail = await f.adapter.getStack("first~project");
   expect(detail.services[0]!.update).toEqual(listed[0]!.services[0]!.update);

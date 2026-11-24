@@ -126,7 +126,7 @@ func TestBindingRefusalConstructionGuard(t *testing.T) {
 		"project/lifecycle_binding.go:bindingFailure":             1,
 		"project/lifecycle_deploy.go:PrepareDeployPoint":          3,
 		"updater/check_relay.go:relayedCheckRefusal":              1,
-		"activity/runtime_layout_refusal.go:const":                1,
+		"activity/runtime_layout_refusal.go:const":                2,
 		"activity/runtime_layout_refusal.go:runtimeTargetFailure": 1,
 		"activity/runtime_layout_refusal.go:runtimeLayoutBinding": 1,
 		"activity/runtime_sender.go:metadata":                     1,
@@ -156,7 +156,8 @@ func TestBindingRefusalConstructionGuard(t *testing.T) {
 						found[site]++
 					}
 				case *ast.Ident:
-					if n.Name == "runtimeLayoutUnsupported" && n.Obj != nil && n.Obj.Kind == ast.Con && site != rel+":const" {
+					// Counted by name: a use from another file of the package has no resolved Obj.
+					if n.Name == "runtimeLayoutUnsupported" {
 						found[site]++
 					}
 				case *ast.CallExpr:

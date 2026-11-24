@@ -200,7 +200,7 @@ export default function StacksPage() {
         ) : stacks.visible.length === 0 && hosts.visible.some((h) => unreadableRows(h.inventory, ["stacks"]).count > 0 || !!h.inventory?.stale) ? (
           // A host whose stacks could not be read is never shown as "no stacks yet" (#600).
           <EmptyState icon={<AlertTriangle />} title={t("emptyUnreadable.title")} description={t("emptyUnreadable.description")} />
-        ) : stacks.visible.length === 0 && (layout !== "hosts" || hosts.visible.length === 0) ? (
+        ) : stacks.visible.length === 0 ? (
           <EmptyState
             icon={<Layers />}
             title={t("emptyAll.title")}

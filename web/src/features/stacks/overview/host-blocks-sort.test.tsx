@@ -1,10 +1,11 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
+import { catalogs } from "@/app/i18n/catalog";
 import { renderWithApp } from "@/test/render";
 
 import { cappedGrid } from "@/shared/lib/host-block-grid";
@@ -86,10 +87,12 @@ describe("stack host blocks", () => {
   });
 });
 
-it("keeps a host check available when its inventory has no stacks", async () => {
+// AUTO-9: no stack anywhere keeps the first-run empty state; the header checks all hosts.
+it("keeps the first-run empty state with the all-hosts check when no stack exists", async () => {
  const adapter = createDemoAdapter(), hosts = await adapter.listHosts();
  adapter.listHosts = async () => [hosts[0]!]; adapter.listStacks = async () => [];
  renderWithApp(<StacksPage />, adapter);
- expect((await screen.findByRole("button", { name: "Auf Updates prüfen" })) instanceof HTMLElement).toBe(true);
- expect(document.querySelectorAll('[data-slot="host-block-actions"]').length).toBe(1);
+ expect((await screen.findByRole("button", { name: catalogs.de.stacks.hostCheck.all })) instanceof HTMLElement).toBe(true);
+ await waitFor(() => expect(screen.queryByText(catalogs.de.stacks.emptyAll.title) !== null).toBe(true));
+ expect(document.querySelectorAll('[data-slot="host-block-actions"]').length).toBe(0);
 });

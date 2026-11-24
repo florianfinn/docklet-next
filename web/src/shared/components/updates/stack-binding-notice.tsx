@@ -28,7 +28,10 @@ export function useStackEligibility(stackId: string, enabled = true) {
   const query = useQuery({ queryKey: ["stack", stackId, "update-eligibility"], queryFn: () => adapter.getUpdateEligibility!(stackId), enabled: adapter.kind === "http" && enabled && supported && read.available && !!adapter.getUpdateEligibility, staleTime: 0 });
   const stack = useStack(stackId), services = stack.data?.services;
   const updatable = services ? new Set(services.filter((service) => hasUpdate(service.update)).map((service) => service.name)) : undefined;
-  const bindings = query.data?.project ? [query.data.project] : (query.data?.services ?? []).flatMap((row) => row.binding ? [row.binding] : []);
+  // Only a current successful read predicts; data retained after a failed refetch or
+  // a version change to an agent without the read predicts nothing.
+  const data = enabled && supported && read.available && query.status === "success" ? query.data : undefined;
+  const bindings = data?.project ? [data.project] : (data?.services ?? []).flatMap((row) => row.binding ? [row.binding] : []);
   // The whole stack stays offered while one service with an update can still be installed alone.
   const blocksAll = bindings.some((binding) => binding.scope === "project") || (!!updatable && updatable.size > 0 && [...updatable].every((name) => bindings.some((binding) => binding.service === name)));
   return { ...query, bindings, updatable, relevant: blockingBindings(bindings, "*", updatable), blocksAll, checking: enabled && !!adapter.getUpdateEligibility && read.available && ((hostId !== "0" && hosts.isPending) || supported && query.isPending) };

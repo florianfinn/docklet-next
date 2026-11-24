@@ -15,7 +15,7 @@ import { AdapterOutcomeError } from "@/data/capability";
 import { renderWithApp } from "@/test/render";
 import { StackUpdateDialog } from "./stack-update-dialog";
 import { CheckUpdatesButton } from "./check-updates-button";
-import { useStackEligibility } from "./stack-binding-notice";
+import { StackBindingNotice, useStackEligibility } from "./stack-binding-notice";
 
 const de = catalogs.de;
 
@@ -76,4 +76,25 @@ it("keeps a manual check usable after an unknown outcome and says it did not fin
   expect(button.hasAttribute("disabled")).toBe(false);
   await userEvent.click(button);
   await waitFor(() => expect(calls).toBe(2));
+});
+
+// A prediction belongs to the current successful read only.
+it("drops a predicted refusal when the eligibility refetch fails", async () => {
+  const f = updateFixture(); await f.adapter.getCurrentUser();
+  const host = (await createDemoAdapter().listHosts())[0]!;
+  host.id = "direct"; host.componentVersion = { ...host.componentVersion, agentContractVersion: 23 } as NonNullable<typeof host.componentVersion>;
+  f.adapter.listHosts = async () => [host];
+  let failed = false;
+  f.adapter.getUpdateEligibility = async () => { if (failed) throw new Error("failed read"); return { project: { scope: "project", reason: "unparsable" }, services: [] }; };
+  function Probe() {
+    const e = useStackEligibility("direct~project");
+    return <><p>{e.isError ? "failed" : e.isSuccess ? "ready" : "pending"}</p><p>{e.blocksAll ? "blocked" : "offered"}</p><button onClick={() => { failed = true; void e.refetch(); }}>refetch</button><StackBindingNotice stackId="direct~project" /></>;
+  }
+  renderWithApp(<Probe />, f.adapter);
+  await screen.findByText("ready");
+  expect(screen.getByText("blocked").textContent).toBe("blocked");
+  await userEvent.click(screen.getByRole("button", { name: "refetch" }));
+  await screen.findByText("failed");
+  expect(screen.queryByText("blocked") === null).toBe(true);
+  expect(screen.queryByRole("status") === null).toBe(true);
 });

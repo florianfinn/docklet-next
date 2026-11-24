@@ -7,7 +7,7 @@
 import { expect, it, vi } from "vitest";
 import { createDemoAdapter } from "../demo/demo-adapter";
 import { createDisconnectedAdapter } from "../disconnected-adapter";
-import { RunGate, GATE_RULES } from "../run-gate";
+import { RunGate, GATE_RULES, withRunGate } from "../run-gate";
 import { mapActivityDetail } from "./map-dto";
 import { renderRun, type CodedActionRun } from "../message-code";
 import { updateFixture } from "./stack-updates.test-support";
@@ -78,4 +78,22 @@ it("the demo port targets one host and the disconnected port refuses it", async 
   expect(run.hostId).toBe(host.id); expect(run.kind).toBe("check-updates");
   await expect(createDisconnectedAdapter().checkHostUpdates!(host.id)).rejects.toMatchObject({ outcome: { kind: "not-available" } });
  } finally { vi.clearAllTimers(); vi.useRealTimers(); }
+});
+
+// A host check is safe to resend: one dropped POST must not lock the host check for the session.
+it("sends a host check again after one dropped POST", async () => {
+  const f = updateFixture(); let posts = 0, drop = true;
+  f.state.hold = (path, init) => {
+    if (path.endsWith("/jobs/update-check-host/run") && init.method === "POST") {
+      posts++;
+      if (drop) { drop = false; return Promise.reject(new TypeError("network")); }
+      return Promise.resolve(response({ success: true, runId: "example-run", status: "queued" }, 202));
+    }
+    return path.includes("/runs/") ? Promise.resolve(response({ id: "example-run", jobId: "update-check-host", environmentId: "direct", activityId: "example-activity" })) : undefined;
+  };
+  const gated = withRunGate(f.adapter);
+  await expect(gated.checkHostUpdates!("direct")).rejects.toMatchObject({ outcome: { code: "runtime.admission-unknown" } });
+  const second = await gated.checkHostUpdates!("direct").then((value) => value, (error: unknown) => error);
+  expect(posts).toBe(2);
+  expect(second).toBe("example-activity");
 });

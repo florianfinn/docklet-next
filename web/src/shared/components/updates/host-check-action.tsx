@@ -51,14 +51,17 @@ function waitForUpdateCheck(adapter: DockletAdapter, id: string, signal: AbortSi
 export function HostCheckAction({ hostId }: { hostId?: string }) {
   const adapter = useAdapter(), client = useQueryClient(), t = useTranslations("stacks.hostCheck");
   const errors = useImageError();
-  const capability = useCapability("checkAllUpdates"), action = useUpdateAction(hostId ?? "all"), runs = useActionRuns();
+  const unfinished = useTranslations("containers.updateCheck")("unfinished");
+  const capability = useCapability("checkAllUpdates"), action = useUpdateAction(hostId ?? "all", unfinished), runs = useActionRuns();
   const pending = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
     const cancel = () => pending.current?.abort();
     const off = identityLifetime(adapter).listen(cancel);
     return () => { cancel(); off(); };
   }, [adapter, hostId]);
-  const observedBusy = runs.some((r) => active(r) && r.kind === "check-updates" && (hostId === undefined ? !r.jobRef && !r.stackId && !r.containerId : r.hostId === hostId && (r.jobRef?.jobId === "update-check-host" || adapter.kind === "demo" && !r.stackId && !r.containerId)));
+  // A running all-hosts check also covers each host.
+  const allHosts = (r: { jobRef?: unknown; stackId?: string; containerId?: string }) => !r.jobRef && !r.stackId && !r.containerId;
+  const observedBusy = runs.some((r) => active(r) && r.kind === "check-updates" && (allHosts(r) || hostId !== undefined && r.hostId === hostId && (r.jobRef?.jobId === "update-check-host" || adapter.kind === "demo" && !r.stackId && !r.containerId)));
   const busy = action.busy || observedBusy;
   const supported = !!adapter.checkHostUpdates;
   const check = () => {

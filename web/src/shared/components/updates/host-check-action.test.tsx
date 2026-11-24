@@ -20,6 +20,7 @@ import { queryKeys } from "@/data/query-keys";
 import { ActivityCenter } from "@/features/activity/ActivityCenter";
 import { activityStore } from "@/features/activity/activity-store";
 import { HostCheckAction } from "./host-check-action";
+import { AdapterOutcomeError } from "@/data/capability";
 import type { ContainerInfo, Stack } from "@/domain/model";
 import activity from "@/features/stacks/testdata/host-update-activity.json";
 
@@ -123,4 +124,26 @@ it("identity replacement discards an old inventory result", async () => {
  await act(async () => { generation++; listeners.forEach((f) => f()); await Promise.resolve(); });
  await act(async () => { inventory.resolve([stack("old-identity")]); await inventory.promise; });
  expect(f.client().getQueryData(queryKeys.stacks)).toBeUndefined(); expect(success).not.toHaveBeenCalled();
+});
+
+it("shows a failed admission as unfinished and stays usable", async () => {
+  const f = fixture();
+  f.adapter.checkHostUpdates = vi.fn(async () => { throw new AdapterOutcomeError({ kind: "error", code: "runtime.admission-unknown" }); });
+  renderWithApp(<f.Surface />, f.adapter);
+  const button = await screen.findByRole("button", { name: "Auf Updates prüfen" });
+  await userEvent.click(button);
+  await waitFor(() => expect(screen.queryByRole("alert") !== null).toBe(true));
+  expect(screen.getByRole("alert").textContent).toBe("Die Prüfung wurde nicht abgeschlossen. Bitte erneut versuchen.");
+  expect(button.textContent).toBe("Auf Updates prüfen");
+  expect(button.hasAttribute("disabled")).toBe(false);
+});
+
+it("is busy while an all-hosts check runs", async () => {
+  const f = fixture();
+  renderWithApp(<f.Surface />, f.adapter);
+  const button = await screen.findByRole("button", { name: "Auf Updates prüfen" });
+  expect(button.hasAttribute("disabled")).toBe(false);
+  act(() => f.listeners.forEach((listen) => listen([{ ...mapActivityDetail({ activity: { ...activity, id: "example-all", resourceId: "update-check", metadata: {} }, stepTrace: [], messages: [], output: [], outputTruncated: false } as never), status: "running", hostId: "0", jobRef: undefined, stackId: undefined, containerId: undefined, kind: "check-updates" }])));
+  expect(button.getAttribute("aria-busy")).toBe("true");
+  expect(button.hasAttribute("disabled")).toBe(true);
 });

@@ -249,5 +249,10 @@ hub coordinator joins concurrent admissions from other tabs. The control stays
 busy through completion and the following inventory read. Result counts describe
 stacks with at least one update and standalone containers with updates, across
 the host's full refreshed inventory, including hidden rows. The all-hosts action
-uses the existing `update-check` / `check-all` path. Failed checks refresh badges
-but report failure, and navigation or an identity change discards local feedback.
+uses the existing `update-check` / `check-all` path; while it runs, each host
+control is busy. Failed checks refresh badges but report failure, and navigation
+or an identity change discards local feedback. An admission with an unknown
+outcome is not kept: the check says it did not finish and can be sent again,
+because the hub joins an existing run for that host. With no stack on any visible
+host, the page keeps its first-run empty state and offers the all-hosts check in
+its header (AUTO-9).

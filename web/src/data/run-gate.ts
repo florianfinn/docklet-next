@@ -368,7 +368,8 @@ export class RunGate {
       },
       (error: unknown) => {
         check();
-        if (entry.durable && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "runtime.admission-unknown") {
+        // A host check is safe to resend (the hub joins its run), so an unknown admission is not kept.
+        if (entry.durable && method !== "checkHostUpdates" && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "runtime.admission-unknown") {
           entry.settled = true;
           entry.error = error;
         } else if (this.entries.get(rule.key) === entry) this.entries.delete(rule.key);
