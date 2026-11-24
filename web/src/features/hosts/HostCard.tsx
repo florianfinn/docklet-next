@@ -31,6 +31,9 @@ import { unraidDetected } from "./unraid-detection";
 import { identityLifetime } from "@/data/identity-lifetime";
 import { useAdapter } from "@/data/use-adapter";
 import { unreadableRows } from "@/domain/unreadable";
+import { hostUpdateHref, selfUpdateRef, versionBadgeModel } from "@/domain/self-update";
+import { useSelfUpdateCheck } from "@/shared/components/updates/use-self-update-check";
+import { VersionBadges } from "@/shared/components/updates/version-badges";
 
 function Row({ label, children, mono }: { label: string; children: ReactNode; mono?: boolean }) {
   return (
@@ -45,7 +48,8 @@ function Row({ label, children, mono }: { label: string; children: ReactNode; mo
 function SystemSection({ component }: { component: SystemComponent | undefined }) {
   const t = useTranslations("hosts.card.systemComponent");
   const ts = useTranslations("common.status");
-  if (component?.metadataOnly) return <SystemMetadata component={component} />;
+  // The card header shows the version as a badge.
+  if (component?.metadataOnly) return <SystemMetadata component={component} hideVersion />;
   return (
     <section aria-label={t("title")} data-slot="system-component" className="flex items-start gap-2.5 rounded-xl border border-dashed bg-muted/15 p-3">
       <Bot className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -99,6 +103,20 @@ interface HostCardProps {
   onFiles?: (host: Host) => void;
 }
 
+/**
+ * Installed version badge with the available update for administrators. The check runs only for online hosts,
+ * and a cached answer is not shown while the host is not online or without the update capability.
+ */
+function HostVersion({ host, system }: { host: Host; system: SystemComponent | undefined }) {
+  const cap = useCapability("selfUpdate", selfUpdateRef(host.id));
+  const online = host.status === "online", enabled = cap.available && online;
+  const { query } = useSelfUpdateCheck(host.id, { host, enabled });
+  const reported = host.id === "0" ? system?.agentVersion : host.agentVersion || system?.agentVersion;
+  const model = versionBadgeModel({ reported, check: query.data, allowed: cap.available, status: !enabled ? "off" : query.isError ? "error" : query.isSuccess ? "success" : "pending" });
+  if (!model.installed && !model.target) return null;
+  return <VersionBadges model={model} variant="card" link={cap.available ? { href: hostUpdateHref(host.id), name: host.name } : undefined} />;
+}
+
 /** One host with connection, directories, file IDs and actions; filter state stays visible. */
 export function HostCard({ host, system, stacks, containers, unraid, allIds, onFiles }: HostCardProps) {
   const unreadable = unreadableRows(host.inventory, ["stacks", "containers"]).count;
@@ -141,6 +159,7 @@ export function HostCard({ host, system, stacks, containers, unraid, allIds, onF
         <ToneBadge tone={host.connection === "edge" ? "info" : "accent"}>{t(`mode.${host.connection}`)}</ToneBadge>
         {host.networkRoute === "tailnet" && <TailnetBadge />}
         {host.demoAdded && <ToneBadge tone="violet">{t("card.demoAdded")}</ToneBadge>}
+        <HostVersion host={host} system={system} />
         <span className="flex-1" />
         <Tooltip>
           <TooltipTrigger asChild>
@@ -176,9 +195,7 @@ export function HostCard({ host, system, stacks, containers, unraid, allIds, onF
             {host.fileOwner ? `${host.fileOwner.uid}:${host.fileOwner.gid}` : t("card.fileIdsAuto")}
           </Row>
         )}
-        {local ? <Row label={t("card.docker")} mono>{dockerVersion || t("card.unavailable")}</Row> : <Row label={t(dockerVersion ? "card.versions" : "card.agentVersion")} mono>
-          {[host.agentVersion === "dev" ? t("card.development") : host.agentVersion, dockerVersion].filter(Boolean).join(" / ") || t("card.unavailable")}
-        </Row>}
+        <Row label={t("card.docker")} mono>{dockerVersion || t("card.unavailable")}</Row>
         <Row label={t("card.system")}>{os || t("card.unavailable")}</Row>
         <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : host.lastSeen ? formatRelative(host.lastSeen) : t("card.neverContacted")}{host.tailnet && ["direct", "relay", "idle"].includes(host.tailnet.path) && <> · {tn(`path.${host.tailnet.path as "direct" | "relay" | "idle"}`)}</>}</Row>
       </dl>

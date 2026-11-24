@@ -77,7 +77,7 @@ it("shows details only for the current identity while the host is available", as
   expect(value(view.container, "System")).toBe("Not reported by the agent");
   await act(async () => { reads[1]!.done.resolve({ os: "Debian GNU/Linux 13 (trixie)", dockerVersion: "28.5.1" }); });
   await waitFor(() => expect(value(view.container, "System")).toBe("Debian GNU/Linux 13 (trixie)"));
-  expect(value(view.container, "Agent / Docker")?.includes("28.5.1")).toBe(true);
+  expect(value(view.container, "Docker")?.includes("28.5.1")).toBe(true);
 
   // Offline: the cached success is no longer shown, without any new read.
   const before = reads.length;
