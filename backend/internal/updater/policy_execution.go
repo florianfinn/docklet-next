@@ -129,10 +129,8 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	if err != nil || check == nil {
 		return skip(policyCode(err, "update.check-unavailable"))
 	}
-	if withoutRegistryImages(check) {
-		return policyTarget(one.TargetID, st.Succeeded, ""), false
-	}
-	if check.Status == "failed" || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled" {
+	// A build-only project is an empty observation: it replaces earlier candidates like any check.
+	if !withoutRegistryImages(check) && (check.Status == "failed" || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled") {
 		return skip("update.check-unavailable")
 	}
 	candidates, err := s.observeImagePolicy(ctx, p, one, check)
@@ -443,12 +441,7 @@ func (s *UpdaterService) checkPolicyProject(ctx context.Context, env, target str
 	if err != nil {
 		return nil, err
 	}
-	if check != nil && withoutRegistryImages(check) {
-		result := *check
-		result.PolicyCode = ""
-		return &result, nil
-	}
-	if check == nil || check.Status == "failed" || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled" {
+	if check == nil || !withoutRegistryImages(check) && (check.Status == "failed" || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled") {
 		return check, imageDTO.Failure("update.check-unavailable", 503)
 	}
 	result := *check

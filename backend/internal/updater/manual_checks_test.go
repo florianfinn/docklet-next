@@ -228,3 +228,30 @@ func TestBuildOnlyProjectDoesNotFailChecks(t *testing.T) {
 	_, err = f.s.CheckPolicyProject(t.Context(), "0", "build-only")
 	require.Error(t, err)
 }
+
+// A project that became build-only replaces its earlier registry candidates with
+// the empty observation, and a scheduled run applies nothing.
+func TestBuildOnlyCheckClearsCandidatesAndAppliesNothing(t *testing.T) {
+	for _, job := range []string{"update-check", "auto-update", "manual"} {
+		t.Run(job, func(t *testing.T) {
+			f := newPolicyFixture(t)
+			one := f.save(t, "project", "scheduled")
+			candidates, err := f.s.observeImagePolicy(t.Context(), f.p, one, f.check)
+			require.NoError(t, err)
+			require.Len(t, candidates, 1)
+			f.check = &projectDTO.UpdateInfo{Status: "unknown", ImageCount: 0}
+			if job == "manual" {
+				_, err = f.s.CheckPolicyProject(t.Context(), "0", "project")
+				require.NoError(t, err)
+			} else {
+				outcome, uncertain := f.s.runImagePolicyTarget(t.Context(), f.p, one, "example-run", job)
+				require.False(t, uncertain)
+				require.Equal(t, "succeeded", string(outcome.Status))
+			}
+			require.Zero(t, f.admissions)
+			live, err := f.s.GetImagePolicy(t.Context(), "0", "project")
+			require.NoError(t, err)
+			require.Empty(t, live.Candidates)
+		})
+	}
+}
