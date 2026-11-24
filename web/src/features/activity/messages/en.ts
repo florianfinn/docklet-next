@@ -85,6 +85,11 @@ export const enActivity = {
     "load-alert": "Sustained load",
   },
   dismiss: "Close notice",
+  scanGroup: {
+    title: "{hosts, plural, one {Vulnerability scans · # host} other {Vulnerability scans · # hosts}}",
+    label: "Vulnerability scans",
+    open: "Open {title} on {host}",
+  },
   notices: {
     region: "Notifications (Alt+T)",
     close: "Close notification",

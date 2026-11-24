@@ -14,6 +14,13 @@ type Translate = ReturnType<typeof useTranslations<"runMessages.scanCounts">>;
 export const isHostScan = (run: Pick<ActionRun, "kind" | "hostScoped" | "sourceOperation">) =>
   run.kind === "scan" && run.hostScoped === true && run.sourceOperation !== "vulnerability.candidate-scan";
 
+/** Any vulnerability scan run, host, image or candidate; they share one notification. */
+export const isScanRun = (run: Pick<ActionRun, "kind" | "sourceOperation">) => run.kind === "scan" || run.sourceOperation === "vulnerability.candidate-scan";
+
+/** A failed or partial scan result stays until closed (#611); the durable record can be partial under a succeeded activity. */
+export const scanPersistent = (run: ActionRun) =>
+  isScanRun(run) && (run.status === "failed" || ["partial", "failed", "interrupted"].includes(run.scan?.summary?.status ?? ""));
+
 /** "6 images scanned · 2 critical · 15 high · 56 s", plus failed images and a partial marker when they apply. */
 export function scanResultLine(summary: ScanRunSummary, t: Translate): string {
   const ms = summary.finishedAt ? Date.parse(summary.finishedAt) - Date.parse(summary.startedAt) : NaN;

@@ -6,7 +6,7 @@
 
 import { useIsUser } from "@/data/use-principal";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "use-intl";
 
@@ -26,12 +26,15 @@ import { isMajorAction } from "./action-policy";
 import { openActivity } from "./activity-store";
 import { ActionToastView } from "./ActionToastView";
 import { ActionDetail } from "./ActionDetail";
+import { isScanRun } from "./scan-counts";
+import { ScanGroupToast } from "./ScanGroupToast";
+import { createStore, useStore, type Store } from "@/shared/lib/store";
 import type { ActionRun } from "@/domain/model";
 import { useNow } from "./run-phase";
 import { runtimePresentation } from "./runtime-presentation";
 import { hasPresentationIntent, notifiesOnFirstObservation, presentationStore, RunToastCoordinator } from "./run-presentation";
 
-function ActionToast({ id, toastId }: { id: string; toastId: string | number }) {
+function ActionToast({ id, toastId, onClose }: { id: string; toastId: string | number; onClose?: () => void }) {
   const user = useIsUser();
   const run = useActionRun(id);
   const scale = useUiStyle("toastScale");
@@ -47,13 +50,33 @@ function ActionToast({ id, toastId }: { id: string; toastId: string | number }) 
       now={now}
       major={major}
       opensDialog={user}
-      onClose={() => toast.dismiss(toastId)}
+      onClose={onClose ?? (() => toast.dismiss(toastId))}
       onOpen={() => (major || user ? openActionDialog(run.id) : openActivity(run.id))}
     />
   );
   // Visible scan toasts own their counters even after the Security page unmounts.
   return run.kind === "scan" || run.sourceOperation === "vulnerability.candidate-scan"
     ? <ActionDetail run={run} fallback={view(run)}>{view}</ActionDetail> : view(run);
+}
+
+const SCAN_GROUP = "scan-group";
+interface ScanGroupState { ids: readonly string[]; persistent: ReadonlySet<string> }
+
+/** One sonner toast for every scan run the coordinator shows; a single member keeps the ordinary run toast. */
+function ScanGroup({ store, close }: { store: Store<ScanGroupState>; close: () => void }) {
+  const user = useIsUser();
+  const state = useStore(store, (s) => s);
+  const onPersistent = useCallback((id: string, value: boolean) => store.set((s) => {
+    if (s.persistent.has(id) === value || !s.ids.includes(id)) return s;
+    const persistent = new Set(s.persistent);
+    if (value) persistent.add(id); else persistent.delete(id);
+    return { ...s, persistent };
+  }), [store]);
+  // A closed group renders nothing during its exit, so no stale countdown can close a newer group.
+  if (!state.ids.length) return null;
+  if (state.ids.length === 1) return <ActionToast id={state.ids[0]!} toastId={SCAN_GROUP} onClose={close} />;
+  return <ScanGroupToast ids={state.ids} persistent={state.persistent} onPersistent={onPersistent} onClose={close}
+    onOpen={(run) => (user ? openActionDialog(run.id) : openActivity(run.id))} />;
 }
 
 /**
@@ -88,13 +111,36 @@ export function ActionToasts() {
 
   useEffect(() => {
     const owned = new Set<string>();
-    const clearOwned = () => { for (const id of owned) toast.dismiss(id); owned.clear(); };
+    // Scan runs share one toast (#611). A new epoch retires dismiss callbacks of an earlier group toast.
+    const group = createStore<ScanGroupState>({ ids: [], persistent: new Set() });
+    let epoch = 0, latest: ActionRun[] = [];
+    const renderGroup = () => {
+      if (!group.get().ids.length) { epoch++; toast.dismiss(SCAN_GROUP); return; }
+      const mine = epoch;
+      const forget = () => { if (mine === epoch) { epoch++; group.set({ ids: [], persistent: new Set() }); } };
+      const close = () => { forget(); toast.dismiss(SCAN_GROUP); };
+      toast.custom(() => <ScanGroup store={group} close={close} />, { id: SCAN_GROUP, duration: Number.POSITIVE_INFINITY, unstyled: true, onDismiss: forget });
+    };
+    const setMembers = (change: (ids: readonly string[]) => readonly string[]) => {
+      const before = group.get().ids, ids = change(before);
+      if (ids === before) return;
+      group.set((s) => ({ ids, persistent: new Set([...s.persistent].filter((id) => ids.includes(id))) }));
+      renderGroup();
+    };
+    const isScan = (id: string) => { const run = latest.find((r) => r.id === id); return run !== undefined && isScanRun(run); };
+    const clearOwned = () => {
+      for (const id of owned) toast.dismiss(id); owned.clear();
+      if (group.get().ids.length) { group.set({ ids: [], persistent: new Set() }); renderGroup(); }
+    };
     const identity = () => client.getQueryData<CurrentUser>(queryKeys.currentUser)?.id;
     let identityId = identity();
     const createCoordinator = () => new RunToastCoordinator(
       {
-        show: (id) => { owned.add(id); toast.custom((toastId) => <ActionToast id={id} toastId={toastId} />, { id, duration: Number.POSITIVE_INFINITY, unstyled: true }); },
-        hide: (id) => toast.dismiss(id),
+        show: (id) => {
+          if (isScan(id)) { setMembers((ids) => (ids.includes(id) ? ids : [...ids, id])); return; }
+          owned.add(id); toast.custom((toastId) => <ActionToast id={id} toastId={toastId} />, { id, duration: Number.POSITIVE_INFINITY, unstyled: true });
+        },
+        hide: (id) => { if (group.get().ids.includes(id)) setMembers((ids) => ids.filter((m) => m !== id)); else toast.dismiss(id); },
         offerDialog: offerActionDialog,
       },
       {
@@ -136,7 +182,10 @@ export function ActionToasts() {
         for (const hostId of pending) if (!failed.has(hostId)) pending.delete(hostId);
       }
       observed = true;
+      latest = rendered;
       coordinator.sync(rendered, history);
+      // The coordinator forgets runs that left the list without a hide; the group drops them too.
+      setMembers((ids) => (ids.every((id) => rendered.some((r) => r.id === id)) ? ids : ids.filter((id) => rendered.some((r) => r.id === id))));
     });
     // Presentation changes are not action observations and cannot seed initial history.
     const syncPresentation = () => { if (observed) coordinator.sync(); };

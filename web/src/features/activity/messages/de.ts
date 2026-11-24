@@ -85,6 +85,11 @@ export const deActivity: typeof enActivity = {
     "auto-heal": "Neustart durch Auto Heal",
     "load-alert": "Anhaltende Last",
   },
+  scanGroup: {
+    title: "{hosts, plural, one {Schwachstellenscans · # Host} other {Schwachstellenscans · # Hosts}}",
+    label: "Schwachstellenscans",
+    open: "{title} auf {host} öffnen",
+  },
   dismiss: "Hinweis schließen",
   notices: {
     region: "Meldungen (Alt+T)",

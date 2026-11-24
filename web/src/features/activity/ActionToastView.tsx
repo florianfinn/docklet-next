@@ -1,5 +1,5 @@
 import { useRunTarget } from "./use-run-target";
-import { useScanCounts } from "./scan-counts";
+import { scanPersistent, useScanCounts } from "./scan-counts";
 import { useDeployProgress } from "./deploy-progress";
 import { History, X } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
@@ -116,12 +116,16 @@ function RestoreLink({ run, onClose }: { run: ActionRun; onClose: () => void }) 
 
 /** Countdown of a settled toast; the toast closes when the animation ends (paused on hover and focus by CSS). */
 function LifeBar({ run, onEnd }: { run: ActionRun; onEnd: () => void }) {
-  if (run.status === "running" || run.status === "queued") return null;
-  const life = TOAST_LIFETIME[run.status];
+  if (run.status === "running" || run.status === "queued" || scanPersistent(run)) return null;
+  return <LifeTrack status={run.status} onEnd={onEnd} />;
+}
+
+export function LifeTrack({ status, onEnd }: { status: keyof typeof TOAST_LIFETIME; onEnd: () => void }) {
+  const life = TOAST_LIFETIME[status];
   return (
     <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-(--tone)/12" data-slot="toast-life-track">
       <span
-        key={run.status}
+        key={status}
         data-slot="toast-life"
         className="block h-full bg-(--tone)/70"
         style={{ "--life": `${life}ms`, "--life-steps": `steps(${Math.round(life / 1000)}, end)` } as React.CSSProperties}
