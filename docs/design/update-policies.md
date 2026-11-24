@@ -20,11 +20,13 @@ observations does not create a manual-check activity.
 
 Binding eligibility reads the saved Compose model and filesystem inputs on the
 target executor. It shares the literal image, build, layout, anchor and writable
-file predicates with update admission and then runs the admission writer as a
-dry run for each service alone, so a service is eligible exactly when an update
-of it would pass the writer; a refusal of the whole document (for example any
-YAML anchor, alias or merge key, which the in-place writer does not rewrite) is a
-project binding. It uses no Docker observation, registry access or writes. A refusal identifies its project or service scope and a declared reason;
+file predicates with update admission and then asks the admission writer's
+read-only validation, which parses the document once and checks each service on
+its own: a refusal of the whole document (for example any YAML anchor, alias or
+merge key, which the in-place writer does not rewrite) is a project binding; a
+refusal of one service's image source (for example a multi-line scalar) names
+that service, and admission keeps the same scope. It uses no Docker observation,
+registry access or writes. A refusal identifies its project or service scope and a declared reason;
 a variable reference includes only the variable name. Eligibility explains the
 current safety boundary and does not edit interpolation, defaults or `.env` files.
 

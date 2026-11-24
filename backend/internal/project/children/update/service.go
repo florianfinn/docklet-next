@@ -2,7 +2,8 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories. M38 #594: document and
+// per-service image source checks split into a shared read-only validator with service-scoped errors.
 
 // Package update owns project content updates: compose image edits and the
 // rename journal that makes project renames recoverable.
@@ -391,58 +392,105 @@ func validateImageUpdateSource(node *yaml.Node) error {
 	return nil
 }
 
-func PrepareProjectServiceImages(source []byte, effective *types.Project, changes map[string]updatertypes.ServiceImageChange) ([]byte, []string, error) {
+// ServiceSourceError is a refusal that concerns only one service's image source;
+// other errors of the writer refuse the whole document.
+type ServiceSourceError struct {
+	Service string
+	Err     error
+}
+
+func (e *ServiceSourceError) Error() string { return e.Err.Error() }
+func (e *ServiceSourceError) Unwrap() error { return e.Err }
+
+// parseImageUpdateSource applies the document-wide rules of the in-place writer.
+func parseImageUpdateSource(source []byte) (*yaml.Node, error) {
 	var document yaml.Node
 	decoder := yaml.NewDecoder(bytes.NewReader(source))
 	if err := decoder.Decode(&document); err != nil {
-		return nil, nil, fmt.Errorf("parse Compose source: %w", err)
+		return nil, fmt.Errorf("parse Compose source: %w", err)
 	}
 	var extra yaml.Node
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return nil, nil, errors.New("tag updates require a single YAML document")
+		return nil, errors.New("tag updates require a single YAML document")
 	}
 	if len(document.Content) != 1 {
-		return nil, nil, errors.New("Compose source must contain a mapping") //nolint:staticcheck // Preserve the existing error message.
+		return nil, errors.New("Compose source must contain a mapping") //nolint:staticcheck // Preserve the existing error message.
 	}
 	if err := validateImageUpdateSource(document.Content[0]); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if composeImageField(document.Content[0], "include") != nil {
-		return nil, nil, errors.New("tag updates do not rewrite Compose includes; update their source manually")
+		return nil, errors.New("tag updates do not rewrite Compose includes; update their source manually")
 	}
 	servicesNode := composeImageField(document.Content[0], "services")
 	if servicesNode == nil || servicesNode.Kind != yaml.MappingNode {
-		return nil, nil, errors.New("Compose source has no services mapping") //nolint:staticcheck // Preserve the existing error message.
+		return nil, errors.New("Compose source has no services mapping") //nolint:staticcheck // Preserve the existing error message.
+	}
+	return servicesNode, nil
+}
+
+// serviceImageEdit applies the per-service rules and prepares the in-place edit of one image scalar.
+func serviceImageEdit(source []byte, servicesNode *yaml.Node, effective *types.Project, name string, change updatertypes.ServiceImageChange) (composeImageEdit, error) {
+	fail := func(err error) (composeImageEdit, error) {
+		return composeImageEdit{}, &ServiceSourceError{Service: name, Err: err}
+	}
+	service, ok := effective.Services[name]
+	if !ok {
+		return fail(fmt.Errorf("service %s is not active in the Compose project", name))
+	}
+	expected, target := refs.NormalizeImageUpdateRef(change.ExpectedRef), refs.NormalizeImageUpdateRef(change.TargetRef)
+	if expected == "" || target == "" || refs.IsImageIDLikeReference(change.ExpectedRef) || refs.IsImageIDLikeReference(change.TargetRef) {
+		return fail(fmt.Errorf("service %s requires mutable image references", name))
+	}
+	if refs.NormalizeImageUpdateRef(service.Image) != expected && refs.NormalizeImageUpdateRef(service.Image) != target {
+		return fail(fmt.Errorf("service %s image changed since update check: expected %s, found %s", name, change.ExpectedRef, service.Image))
+	}
+	serviceNode := composeImageField(servicesNode, name)
+	if composeImageField(serviceNode, "extends") != nil {
+		return fail(fmt.Errorf("tag updates do not rewrite extended service %s; update its source manually", name))
+	}
+	imageNode := composeImageField(serviceNode, "image")
+	if imageNode == nil || imageNode.Kind != yaml.ScalarNode || imageNode.Tag != "!!str" {
+		return fail(fmt.Errorf("service %s requires an explicit image scalar in the authoritative Compose file", name))
+	}
+	if !strings.Contains(imageNode.Value, "$") && refs.NormalizeImageUpdateRef(imageNode.Value) != expected && refs.NormalizeImageUpdateRef(imageNode.Value) != target {
+		return fail(fmt.Errorf("service %s source image changed since Compose was loaded", name))
+	}
+	edit, err := composeImageSourceEdit(source, imageNode, refs.PreserveConfiguredRef(service.Image, change.TargetRef))
+	if err != nil {
+		return fail(fmt.Errorf("service %s: %w", name, err))
+	}
+	return edit, nil
+}
+
+// ValidateProjectServiceImages is the writer's read-only check: one parse, then
+// each service on its own. A document error refuses every service.
+func ValidateProjectServiceImages(source []byte, effective *types.Project, changes map[string]updatertypes.ServiceImageChange) (map[string]error, error) {
+	servicesNode, err := parseImageUpdateSource(source)
+	if err != nil {
+		return nil, err
+	}
+	refusals := map[string]error{}
+	for name, change := range changes {
+		if _, err := serviceImageEdit(source, servicesNode, effective, name, change); err != nil {
+			refusals[name] = err
+		}
+	}
+	return refusals, nil
+}
+
+func PrepareProjectServiceImages(source []byte, effective *types.Project, changes map[string]updatertypes.ServiceImageChange) ([]byte, []string, error) {
+	servicesNode, err := parseImageUpdateSource(source)
+	if err != nil {
+		return nil, nil, err
 	}
 	serviceNames := make([]string, 0, len(changes))
 	// Rewrite image scalars in place; re-encoding the node tree drops blank lines and operator formatting.
 	edits := make([]composeImageEdit, 0, len(changes))
 	for name, change := range changes {
-		service, ok := effective.Services[name]
-		if !ok {
-			return nil, nil, fmt.Errorf("service %s is not active in the Compose project", name)
-		}
-		expected, target := refs.NormalizeImageUpdateRef(change.ExpectedRef), refs.NormalizeImageUpdateRef(change.TargetRef)
-		if expected == "" || target == "" || refs.IsImageIDLikeReference(change.ExpectedRef) || refs.IsImageIDLikeReference(change.TargetRef) {
-			return nil, nil, fmt.Errorf("service %s requires mutable image references", name)
-		}
-		if refs.NormalizeImageUpdateRef(service.Image) != expected && refs.NormalizeImageUpdateRef(service.Image) != target {
-			return nil, nil, fmt.Errorf("service %s image changed since update check: expected %s, found %s", name, change.ExpectedRef, service.Image)
-		}
-		serviceNode := composeImageField(servicesNode, name)
-		if composeImageField(serviceNode, "extends") != nil {
-			return nil, nil, fmt.Errorf("tag updates do not rewrite extended service %s; update its source manually", name)
-		}
-		imageNode := composeImageField(serviceNode, "image")
-		if imageNode == nil || imageNode.Kind != yaml.ScalarNode || imageNode.Tag != "!!str" {
-			return nil, nil, fmt.Errorf("service %s requires an explicit image scalar in the authoritative Compose file", name)
-		}
-		if !strings.Contains(imageNode.Value, "$") && refs.NormalizeImageUpdateRef(imageNode.Value) != expected && refs.NormalizeImageUpdateRef(imageNode.Value) != target {
-			return nil, nil, fmt.Errorf("service %s source image changed since Compose was loaded", name)
-		}
-		edit, err := composeImageSourceEdit(source, imageNode, refs.PreserveConfiguredRef(service.Image, change.TargetRef))
+		edit, err := serviceImageEdit(source, servicesNode, effective, name, change)
 		if err != nil {
-			return nil, nil, fmt.Errorf("service %s: %w", name, err)
+			return nil, nil, err
 		}
 		edits = append(edits, edit)
 		serviceNames = append(serviceNames, name)

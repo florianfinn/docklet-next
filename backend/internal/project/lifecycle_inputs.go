@@ -322,14 +322,14 @@ func lifecycleVersionFiles(snapshot *life.Snapshot, selections []dto.ImageSelect
 			}
 			_, _, err := edits.PrepareProjectServiceImages(f.Content, snapshot.Model, validations)
 			if err != nil {
-				return nil, bindingFailure("", "unparsable")
+				return nil, writerBindingFailure(err)
 			}
 			updated := f.Content
 			if len(changes) > 0 {
 				updated, _, err = edits.PrepareProjectServiceImages(f.Content, snapshot.Model, changes)
 			}
 			if err != nil {
-				return nil, bindingFailure("", "unparsable")
+				return nil, writerBindingFailure(err)
 			}
 			desired.Files[i].Content = updated
 			found = true
@@ -367,26 +367,34 @@ func lifecycleSharedImageSource(snapshot *life.Snapshot, services []string) erro
 		if yaml.Unmarshal(file.Content, &document) != nil || len(document.Content) != 1 {
 			return bindingFailure("", "unparsable")
 		}
-		serviceMap := lifecycleYAMLField(document.Content[0], "services", 0)
-		if serviceMap == nil || serviceMap.Kind != yaml.MappingNode {
-			return bindingFailure("", "unparsable")
+		if err := lifecycleSharedImageSourceIn(&document, services); err != nil {
+			return err
 		}
-		images := map[string]*yaml.Node{}
-		for i := 0; i+1 < len(serviceMap.Content); i += 2 {
-			image := lifecycleYAMLField(serviceMap.Content[i+1], "image", 0)
-			if image != nil && image.Kind == yaml.AliasNode {
-				image = image.Alias
-			}
-			images[serviceMap.Content[i].Value] = image
+	}
+	return nil
+}
+
+// lifecycleSharedImageSourceIn checks an already parsed primary document.
+func lifecycleSharedImageSourceIn(document *yaml.Node, services []string) error {
+	serviceMap := lifecycleYAMLField(document.Content[0], "services", 0)
+	if serviceMap == nil || serviceMap.Kind != yaml.MappingNode {
+		return bindingFailure("", "unparsable")
+	}
+	images := map[string]*yaml.Node{}
+	for i := 0; i+1 < len(serviceMap.Content); i += 2 {
+		image := lifecycleYAMLField(serviceMap.Content[i+1], "image", 0)
+		if image != nil && image.Kind == yaml.AliasNode {
+			image = image.Alias
 		}
-		for key, image := range images {
-			if image == nil || !lifecycleServiceSelected(services, key) {
-				continue
-			}
-			for other, candidate := range images {
-				if other != key && image == candidate {
-					return bindingFailure(key, "shared-image-anchor")
-				}
+		images[serviceMap.Content[i].Value] = image
+	}
+	for key, image := range images {
+		if image == nil || !lifecycleServiceSelected(services, key) {
+			continue
+		}
+		for other, candidate := range images {
+			if other != key && image == candidate {
+				return bindingFailure(key, "shared-image-anchor")
 			}
 		}
 	}
@@ -422,4 +430,40 @@ func lifecycleYAMLField(node *yaml.Node, key string, depth int) *yaml.Node {
 		}
 	}
 	return nil
+}
+
+// writerBindingFailure keeps the writer's scope: a refusal of one service's image
+// source names that service; any other writer refusal concerns the whole document.
+func writerBindingFailure(err error) *imageDTO.OperationError {
+	var local *edits.ServiceSourceError
+	if errors.As(err, &local) {
+		return bindingFailure(local.Service, "unparsable")
+	}
+	return bindingFailure("", "unparsable")
+}
+
+// lifecycleWriterRefusals runs the admission writer's read-only check once for the
+// given services of the primary Compose file (each as a rebuild of its own image).
+func lifecycleWriterRefusals(snapshot *life.Snapshot, services []string) (map[string]*imageDTO.OperationError, *imageDTO.OperationError) {
+	primary := filepath.Base(snapshot.Model.ComposeFiles[0])
+	for _, f := range snapshot.Files {
+		if f.Path != primary {
+			continue
+		}
+		changes := make(map[string]updatertypes.ServiceImageChange, len(services))
+		for _, name := range services {
+			image := snapshot.Model.Services[name].Image
+			changes[name] = updatertypes.ServiceImageChange{ExpectedRef: image, TargetRef: image}
+		}
+		refusals, err := edits.ValidateProjectServiceImages(f.Content, snapshot.Model, changes)
+		if err != nil {
+			return nil, writerBindingFailure(err)
+		}
+		out := make(map[string]*imageDTO.OperationError, len(refusals))
+		for name, refusal := range refusals {
+			out[name] = writerBindingFailure(refusal)
+		}
+		return out, nil
+	}
+	return nil, bindingFailure("", "file-missing")
 }

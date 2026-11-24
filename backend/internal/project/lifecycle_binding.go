@@ -49,15 +49,40 @@ func referenceBindingFailure(service, source string) *imageDTO.OperationError {
 // modelBindingFailure shares the same source predicates with the version writer;
 // resolved Compose values alone cannot prove that a field is literal.
 func modelBindingFailure(snapshot *life.Snapshot, service string) error {
+	document, err := lifecyclePrimaryDocument(snapshot)
+	if err != nil {
+		return err
+	}
+	return modelBindingFailureIn(snapshot, document, service)
+}
+
+// lifecyclePrimaryDocument parses the single authoritative Compose file once.
+func lifecyclePrimaryDocument(snapshot *life.Snapshot) (*yaml.Node, error) {
 	if snapshot == nil || snapshot.Model == nil {
-		return bindingFailure("", "unparsable")
+		return nil, bindingFailure("", "unparsable")
 	}
 	if len(snapshot.Model.ComposeFiles) == 0 {
-		return bindingFailure("", "file-missing")
+		return nil, bindingFailure("", "file-missing")
 	}
 	if len(snapshot.Model.ComposeFiles) != 1 {
-		return bindingFailure("", "multiple-compose-files")
+		return nil, bindingFailure("", "multiple-compose-files")
 	}
+	primary := filepath.Base(snapshot.Model.ComposeFiles[0])
+	for _, file := range snapshot.Files {
+		if file.Path != primary {
+			continue
+		}
+		var document yaml.Node
+		if yaml.Unmarshal(file.Content, &document) != nil || len(document.Content) != 1 {
+			return nil, bindingFailure("", "unparsable")
+		}
+		return &document, nil
+	}
+	return nil, bindingFailure("", "file-missing")
+}
+
+// modelBindingFailureIn applies the per-service source predicates to an already parsed document.
+func modelBindingFailureIn(snapshot *life.Snapshot, document *yaml.Node, service string) error {
 	svc, ok := snapshot.Model.Services[service]
 	if !ok {
 		return bindingFailure(service, "unparsable")
@@ -68,30 +93,19 @@ func modelBindingFailure(snapshot *life.Snapshot, service string) error {
 	if failure := referenceBindingFailure(service, svc.Image); failure != nil {
 		return failure
 	}
-	primary := filepath.Base(snapshot.Model.ComposeFiles[0])
-	for _, file := range snapshot.Files {
-		if file.Path != primary {
-			continue
-		}
-		var document yaml.Node
-		if yaml.Unmarshal(file.Content, &document) != nil || len(document.Content) != 1 {
-			return bindingFailure("", "unparsable")
-		}
-		services := lifecycleYAMLField(document.Content[0], "services", 0)
-		node := lifecycleYAMLField(services, service, 0)
-		image := lifecycleYAMLField(node, "image", 0)
-		if image == nil {
-			return bindingFailure(service, "unparsable")
-		}
-		if image.Kind == yaml.AliasNode {
-			image = image.Alias
-		}
-		if failure := referenceBindingFailure(service, image.Value); failure != nil {
-			return failure
-		}
-		return lifecycleSharedImageSource(snapshot, []string{service})
+	services := lifecycleYAMLField(document.Content[0], "services", 0)
+	node := lifecycleYAMLField(services, service, 0)
+	image := lifecycleYAMLField(node, "image", 0)
+	if image == nil {
+		return bindingFailure(service, "unparsable")
 	}
-	return bindingFailure("", "file-missing")
+	if image.Kind == yaml.AliasNode {
+		image = image.Alias
+	}
+	if failure := referenceBindingFailure(service, image.Value); failure != nil {
+		return failure
+	}
+	return lifecycleSharedImageSourceIn(document, []string{service})
 }
 
 // ImageUpdateEligibility reads only saved model/filesystem inputs. It neither
@@ -124,28 +138,48 @@ func (s *ProjectService) ImageUpdateEligibility(ctx context.Context, id string) 
 		names = append(names, name)
 	}
 	slices.Sort(names)
-	for _, name := range names {
-		entry := dto.ServiceEligibility{Service: name, Eligible: true}
-		err := modelBindingFailure(snapshot, name)
-		if err == nil {
-			// The admission writer is the proof: a dry run for this service alone
-			// refuses exactly what an update of it would (closing review M38-CL-R2-01).
-			source := snapshot.Model.Services[name].Image
-			_, err = lifecycleVersionFiles(snapshot, []dto.ImageSelection{{Service: name, SourceReference: source, Reference: source, Kind: "rebuild"}})
+	document, err := lifecyclePrimaryDocument(snapshot)
+	if err != nil {
+		var problem *imageDTO.OperationError
+		if !errors.As(err, &problem) {
+			return result, err
 		}
-		if err != nil {
+		result.Project = problem.Problem.Binding
+		return result, nil
+	}
+	entries := make([]dto.ServiceEligibility, 0, len(names))
+	candidates := make([]string, 0, len(names))
+	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		entry := dto.ServiceEligibility{Service: name, Eligible: true}
+		if err := modelBindingFailureIn(snapshot, document, name); err != nil {
 			var problem *imageDTO.OperationError
-			if !errors.As(err, &problem) || problem.Problem.Binding == nil {
+			if !errors.As(err, &problem) {
 				return result, err
 			}
-			if problem.Problem.Binding.Scope == "project" {
-				// A document-wide refusal applies to every service.
-				return dto.UpdateEligibility{Services: []dto.ServiceEligibility{}, Project: problem.Problem.Binding}, nil
-			}
 			entry.Eligible, entry.Binding = false, problem.Problem.Binding
+		} else {
+			candidates = append(candidates, name)
 		}
-		result.Services = append(result.Services, entry)
+		entries = append(entries, entry)
 	}
+	// The admission writer is the proof for the rest: one read-only check of the
+	// document, then of each service alone (closing review M38-CL-R2-01, R3-01).
+	if len(candidates) > 0 {
+		refusals, document := lifecycleWriterRefusals(snapshot, candidates)
+		if document != nil {
+			result.Project = document.Problem.Binding
+			return result, nil
+		}
+		for i := range entries {
+			if refusal := refusals[entries[i].Service]; refusal != nil {
+				entries[i].Eligible, entries[i].Binding = false, refusal.Problem.Binding
+			}
+		}
+	}
+	result.Services = entries
 	return result, nil
 }
 
