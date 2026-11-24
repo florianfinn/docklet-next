@@ -16,7 +16,7 @@ import { updateEligibility } from "./update-binding";
 import { observation } from "./update-validation";
 import { MAINTENANCE_CODE } from "./problem-code";
 interface Options { baseUrl: string; client: CsrfClient; capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>; generation: () => number; changed: () => void }
-export function createStackUpdates({ baseUrl, client, capability, generation, changed }: Options): Required<Omit<UpdatesApi, "checkAllUpdates" | "restoreContainerImage" | "getContainerPreviousImage" | "getUpdateSettings" | "getUpdateCheckJob" | "getUpdateJobTargets">> {
+export function createStackUpdates({ baseUrl, client, capability, generation, changed }: Options): Required<Omit<UpdatesApi, "checkHostUpdates" | "checkAllUpdates" | "restoreContainerImage" | "getContainerPreviousImage" | "getUpdateSettings" | "getUpdateCheckJob" | "getUpdateJobTargets">> {
   async function request(operation: string, ref: ResourceRef, suffix: string, method = "GET", body?: object, reads: string[] = []): Promise<unknown> {
     const owner = generation(), current = () => { if (owner !== generation()) throw new CancelledError(); };
     for (const name of [operation, ...reads]) { const cap = await capability(name, ref); current(); if (!cap.available) throw unavailable(name, cap.resourceRef, cap.disabledReasonCode); }

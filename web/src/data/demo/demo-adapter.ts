@@ -332,6 +332,17 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       }
     },
 
+    checkAllUpdates: () => adapter.checkUpdates({}),
+    async checkHostUpdates(hostId) {
+      if (hostId === undefined) return adapter.checkAllUpdates!();
+      const host = db.host(hostId);
+      if (!host) throw unavailable("checkHostUpdates", { kind: "host", id: hostId });
+      return runner.start({ kind: "check-updates", title: "Update-Prüfung", target: "", hostId,
+        steps: [{ key: "collect", label: "Registries abfragen", ms: 1100 }, { key: "save", label: "Ergebnis speichern" }],
+        failAt: host.status === "offline" ? "collect" : undefined,
+        onSuccess: () => { db.changed("stacks", "containers"); },
+      });
+    },
     async checkUpdates(scope) {
       const stack = scope.stackId ? requireStack(scope.stackId) : undefined;
       const container = scope.containerId ? db.containers().find((c) => c.id === scope.containerId) : undefined;

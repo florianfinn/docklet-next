@@ -110,7 +110,7 @@ const IMPLEMENTED = new Set<string>([
   "installContainerUpdate",
   "restoreContainerImage",
   "getContainerPreviousImage",
-  "checkAllUpdates",
+  "checkAllUpdates", "checkHostUpdates",
   "getUpdateSettings",
   "listSchedule",
   "getSystemImageHints",
@@ -835,7 +835,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     tailnet: tailnet.api,
     ...createSettingsCore(baseUrl, client),
  ...createModulesApi(baseUrl, client),
-    ...createUpdateSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
+    ...createUpdateSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, accepted: (host) => refreshHost(host) }),
     ...createNotificationSettings({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...hubBackups,
     // The page's detailed status read is also the browser-wide maintenance observation of this identity.

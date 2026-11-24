@@ -202,7 +202,7 @@ func TestDefaultChecksAndHubNotificationsDirectEdge(t *testing.T) {
 			_, inventoryError := hub.p.ports.targets(t.Context(), env)
 			require.NoError(t, inventoryError)
 			require.NoError(t, hub.s.deps.Settings.UpdateSetting(t.Context(), "updateNotify", "false"))
-			outcome, e := hub.s.RunUpdateCheck(t.Context())
+			outcome, e := hub.s.RunUpdateCheckHost(t.Context(), env)
 			require.NoError(t, e)
 			require.Len(t, outcome.Targets, 3)
 			require.Equal(t, "succeeded", string(outcome.Status))

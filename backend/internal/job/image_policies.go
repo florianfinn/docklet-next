@@ -25,6 +25,9 @@ func (s *JobService) Submit(ctx context.Context, r st.Request) (st.Run, error) {
 	return s.legacySubmit(ctx, r)
 }
 func (s *JobService) GetRun(ctx context.Context, env, job, run string) (st.Run, error) {
+	if job == hostUpdateCheckJob {
+		return s.runs.Get(ctx, env, job, run)
+	}
 	return s.legacyGetRun(ctx, env, job, run)
 }
 func (s *JobService) ListRuns(ctx context.Context, env, job string, page, limit int) (st.RunList, error) {
@@ -34,6 +37,9 @@ func (s *JobService) ListRuns(ctx context.Context, env, job string, page, limit 
 	return s.legacyListRuns(ctx, env, job, page, limit)
 }
 func (s *JobService) CancelRun(ctx context.Context, env, job, run string) (st.Run, error) {
+	if job == hostUpdateCheckJob {
+		return s.runs.Cancel(ctx, env, job, run)
+	}
 	return s.legacyCancelRun(ctx, env, job, run)
 }
 func (s *JobService) RetryRun(ctx context.Context, env, job, run string) (st.Run, error) {

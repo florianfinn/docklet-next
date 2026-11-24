@@ -173,3 +173,22 @@ func TestManualProjectCheckRecordsHostAndProjectName(t *testing.T) {
 	require.Equal(t, "check_project_update", row.Metadata["action"])
 	require.Equal(t, "image_update_check", string(row.Type))
 }
+
+func TestHostCheckLocalTargetIncludesStacksAndStandaloneContainers(t *testing.T) {
+	f := newPolicyFixture(t)
+	f.p.ports.targets = func(_ context.Context, env string) ([]updateTarget, error) {
+		require.Equal(t, "0", env)
+		return []updateTarget{{Kind: "stack", ID: "project", Eligible: true}, {Kind: "container", ID: "app", Name: "app", Eligible: true}}, nil
+	}
+	f.p.ports.checkContainer = func(_ context.Context, env string, _ updateTarget) (*projectDTO.UpdateInfo, error) {
+		require.Equal(t, "0", env)
+		return f.check, nil
+	}
+	out, err := f.s.RunUpdateCheckHost(t.Context(), "0")
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", string(out.Status))
+	require.Len(t, out.Targets, 2)
+	for _, target := range out.Targets {
+		require.Equal(t, "0", target.EnvironmentID)
+	}
+}

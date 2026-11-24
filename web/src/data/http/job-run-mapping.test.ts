@@ -93,12 +93,12 @@ it.each(["project_update", "project_restore"])("keeps activity.message and event
   } finally { errors.mockRestore(); }
 });
 
-// Q-R1S6-A (a): target outcomes are read for update-window jobs only.
-it("only update-window jobs request target-outcome detail", () => {
-  for (const jobId of ["update-check", "update-window:direct:stack:app", "volume-backup", "example-job"]) {
+// Target outcomes are read for update windows and the static single-host check.
+it("only update-window and host-check jobs request target-outcome detail", () => {
+  for (const jobId of ["update-check-host", "update-check", "update-window:direct:stack:app", "volume-backup", "example-job"]) {
     const detail = job(jobId, "Example job");
     detail.activity.metadata = { jobId, runId: "example-run" };
     const run = mapActivityDetail(detail);
-    expect(run.jobRef !== undefined).toBe(jobId.startsWith("update-window:"));
+    expect(run.jobRef !== undefined).toBe(jobId === "update-check-host" || jobId.startsWith("update-window:"));
   }
 });

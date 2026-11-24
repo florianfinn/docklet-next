@@ -69,7 +69,7 @@ const KINDS: Record<string, ActionKind> = {
 const JOB_STEPS = new Set(["queued", "running", "waiting", "retrying", "succeeded", "failed", "partial", "needs_attention", "canceled", "skipped"]);
 function jobKind(run: Activity): ActionKind | undefined {
   if (run.type !== "job_run" || run.resourceType !== "job") return undefined;
-  if (run.resourceId === "update-check") return "check-updates";
+  if ((run.resourceId === "update-check" || run.resourceId === "update-check-host")) return "check-updates";
   return run.resourceId?.startsWith("update-window:") ? "update" : undefined;
 }
 
@@ -293,7 +293,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     deployProgress: deployProgress(run),
     ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
     ...(updateRecovery ? { updateRecovery } : {}),
-    ...(job && typeof run.metadata?.jobId === "string" && /^update-window:/.test(run.metadata.jobId) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
+    ...(job && typeof run.metadata?.jobId === "string" && (run.metadata.jobId === "update-check-host" || /^update-window:/.test(run.metadata.jobId)) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
     kind, sourceOperation: run.type,
     title: repositoryCheck ? { code: `activity.runKind.${kind}`, params: {} } : activityTitle(run),
     hostScoped,

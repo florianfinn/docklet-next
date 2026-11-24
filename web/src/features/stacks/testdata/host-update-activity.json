@@ -1,0 +1,30 @@
+{
+  "id": "example-host-check",
+  "environmentId": "example-host",
+  "batchId": "example-run",
+  "sourceEnvironmentId": "example-host",
+  "type": "job_run",
+  "status": "queued",
+  "resourceType": "job",
+  "resourceId": "update-check-host",
+  "resourceName": "Update check",
+  "step": "queued",
+  "latestMessage": "Update check: queued",
+  "messageCode": "job.queued",
+  "startedBy": {
+    "userId": "operator",
+    "username": "operator"
+  },
+  "startedAt": "2026-11-24T00:00:00Z",
+  "metadata": {
+    "attemptCount": 0,
+    "domainActivityId": "",
+    "environmentId": "example-host",
+    "jobId": "update-check-host",
+    "jobStatus": "queued",
+    "runId": "example-run",
+    "runUpdatedAt": "2026-11-24T00:00:00Z",
+    "trigger": "manual"
+  },
+  "createdAt": "2026-11-24T00:00:00Z"
+}

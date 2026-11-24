@@ -32,6 +32,7 @@ interface HostBlocksProps<T, K extends string> {
   onHostDir: (dir: SortDir) => void;
   labels: HostBlockLabels;
   summary: (host: Host, rows: T[]) => ReactNode;
+  actions?: (host: Host) => ReactNode;
   /** Hide blocks without rows, e.g. while a search or status filter is active. */
   hideEmpty?: boolean;
   /**
@@ -140,6 +141,7 @@ function HostBlock<T, K extends string>({ host, rows, hiddenRows, onCards, ...p 
           </ToneBadge>
         )}
         <span className="ml-auto text-xs text-muted-foreground tabular-nums">{p.summary(host, rows)}</span>
+        {p.actions && <div className="flex max-w-full flex-wrap items-center gap-2" data-slot="host-block-actions">{p.actions(host)}</div>}
         {p.sortBar === "header" && view === "cards" && (
           <div className="flex w-full justify-end" data-slot="host-block-sort">
             <CardSortBar compact label={host.name} columns={p.columns("table")} sort={p.sort} onSort={p.onSort} extra={p.sortExtra} />

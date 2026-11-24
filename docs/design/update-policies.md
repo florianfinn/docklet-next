@@ -225,3 +225,22 @@ Phase 2 owns `activity/capabilities*.go`, evidence helpers/tests in `activity/ru
 `backend/pkg/libarcane/edge/command_client*.go` only for bounded point-list response assembly/tests; `scripts/agent-contract.mjs`, generated contracts and named message subtree.
 No admission lock change or runtime_http_service.go edit is needed. Other web code/tests belong to #231; migrations and other producers stay read-only.
 Focused checks/red mutations precede full lint/test under the load rule. Phase 1 changes this design only and uses text checks.
+
+## Manual host checks
+
+The manual-only static job `update-check-host` uses the durable run's environment
+as its target, including environment `0`. The existing job-run route admits it
+on the hub after checking the enabled registration and JobsManage permission.
+Queued and running submissions for the same host join one run. Execution and
+restart reconciliation recheck permission and registration before running that
+host's check; a replacement registration created after admission refuses the old
+run. Agent delivery and agent history are never used for this job.
+
+The Stacks host header follows the run through its activity and jobRef. Its
+`check:host:<id>` gate shares admission across controls in one browser, and the
+hub coordinator joins concurrent admissions from other tabs. The control stays
+busy through completion and the following inventory read. Result counts describe
+stacks with at least one update and standalone containers with updates, across
+the host's full refreshed inventory, including hidden rows. The all-hosts action
+uses the existing `update-check` / `check-all` path. Failed checks refresh badges
+but report failure, and navigation or an identity change discards local feedback.

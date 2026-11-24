@@ -10,12 +10,17 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"time"
 
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	st "github.com/florianfinn/docklet-next/types/scheduler"
 )
 
 const hostUpdateCheckJob = "update-check-host"
+
+type hostUpdateChecker interface {
+	RunUpdateCheckHost(context.Context, string) (st.Outcome, error)
+}
 
 func (s *JobService) hostUpdateCheckAccess(ctx context.Context, run st.Run) error {
 	if s.cfg == nil || s.cfg.AgentMode || s.cfg.EdgeAgent {
@@ -27,11 +32,21 @@ func (s *JobService) hostUpdateCheckAccess(ctx context.Context, run st.Run) erro
 	if s.db == nil {
 		return imageDTO.Failure("update.check-unavailable", 503)
 	}
-	var host struct{ Enabled bool }
-	if err := s.db.WithContext(ctx).Table("environments").Select("enabled").Where("id = ?", run.EnvironmentID).Take(&host).Error; err != nil || !host.Enabled {
+	var host struct {
+		Enabled   bool
+		CreatedAt time.Time
+	}
+	if err := s.db.WithContext(ctx).Table("environments").Select("enabled,created_at").Where("id = ?", run.EnvironmentID).Take(&host).Error; err != nil || !host.Enabled {
 		return imageDTO.Failure("agent.unavailable", 503)
 	}
-	return s.authorizeRunInternal(ctx, run)
+	// A restarted run must never bind to a registration created after admission.
+	if !run.CreatedAt.IsZero() && host.CreatedAt.After(run.CreatedAt) {
+		return imageDTO.Failure("update.target-changed", 409)
+	}
+	if err := s.authorizeRunInternal(ctx, run); err != nil {
+		return imageDTO.Failure("update.permission-denied", 403)
+	}
+	return nil
 }
 func (s *JobService) submitHostUpdateCheck(ctx context.Context, request st.Request) (st.Run, error) {
 	request.EnvironmentID = cmp.Or(request.EnvironmentID, "0")
@@ -47,7 +62,7 @@ func (s *JobService) submitHostUpdateCheck(ctx context.Context, request st.Reque
 }
 func (s *JobService) executeHostUpdateCheck(ctx context.Context, run st.Run) (st.Outcome, error) {
 	if err := s.hostUpdateCheckAccess(ctx, run); err != nil {
-		return st.Outcome{Status: st.Failed, Code: "agent.unavailable"}, err
+		return st.Outcome{Status: st.Failed, Code: imageDTO.Neutral(err, "update.check-unavailable", 503).Problem.Code}, err
 	}
 	return s.imagePolicies.RunUpdateCheckHost(s.runContextInternal(ctx, run), run.EnvironmentID)
 }

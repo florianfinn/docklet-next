@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderWithApp } from "@/test/render";
@@ -29,6 +30,9 @@ describe("stack host blocks", () => {
     renderWithApp(<StacksPage />);
     await screen.findByRole("link", { name: "Stack Media öffnen" });
     const blocks = document.querySelector<HTMLElement>('[data-slot="host-blocks"]')!;
+    expect([...blocks.querySelectorAll('[data-slot="host-block-actions"] button')].every((b) => b.textContent === "Auf Updates prüfen")).toBe(true);
+    expect(blocks.querySelectorAll('[data-slot="host-block-actions"] button').length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Alle Hosts auf Updates prüfen" }) instanceof HTMLElement).toBe(true);
     expect([blocks.querySelector('[data-slot="card-sort-bar"]') === null, blocks.querySelector('[data-slot="host-block-sort"]') === null]).toEqual([true, true]);
 
     const atlas = screen.getByRole("region", { name: /Atlas/ });
@@ -50,6 +54,7 @@ describe("stack host blocks", () => {
     const atlas = screen.getByRole("region", { name: /Atlas/ });
     expect([atlas.getAttribute("data-view"), blocks.querySelector(':scope > div > [data-slot="card-sort-bar"]') === null]).toEqual(["cards", true]);
 
+    expect(atlas.querySelector('[data-slot="host-block-actions"] button')?.textContent).toBe("Auf Updates prüfen");
     const header = within(atlas.querySelector<HTMLElement>("header")!);
     expect(atlasNames()).toEqual(["Home", "Media", "Paperless"]);
     // Radix Select opens from the keyboard under happy-dom.
@@ -79,4 +84,12 @@ describe("stack host blocks", () => {
     expect([style.gridTemplateColumns, style.maxWidth]).toEqual(["repeat(auto-fit, minmax(min(100%, max(var(--hb-min), calc((100% - 2rem) / 3))), 1fr))", "calc(3 * 56rem + 2rem)"]);
     expect(cappedGrid(2, 1).maxWidth).toBe(undefined);
   });
+});
+
+it("keeps a host check available when its inventory has no stacks", async () => {
+ const adapter = createDemoAdapter(), hosts = await adapter.listHosts();
+ adapter.listHosts = async () => [hosts[0]!]; adapter.listStacks = async () => [];
+ renderWithApp(<StacksPage />, adapter);
+ expect((await screen.findByRole("button", { name: "Auf Updates prüfen" })) instanceof HTMLElement).toBe(true);
+ expect(document.querySelectorAll('[data-slot="host-block-actions"]').length).toBe(1);
 });

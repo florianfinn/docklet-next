@@ -79,6 +79,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     runStackCommand: unavailable,
     installStackUpdates: unavailable,
     checkUpdates: unavailable,
+    checkHostUpdates: unavailable,
     deployStack: unavailable,
     saveStackFiles: unavailable,
     restoreRestorePoint: unavailable,

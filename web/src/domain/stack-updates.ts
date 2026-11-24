@@ -59,6 +59,7 @@ export interface UpdatesApi {
   saveContainerUpdatePolicy?(id: string, mode: PolicyMode, expectedRevision: number, window?: UpdateWindow): Promise<StackUpdatePolicy>;
   getUpdateSettings?(): Promise<import("./settings").UpdateSettings & { timeZone: string; nextRun?: string; projectionUnavailable?: boolean }>;
   checkAllUpdates?(): Promise<string>;
+  checkHostUpdates?(hostId?: string): Promise<string>;
   restoreContainerImage?(id: string): Promise<string>;
   getContainerPreviousImage?(id: string): Promise<{ imageId: string; reference: string; createdAt: string } | undefined>;
   getSystemImageHints?(hostId: string): Promise<SystemHints>;

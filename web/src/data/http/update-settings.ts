@@ -12,7 +12,7 @@ import { splitInventoryId } from "./inventory-mapping";
 import { runtimeResponseError } from "./runtime-mapping";
 import { record, id, date, choice, bool, optionalDate, list, reason } from "./update-validation";
 
-export function createUpdateSettings(o: { baseUrl: string; client: CsrfClient; generation: () => number; capability: (op: string, ref: ResourceRef) => Promise<CapabilityDescriptor> }): Required<Pick<UpdatesApi, "getUpdateSettings" | "checkAllUpdates" | "getContainerPreviousImage" | "getUpdateCheckJob" | "getUpdateJobTargets">> {
+export function createUpdateSettings(o: { baseUrl: string; client: CsrfClient; generation: () => number; accepted?: (host: string) => void; capability: (op: string, ref: ResourceRef) => Promise<CapabilityDescriptor> }): Required<Pick<UpdatesApi, "checkHostUpdates" | "getUpdateSettings" | "checkAllUpdates" | "getContainerPreviousImage" | "getUpdateCheckJob" | "getUpdateJobTargets">> {
   async function request(path: string, method = "GET", operation?: string, ref: ResourceRef = { kind: "hub", id: "0" }) {
     const version = o.generation(), current = () => { if (version !== o.generation()) throw new CancelledError(); };
     if (operation) { const cap = await o.capability(operation, ref); current(); if (!cap.available) throw unavailable(operation, ref, cap.disabledReasonCode); }
@@ -49,6 +49,20 @@ export function createUpdateSettings(o: { baseUrl: string; client: CsrfClient; g
         nextRun = (await checkJob("0")).nextRun;
       } catch (error) { if (error instanceof CancelledError) throw error; projectionUnavailable = true; }
       return { interval, notify, timeZone, nextRun, projectionUnavailable };
+    },
+    async checkHostUpdates(host) {
+      const target = host ?? "0", job = host === undefined ? "update-check" : "update-check-host";
+      id(target);
+      const path = `/environments/${encodeURIComponent(target)}/jobs/${job}`;
+      const envelope = record(await request(host === undefined ? "/updater/check-all" : `${path}/run`, "POST", "checkAllUpdates"));
+      if (envelope.success !== true) throw new AdapterOutcomeError({ kind: "error", code: "runtime.admission-unknown" });
+      const runId = id(envelope.runId);
+      // The action store follows activity IDs; scheduler IDs remain in jobRef.
+      const run = record(await request(`${path}/runs/${encodeURIComponent(runId)}`));
+      if (id(run.id) !== runId || run.jobId !== job || run.environmentId !== target) throw new AdapterOutcomeError({ kind: "error", code: "runtime.admission-unknown" });
+      const activityId = id(run.activityId);
+      o.accepted?.(target);
+      return activityId;
     },
     async checkAllUpdates() {
       const envelope = record(await request("/updater/check-all", "POST", "checkAllUpdates"));

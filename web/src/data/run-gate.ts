@@ -76,6 +76,7 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
     const key = s.stackId ? `check:stack:${s.stackId}` : s.containerId ? `check:container:${s.containerId}` : "check:all";
     return { key, freshMs: CHECK_FRESH_MS, coveredBy: key === "check:all" ? [] : ["check:all"] };
   },
+  checkHostUpdates: ([host]) => ({ key: host === undefined ? "check:all" : `check:host:${str(host)}` }),
   scanVulnerabilityCandidates: ([host, input]) => ({ key: `candidate-scan:${str(host)}:${contentHash(JSON.stringify(input))}` }),
   runScan: () => ({ key: "scan:all", freshMs: CHECK_FRESH_MS }),
   reconnectHost: ([hostId]) => ({ key: `reconnect:${str(hostId)}`, freshMs: CHECK_FRESH_MS }),
@@ -353,7 +354,7 @@ export class RunGate {
     }
 
     // Registered before the start: a run list update during the start must not prune it.
-    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "installContainerUpdate" || method === "restoreContainerImage" || method === "restoreRestorePoint" || method === "recreateContainer" || method === "restartService" || method === "selfUpdate") };
+    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "checkHostUpdates" || method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "installContainerUpdate" || method === "restoreContainerImage" || method === "restoreRestorePoint" || method === "recreateContainer" || method === "restartService" || method === "selfUpdate") };
     this.entries.set(rule.key, entry);
     entry.promise = new Promise<unknown>((resolve) => resolve(start())).then(
       (value) => {

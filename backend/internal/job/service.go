@@ -36,7 +36,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
@@ -55,7 +54,7 @@ import (
 // NOTE: This is intentionally separate from settings.SettingsService to keep the API
 // surface job-focused and to centralize schedule validation/rescheduling.
 type JobService struct {
-	imagePolicies *updater.UpdaterService
+	imagePolicies hostUpdateChecker
 	activity      *activity.ActivityService
 	activityMu    sync.Mutex
 	runs          *runs.Coordinator
