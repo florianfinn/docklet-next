@@ -45,6 +45,10 @@ func adoptionCandidate(i dto.Instance, rows []dto.Discovery) (dto.Identity, dto.
 		return dto.Identity{}, dto.AdoptionAmbiguous
 	}
 	d := candidates[0]
+	// The stored container itself without a readable state (Epoch's container-changed) is not a recreation.
+	if d.Identity.ContainerID == i.Identity.ContainerID {
+		return dto.Identity{}, dto.AdoptionContainerMissing
+	}
 	if d.Kind != i.Kind {
 		return dto.Identity{}, dto.AdoptionKindChanged
 	}

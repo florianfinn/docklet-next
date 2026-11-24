@@ -32,7 +32,8 @@ export function InstanceWorkspace({
   api: ProxyApi;
   updated: (i: Instance) => void;
   removed: () => void;
-  adoption?: { claim: (id: string) => boolean; result: (value: Adoption) => void };
+  /** `claim` bounds the automatic adoption when the instance opens; `opened` tells whether that read produced the answer. */
+  adoption?: { claim: (id: string) => boolean; result: (value: Adoption, opened: boolean) => void };
 }) {
   const t = useTranslations("proxyContract.ui"),
     [snapshot, setSnapshot] = useState<Snapshot>(),
@@ -49,7 +50,9 @@ export function InstanceWorkspace({
   useEffect(() => { callbacks.current={adoption,updated}; },[adoption,updated]);
   const attempted = useRef(false), sequence = useRef(0), controller = useRef(new AbortController());
   const [adoptionResult, setAdoptionResult] = useState<Adoption>();
-  const refresh = useCallback(async () => {
+  // AUTO-1: every read may adopt once. Opening the instance claims its one automatic attempt per page open;
+  // the refresh gesture, focus/visibility regain and follow-up reads after an operation each allow one more.
+  const refresh = useCallback(async (trigger: "open" | "read" = "read") => {
     const {adoption,updated}=callbacks.current;
     const request = ++sequence.current, ownedController = controller.current;
     const valid = () => active.current && request === sequence.current && !ownedController.signal.aborted;
@@ -61,7 +64,7 @@ export function InstanceWorkspace({
     ]);
     if (!valid()) return false;
     if (configuration.status === "rejected" && configuration.reason instanceof ProxyError && configuration.reason.code === "container-changed" &&
-      (adoption ? adoption.claim(instance.id) : !attempted.current)) {
+      (trigger === "read" || (adoption ? adoption.claim(instance.id) : !attempted.current))) {
       attempted.current = true;
       setSnapshot(undefined);
       setEditor(undefined);
@@ -70,7 +73,7 @@ export function InstanceWorkspace({
         const answer = await api.adopt(instance.id, ownedController.signal);
         if (!valid()) return false;
         setAdoptionResult(answer);
-        adoption?.result(answer);
+        adoption?.result(answer, trigger === "open");
         if (answer.outcome !== "refused") {
           if (JSON.stringify(answer.instance) !== JSON.stringify(instance)) { updated(answer.instance); return false; }
           [configuration, operations] = await Promise.allSettled([
@@ -99,7 +102,7 @@ export function InstanceWorkspace({
     controller.current = new AbortController();
     let live = true;
     void Promise.resolve().then(() => {
-      if (live) return refresh();
+      if (live) return refresh("open");
     });
     return () => {
       live = false;

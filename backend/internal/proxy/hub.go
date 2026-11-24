@@ -469,22 +469,11 @@ func (m *Module) CreateResolver(ctx context.Context, id string, input dto.Resolv
 			return dto.Operation{}, dto.Fail(dto.AgentUnavailable, 503)
 		}
 	}
-	inv, err := m.Transport.Inventory(ctx, i)
+	i, err = m.writeAdmission(ctx, id, false)
 	if err != nil {
 		return dto.Operation{}, err
 	}
-	reg, err := m.Transport.Registration(ctx, i.EnvironmentID)
-	if err != nil {
-		return dto.Operation{}, err
-	}
-	i.Generation = inv.Generation
-	i.Registration = reg
-	i.Eligibility = inv.Eligibility
-	if inv.Identity.ContainerID != i.Identity.ContainerID {
-		return dto.Operation{}, dto.Fail(dto.ContainerChanged, 409)
-	}
-	i.Identity.StartedAt = inv.Identity.StartedAt
-	return m.Hub.CreateResolver(ctx, dto.ResolverApplyRequest{ID: uuid.NewString(), Instance: i, Generation: i.Generation, Registration: reg, Request: input})
+	return m.Hub.CreateResolver(ctx, dto.ResolverApplyRequest{ID: uuid.NewString(), Instance: i, Generation: i.Generation, Registration: i.Registration, Request: input})
 }
 
 // adoptResolver runs in the receipt transaction. A concurrent re-registration

@@ -170,6 +170,10 @@ func TestS2EveryIdentityField(t *testing.T) {
 	f := newAdoptionFixture(t)
 	_, why := adoptionCandidate(f.request.Instance, []dto.Discovery{f.candidate, f.candidate})
 	require.Equal(t, dto.AdoptionAmbiguous, why)
+	same := f.candidate
+	same.Identity.ContainerID = f.request.Instance.Identity.ContainerID
+	_, why = adoptionCandidate(f.request.Instance, []dto.Discovery{same})
+	require.Equal(t, dto.AdoptionContainerMissing, why)
 }
 func TestS2OpenOperationRefused(t *testing.T) {
 	for _, kind := range []string{"reservation", "unfinished"} {

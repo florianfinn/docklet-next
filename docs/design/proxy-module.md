@@ -34,10 +34,19 @@ name, proxy kind, mount target, canonical source, source kind, mount mode and
 read-only authority. Discovery uses the same Direct and Edge transport. A single
 transaction fences registration and instance identity, checks ownership, updates
 the identity and writes a finished `adoption` receipt for Recent operations.
-Reads trigger adoption once on `container-changed` and retry with the returned
-instance; writes revalidate before admission. Page/instance open, Refresh and
-window focus or visibility regain (debounced two seconds) trigger reads; there is
-no identity polling. Other differences keep `container-changed`. A transient
+Each read triggers at most one adoption on `container-changed` and retries with
+the returned instance. Opening an instance adopts automatically once per page
+open; Refresh, window focus or visibility regain (debounced two seconds) and the
+read after an operation settles each allow one more, so a refusal such as an open
+operation clears on the next read. Only opening switches the view: to the
+`supersededBy` instance, or to the next untried instance when the page (not the
+person) chose the refused one. There is no identity polling. Writes (apply and
+resolver) adopt first, then store the refreshed identity, generation and
+registration before admission, so a plain restart (same container, new
+`StartedAt`) never refuses a write; a concurrent change of the stored container
+is `container-changed`, any other concurrent change of the row is retried once and
+then `operation-conflict`. A container that reports itself without readable state
+is never adopted as its own recreation. Other differences keep `container-changed`. A transient
 Docker error while classifying a source is an error, not a read-only source; only a
 missing path and a bind-rule refusal classify. The same holds for every identity and
 target read: only a typed refusal or an observed difference (removed or stopped

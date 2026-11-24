@@ -46,7 +46,8 @@ function Manager() {
     };
   });
   const api = connection.api;
-  const attempts = useRef(new Set<string>());
+  // `attempts` bounds the open-time fallback walk; `chosen` is set when the person picked the instance.
+  const attempts = useRef(new Set<string>()), chosen = useRef(false);
   const [stale,setStale]=useState<Record<string, Adoption>>({});
   const [instances, setInstances] = useState<Instance[]>(),
     [{ view, last }, setPage] = useState<{ view: View; last: string }>({ view: { kind: "setup" }, last: "" }),
@@ -64,7 +65,7 @@ function Manager() {
         if (live && active.current) {
           setError(undefined);
           setInstances(rows);
-          setPage(to(first(rows)));
+          chosen.current = false; setPage(to(first(rows)));
         }
       },
       e => {
@@ -89,7 +90,7 @@ function Manager() {
       const i = await api.create(input);
       if (active.current) {
         setInstances(old => [...(old ?? []), i]);
-        setPage(to({ kind: "instance", id: i.id }));
+        chosen.current = true; setPage(to({ kind: "instance", id: i.id }));
       }
     } catch (e) {
       if (active.current) setError(e);
@@ -122,7 +123,7 @@ function Manager() {
                 hideLabel
                 value={instance ? instance.id : SETUP}
                 placeholder={t("instance")}
-                onChange={v => setPage(to(v === SETUP ? { kind: "setup" } : { kind: "instance", id: v }))}
+                onChange={v => { chosen.current = v !== SETUP; setPage(to(v === SETUP ? { kind: "setup" } : { kind: "instance", id: v })); }}
                 options={[
                   ...instances.map(i => ({
                     value: i.id,
@@ -145,10 +146,12 @@ function Manager() {
                 api={api}
                 adoption={{
                   claim: id => { if (attempts.current.has(id)) return false; attempts.current.add(id);return true; },
-                  result: answer => {
-                    if (answer.outcome !== "refused") return;
+                  result: (answer, opened) => {
+                    if (answer.outcome !== "refused") { setStale(old => { const { [answer.instance.id]: _cleared, ...rest } = old; return rest; }); return; }
                     setStale(old=>({...old,[answer.instance.id]:answer}));
-                    const next=instances.find(i=>i.id===answer.supersededBy && !attempts.current.has(i.id)) ?? instances.find(i=>i.id!==answer.instance.id && !attempts.current.has(i.id));
+                    // Only opening switches the view: to the successor, or (when the page chose the instance) to the next untried one.
+                    if (!opened) return;
+                    const next=instances.find(i=>i.id===answer.supersededBy && !attempts.current.has(i.id)) ?? (chosen.current ? undefined : instances.find(i=>i.id!==answer.instance.id && !attempts.current.has(i.id)));
                     if (next) setPage(to({kind:"instance",id:next.id}));
                   },
                 }}
@@ -156,7 +159,7 @@ function Manager() {
                 removed={() => {
                   const rest = instances.filter(row => row.id !== instance.id);
                   setInstances(rest);
-                  setPage(to(first(rest)));
+                  chosen.current = false; setPage(to(first(rest)));
                 }}
               />
             </>
@@ -174,7 +177,7 @@ function Manager() {
                 busy={busy}
               />
               {back && (
-                <Button variant="ghost" onClick={() => setPage(to({ kind: "instance", id: back.id }))}>
+                <Button variant="ghost" onClick={() => { chosen.current = true; setPage(to({ kind: "instance", id: back.id })); }}>
                   {t("back")}
                 </Button>
               )}
@@ -191,7 +194,7 @@ function Manager() {
                 if (active.current) {
                   setError(undefined);
                   setInstances(rows);
-                  setPage(to(first(rows)));
+                  chosen.current = false; setPage(to(first(rows)));
                 }
               },
               e => {

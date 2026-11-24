@@ -131,3 +131,51 @@ it("adopts a recreation on the existing Refresh gesture",async()=>{
  await screen.findByRole("tab",{name:"Routes"});
  expect(f.fetcher.mock.calls.some(([url,init])=>String(url).endsWith("/read")&&JSON.parse(String(init?.body)).identity.containerId===replacement.identity.containerId)).toBe(true);
 });
+// S2-R1-2: each read may adopt once, so a refusal clears on the next read and a later recreation is followed.
+function sequenced(answers:Adoption[],initiallyChanged=true) {
+ const f=fixture(),raw=f.fetcher.getMockImplementation()!;
+ let current=instance.identity.containerId,changed=initiallyChanged;const adoptions:Adoption[]=[];
+ f.fetcher.mockImplementation(async(input,init)=>{
+  const path=String(input);
+  if(path.endsWith("/adopt")){const answer=answers[adoptions.length]??answers.at(-1)!;adoptions.push(answer);if(answer.outcome!=="refused"){current=answer.instance.identity.containerId;changed=false;}return json(answer)}
+  if((path.endsWith("/read")||path.endsWith("/inventory"))&&changed&&JSON.parse(String(init?.body)).identity.containerId===current)return new Response(JSON.stringify({code:"container-changed"}),{status:409});
+  return raw(input,init);
+ });
+ vi.stubGlobal("fetch",f.fetcher);
+ return {...f,adoptions,recreate:()=>{changed=true}};
+}
+it("adopts on Refresh after an earlier operation-open refusal and clears the stale mark",async()=>{
+ const f=sequenced([{outcome:"refused",reason:"operation-open",instance},{outcome:"adopted",instance:replacement,operationId:"adoption-one"}]);
+ render(<Providers><ProxyPage/></Providers>);
+ await screen.findByText("An operation is still open for this instance.");
+ expect(f.adoptions).toHaveLength(1);expect(screen.queryByText("Stale")!==null).toBe(true);
+ await userEvent.click(screen.getByRole("button",{name:"Refresh"}));
+ await waitFor(()=>expect(f.adoptions).toHaveLength(2));
+ await screen.findByRole("tab",{name:"Routes"});
+ expect(screen.queryByText("Stale")===null).toBe(true);
+});
+it("follows a second recreation in the same page session on the next read",async()=>{
+ const third:Instance={...instance,identity:{...instance.identity,containerId:"container-three",startedAt:"2026-11-24T01:00:00Z"}};
+ const f=sequenced([{outcome:"adopted",instance:replacement,operationId:"adoption-one"},{outcome:"adopted",instance:third,operationId:"adoption-two"}]);
+ render(<Providers><ProxyPage/></Providers>);
+ await screen.findByRole("tab",{name:"Routes"});expect(f.adoptions).toHaveLength(1);
+ f.recreate();
+ await userEvent.click(screen.getByRole("button",{name:"Refresh"}));
+ await waitFor(()=>expect(f.adoptions).toHaveLength(2));
+ await screen.findByRole("tab",{name:"Routes"});
+ expect(f.fetcher.mock.calls.some(([url,init])=>String(url).endsWith("/read")&&JSON.parse(String(init?.body)).identity.containerId===third.identity.containerId)).toBe(true);
+});
+// S2-R1-3: only opening switches the view; a refusal on a later read keeps the instance and marks it stale.
+it("keeps the open instance when a later read's adoption is refused",async()=>{
+ const f=sequenced([{outcome:"refused",reason:"source-changed",instance}],false);
+ const second={...replacement,id:"instance-two",name:"Second proxy"};f.state.instances=[instance,second];
+ render(<Providers><ProxyPage/></Providers>);
+ await screen.findByRole("tab",{name:"Routes"});
+ f.recreate();
+ await userEvent.click(screen.getByRole("button",{name:"Refresh"}));
+ await waitFor(()=>expect(f.adoptions).toHaveLength(1));
+ await waitFor(()=>expect(screen.queryByRole("button",{name:"Remove instance"})!==null).toBe(true));
+ expect(screen.queryByText("Stale")!==null).toBe(true);
+ const lastRead=f.fetcher.mock.calls.filter(([url])=>String(url).endsWith("/read")).at(-1);
+ expect(JSON.parse(String(lastRead?.[1]?.body)).id).toBe(instance.id);
+});
