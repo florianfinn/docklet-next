@@ -2,6 +2,7 @@
 
 export const enStacks = {
   hostCheck: {
+    partial: "Some targets could not be checked.", partialCount: "{count, plural, one {# target} other {# targets}} could not be checked.", openRun: "Open run",
     check: "Check for updates", all: "Check all hosts for updates", checking: "Checking…",
     result: "{stacks, plural, one {# stack} other {# stacks}} and {containers, plural, one {# container} other {# containers}} have updates",
   },

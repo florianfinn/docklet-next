@@ -250,8 +250,10 @@ busy through completion and the following inventory read. Result counts describe
 stacks with at least one update and standalone containers with updates, across
 the host's full refreshed inventory, including hidden rows. The all-hosts action
 uses the existing `update-check` / `check-all` path; while it runs, each host
-control is busy. Failed checks refresh badges but report failure, and navigation
-or an identity change discards local feedback. An admission with an unknown
+control is busy. A partial run still reports its counts, with the number of
+targets that could not be checked and a link to the run; a failed run refreshes
+badges but reports failure. Navigation or an identity change discards local
+feedback. An admission with an unknown
 outcome is not kept: the check says it did not finish and can be sent again,
 because the hub joins an existing run for that host. With no stack on any visible
 host, the page keeps its first-run empty state and offers the all-hosts check in

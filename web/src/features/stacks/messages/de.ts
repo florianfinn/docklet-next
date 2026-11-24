@@ -3,6 +3,7 @@ import type { enStacks } from "./en";
 
 export const deStacks: typeof enStacks = {
   hostCheck: {
+    partial: "Einige Ziele konnten nicht geprüft werden.", partialCount: "{count, plural, one {# Ziel konnte} other {# Ziele konnten}} nicht geprüft werden.", openRun: "Lauf öffnen",
     check: "Auf Updates prüfen", all: "Alle Hosts auf Updates prüfen", checking: "Prüfung läuft…",
     result: "{stacks, plural, one {# Stack} other {# Stacks}} und {containers, plural, one {# Container} other {# Container}} haben Updates",
   },

@@ -281,6 +281,8 @@ export interface ActionRun {
   recreateResult?: { oldId: string; newId: string; oldName: string; newName: string };
   updateRecovery?: { outcome: "restored" | "restore-failed" | "unavailable" | "not-needed" | "interrupted"; code?: string };
   jobRef?: { jobId: string; runId: string };
+  /** A scheduler job run that ended with some targets failed; its activity status is failed. */
+  partial?: boolean;
   baselineCode?: string;
   lifecycleCode?: string;
   effectVerified?: boolean;

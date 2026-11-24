@@ -293,6 +293,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     deployProgress: deployProgress(run),
     ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
     ...(updateRecovery ? { updateRecovery } : {}),
+    ...(job && run.metadata?.jobStatus === "partial" ? { partial: true } : {}),
     ...(job && typeof run.metadata?.jobId === "string" && (run.metadata.jobId === "update-check-host" || /^update-window:/.test(run.metadata.jobId)) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
     kind, sourceOperation: run.type,
     title: repositoryCheck ? { code: `activity.runKind.${kind}`, params: {} } : activityTitle(run),

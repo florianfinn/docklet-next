@@ -15,6 +15,7 @@ import { useCapability } from "@/data/use-capability";
 import { useActionRuns } from "@/data/live";
 import { useImageError } from "@/features/images/use-image-error";
 import { identityLifetime } from "@/data/identity-lifetime";
+import { openActionDialog } from "@/features/activity/action-dialog-store";
 import { queryKeys } from "@/data/query-keys";
 import { AdapterOutcomeError } from "@/data/capability";
 import type { CodedActionRun } from "@/data/message-code";
@@ -74,17 +75,24 @@ export function HostCheckAction({ hostId }: { hostId?: string }) {
       // Unfiltered reads count all of this host, including rows hidden in the overview.
       const [stacks, containers] = await Promise.all([adapter.listStacks(), adapter.listContainers()]);
       if (controller.signal.aborted) throw new CancelledError();
-      return { run, stacks, containers };
-    }, ({ run, stacks, containers }) => {
+      // A partial run still reports its counts; the failed target count is shown when the run's targets can be read (D-7).
+      const failed = run.partial && run.jobRef && adapter.getUpdateJobTargets
+        ? await adapter.getUpdateJobTargets(run.hostId ?? "0", run.jobRef.jobId, run.jobRef.runId).then((targets) => targets.filter((target) => target.status === "failed").length, () => undefined)
+        : undefined;
+      if (controller.signal.aborted) throw new CancelledError();
+      return { run, stacks, containers, failed };
+    }, ({ run, stacks, containers, failed }) => {
       client.setQueryData(queryKeys.stacks, stacks); client.setQueryData(queryKeys.containers, containers);
-      if (run.status !== "succeeded") {
+      if (run.status !== "succeeded" && !run.partial) {
         toast.error(errors(new AdapterOutcomeError({ kind: "error", code: run.error?.code ?? "update.check-unavailable" })));
         return;
       }
-      toast.success(t("result", {
+      const result = t("result", {
         stacks: stacks.filter((s) => (hostId === undefined || s.hostId === hostId) && summarizeUpdates(s.services).pending > 0).length,
         containers: containers.filter((c) => (hostId === undefined || c.hostId === hostId) && !c.stackId && hasUpdate(c.update)).length,
-      }));
+      });
+      if (run.status === "succeeded") { toast.success(result); return; }
+      toast.warning(result, { description: failed ? t("partialCount", { count: failed }) : t("partial"), action: { label: t("openRun"), onClick: () => openActionDialog(run.id) } });
     });
   };
   return <div className="flex min-w-0 flex-col gap-1">

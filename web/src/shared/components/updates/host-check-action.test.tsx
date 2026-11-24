@@ -32,8 +32,8 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); activityStore.reset(); setApp
 function fixture() {
   const adapter = createDemoAdapter(), listeners = new Set<(rows: CodedActionRun[]) => void>();
   let rows: CodedActionRun[] = [], client!: QueryClient;
-  const publish = (status: CodedActionRun["status"]) => {
-    rows = [{ ...mapActivityDetail({ activity, stepTrace: [], messages: [], output: [], outputTruncated: false } as never), status }];
+  const publish = (status: CodedActionRun["status"], partial = false) => {
+    rows = [{ ...mapActivityDetail({ activity: partial ? { ...activity, status: "failed", metadata: { ...activity.metadata, jobStatus: "partial" } } : activity, stepTrace: [], messages: [], output: [], outputTruncated: false } as never), status }];
     listeners.forEach((f) => f(rows));
   };
   adapter.subscribeActions = (f) => { listeners.add(f); f(rows); return () => { listeners.delete(f); }; };
@@ -95,13 +95,26 @@ it.each(["en-US", "de"] as const)("shows the real producer in the Action Centre 
   expect(document.querySelector("#run-example-host-check")?.textContent).toContain(locale === "de" ? "Update-Prüfung" : "Update check");
 });
 
-it("partial checks still refresh successful badges and report failure instead of a success count", async () => {
+it("failed checks still refresh successful badges and report failure instead of a success count", async () => {
  const f = fixture(), success = vi.spyOn(toast, "success").mockImplementation(() => "example"), error = vi.spyOn(toast, "error").mockImplementation(() => "example");
  renderWithApp(<f.Surface />, f.adapter);
  await userEvent.click(await screen.findByRole("button", { name: "Auf Updates prüfen" }));
  act(() => f.publish("failed"));
  await waitFor(() => expect(error).toHaveBeenCalledTimes(1));
  expect(f.client().getQueryData<Stack[]>(queryKeys.stacks)?.length).toBe(4); expect(success).not.toHaveBeenCalled();
+});
+
+// D-7: a partial run reports its counts with the number of targets that could not be checked and a link to the run.
+it("partial checks report the counts and how many targets could not be checked", async () => {
+ const f = fixture(), warning = vi.spyOn(toast, "warning").mockImplementation(() => "example"), error = vi.spyOn(toast, "error").mockImplementation(() => "example");
+ f.adapter.getUpdateJobTargets = vi.fn(async () => [{ id: "a", status: "succeeded" as const }, { id: "b", status: "failed" as const }, { id: "c", status: "failed" as const }]);
+ renderWithApp(<f.Surface />, f.adapter);
+ await userEvent.click(await screen.findByRole("button", { name: "Auf Updates prüfen" }));
+ act(() => f.publish("failed", true));
+ await waitFor(() => expect(warning).toHaveBeenCalledTimes(1));
+ expect(String(warning.mock.calls[0]?.[0])).toBe("2 Stacks und 1 Container haben Updates");
+ expect((warning.mock.calls[0]?.[1] as { description?: string }).description).toBe("2 Ziele konnten nicht geprüft werden.");
+ expect(error).not.toHaveBeenCalled();
 });
 
 it("navigation while queued cancels the completion listener before inventory writes", async () => {
