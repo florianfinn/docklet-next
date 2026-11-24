@@ -2,7 +2,7 @@
 // Revision: 93a1bd85562f9c156a80280dc7b450877d71881b45f83cf5b901d6ac993ffd71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. M9 #204: scoped network capabilities and late-response guards Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. Candidate #231: Docker reference identity matching. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M26 #462: bounded shell counts and raw inventory ownership.; M36 #568: record baseline without pulling images. M39 #612: simulated host scan run summaries.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. M9 #204: scoped network capabilities and late-response guards Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. Candidate #231: Docker reference identity matching. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M26 #462: bounded shell counts and raw inventory ownership.; M36 #568: record baseline without pulling images.
 
 import { demoVulnerabilityCandidates } from "./demo-vulnerability-candidates";
 import { demoVulnerabilityAdvisories } from "./demo-vulnerability-advisory";
@@ -47,7 +47,6 @@ import { createDemoHubBackups } from "./demo-hub-backups";
 import { createDemoHistory } from "./demo-history";
 import { createDemoServiceWidgets } from "./demo-service-widgets";
 import { createMemoryUiPreferences } from "./demo-ui-preferences";
-import type { ScanRunSummary } from "@/domain/security";
 
 export class DemoCommandError extends Error {
   readonly code: "not-found" | "recreate-not-allowed" | "managed-by-unraid";
@@ -69,7 +68,6 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     const stack = run.stackId ? db.stack(run.stackId) : undefined;
     return stack ? composeScript(composeTarget(stack), run.services) : genericScript;
   }, () => db.settings.activity.maxFinishedActions);
-  const demoScanRuns = new Map<string, ScanRunSummary>();
   const metrics = new MetricsSimulator({
     hosts: () => db.hosts,
     containers: () => db.containers().map((c) => ({ id: c.id, hostId: c.hostId, running: c.state === "running" })),
@@ -566,14 +564,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       });
     },
 
-    async getScanRunSummaries() {
-      return simulateRead("security", () => ({ runs: new Map(demoScanRuns) }));
-    },
-
     async runScan() {
       const images = db.security.images.filter((i) => db.host(i.hostId)?.status !== "offline");
-      const startedAt = new Date().toISOString();
-      const id = await runner.start({
+      return runner.start({
         kind: "scan",
         title: "Schwachstellenscan",
         target: "Alle verbundenen Hosts",
@@ -591,14 +584,12 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
           const counts = { critical: 0, high: 0, medium: 0, low: 0 };
           for (const i of db.security.images) for (const k of Object.keys(counts) as (keyof typeof counts)[]) counts[k] += i.counts[k];
           db.security.history = [...db.security.history, { at, trigger: "manual" as const, counts }].slice(-14);
-          demoScanRuns.set(id, Object.freeze({ status: "completed" as const, targets: images.length, scanned: images.length, failed: 0, skipped: 0, counts: Object.freeze({ ...counts, unknown: 0 }), startedAt, finishedAt: at }));
           db.pushEvent({ kind: "scan", level: "info", title: `Schwachstellenscan abgeschlossen (${images.length} Images)` });
           // A manual scan switches scans on, which the settings show too.
           if (enabledBefore) db.changed("security");
           else db.changed("security", "settings");
         },
       });
-      return id;
     },
 
     async setScanEnabled(enabled) {

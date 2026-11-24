@@ -28,6 +28,7 @@ export const queryKeys = {
   // Under the security prefix: scans, ignores and settings changes refresh it with the overview.
   activeSecurity: ["security", "active"],
   // Under the security prefix: a settled scan and a host registration change (security topic) refresh it.
+  scanRunsRoot: ["security", "scan-runs"],
   scanRuns: (hostId: string) => ["security", "scan-runs", hostId],
   topology: ["topology"],
   networks: ["network-summaries"],

@@ -91,7 +91,8 @@ export interface ImportResult {
 }
 
 /** Query topics used to invalidate cached reads after server-side changes. */
-export type Topic = "hosts" | "stacks" | "containers" | "security" | "topology" | "events" | "dashboardEvents" | "schedule" | "volumes" | "settings" | "images" | "registries";
+/** `registration`: a host's registration or connection changed; host-owned results of the old one are void. */
+export type Topic = "hosts" | "stacks" | "containers" | "security" | "topology" | "events" | "dashboardEvents" | "schedule" | "volumes" | "settings" | "images" | "registries" | "registration";
 
 export type Unsubscribe = () => void;
 
