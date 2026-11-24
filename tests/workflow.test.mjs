@@ -189,6 +189,8 @@ test("a release train of text, version and its provenance entry takes the text s
   for (const head of [
     train('{"next":"1.1.0","channel":"beta"}\n', next),
     train('{"next":"1.1.0-rc.1"}\n', next),
+    train('{"next":["1.1.0"]}\n', next),
+    train('{"next":"01.1.0"}\n', next),
     train('{"next":"1.1.0"}\n', { ...next, "deploy/release/other.json": entry("d".repeat(64), "Other input.") }),
     train('{"next":"1.1.0"}\n', { ...next, "deploy/release/version.json": { ...next["deploy/release/version.json"], license: "MIT" } }),
     train('{"next":"1.1.0"}\n', next, ["third_party/", "web/"]),

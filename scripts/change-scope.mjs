@@ -28,7 +28,9 @@ export function isReleaseMetadata(root, base, head, paths) {
   if (!paths.every((path) => path === RELEASE_VERSION || path === PROVENANCE || isTextOnly([path]))) return false;
   try {
     const version = JSON.parse(git(["show", `${head}:${RELEASE_VERSION}`], root));
-    if (Object.keys(version).join() !== "next" || !/^\d+\.\d+\.\d+$/.test(version.next)) return false;
+    // Stable versions only, with the release contract's rule against leading zeros (deploy/release/common.mjs).
+    if (Object.keys(version).join() !== "next" || typeof version.next !== "string" ||
+        !/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(version.next)) return false;
     if (!paths.includes(PROVENANCE)) return true;
     const fork = git(["merge-base", base, head], root).trim();
     const entryless = (ref) => {
