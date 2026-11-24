@@ -93,3 +93,43 @@ func TestUnselectedInterpolatedImageDoesNotRefuseItsPeer(t *testing.T) {
 		})
 	}
 }
+
+// Eligibility and the admission writer agree per service by construction: a
+// service is eligible exactly when the writer accepts a selection of it alone,
+// and a document-wide writer refusal is a project binding (M38-CL-R2-01).
+func TestEligibilityAgreesWithTheAdmissionWriter(t *testing.T) {
+	for _, tc := range []struct{ name, prefix, suffix string }{
+		{"literal-only", "", "  side:\n    image: registry.example.com/side:1.0.0\n"},
+		{"unselected-shared-image-anchor", "", "  side:\n    image: &side_image registry.example.com/side:1.0.0\n  peer:\n    image: *side_image\n"},
+		{"unselected-label-anchor", "", "  side:\n    image: registry.example.com/side:1.0.0\n    labels: &side_labels {example.label: example}\n"},
+		{"unselected-merge-key", "x-common: &common\n  restart: unless-stopped\n", "  side:\n    <<: *common\n    image: registry.example.com/side:1.0.0\n"},
+		{"unselected-interpolation", "", "  side:\n    image: ${SIDE_IMAGE:-registry.example.com/side:1.0.0}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, "compose.yaml"), []byte(tc.prefix+lifecycleOriginal+tc.suffix), 0600))
+			eligibility, err := f.service.ImageUpdateEligibility(t.Context(), f.project.ID)
+			require.NoError(t, err)
+			snapshot, err := f.service.lifecycleInputs(t.Context(), f.project)
+			require.NoError(t, err)
+			for name, svc := range snapshot.Model.Services {
+				_, writerErr := lifecycleVersionFiles(snapshot, []dto.ImageSelection{{Service: name, SourceReference: svc.Image, Reference: svc.Image, Kind: "rebuild"}})
+				var refusal *imageDTO.OperationError
+				if writerErr != nil {
+					require.ErrorAs(t, writerErr, &refusal)
+				}
+				if eligibility.Project != nil {
+					require.Error(t, writerErr, name)
+					continue
+				}
+				eligible := false
+				for _, entry := range eligibility.Services {
+					if entry.Service == name {
+						eligible = entry.Eligible
+					}
+				}
+				require.Equal(t, writerErr == nil, eligible, name)
+			}
+		})
+	}
+}

@@ -126,10 +126,21 @@ func (s *ProjectService) ImageUpdateEligibility(ctx context.Context, id string) 
 	slices.Sort(names)
 	for _, name := range names {
 		entry := dto.ServiceEligibility{Service: name, Eligible: true}
-		if err := modelBindingFailure(snapshot, name); err != nil {
+		err := modelBindingFailure(snapshot, name)
+		if err == nil {
+			// The admission writer is the proof: a dry run for this service alone
+			// refuses exactly what an update of it would (closing review M38-CL-R2-01).
+			source := snapshot.Model.Services[name].Image
+			_, err = lifecycleVersionFiles(snapshot, []dto.ImageSelection{{Service: name, SourceReference: source, Reference: source, Kind: "rebuild"}})
+		}
+		if err != nil {
 			var problem *imageDTO.OperationError
-			if !errors.As(err, &problem) {
+			if !errors.As(err, &problem) || problem.Problem.Binding == nil {
 				return result, err
+			}
+			if problem.Problem.Binding.Scope == "project" {
+				// A document-wide refusal applies to every service.
+				return dto.UpdateEligibility{Services: []dto.ServiceEligibility{}, Project: problem.Problem.Binding}, nil
 			}
 			entry.Eligible, entry.Binding = false, problem.Problem.Binding
 		}
