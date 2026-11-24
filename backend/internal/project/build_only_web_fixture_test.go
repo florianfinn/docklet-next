@@ -7,7 +7,6 @@
 package project
 
 import (
-	"bytes"
 	jsonv1 "encoding/json"
 	"encoding/json/jsontext"
 	json "encoding/json/v2"
@@ -56,7 +55,11 @@ func TestBuildOnlyProjectWebFixture(t *testing.T) {
 		rows[i].CreatedAt, rows[i].UpdatedAt, rows[i].Path = "", "", "/srv/projects/"+rows[i].Name
 	}
 	detail.CreatedAt, detail.UpdatedAt, detail.Path = "", "", "/srv/projects/"+detail.Name
-	writeBuildOnlyWebFixture(t, map[string]any{"projects": rows, "detail": detail})
+	// A struct keeps the key order fixed; encoding/json/v2 does not order map keys.
+	writeBuildOnlyWebFixture(t, struct {
+		Projects []dto.Details `json:"projects"`
+		Detail   dto.Details   `json:"detail"`
+	}{rows, detail})
 }
 
 func writeBuildOnlyWebFixture(t *testing.T, value any) {
@@ -71,5 +74,5 @@ func writeBuildOnlyWebFixture(t *testing.T, value any) {
 	}
 	expected, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.True(t, bytes.Equal(expected, body), "web fixture differs from producer bytes; regenerate with UPDATE_WEB_FIXTURES=1")
+	require.Equal(t, string(expected), string(body), "web fixture differs from producer bytes; regenerate with UPDATE_WEB_FIXTURES=1")
 }
