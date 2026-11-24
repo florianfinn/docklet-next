@@ -175,8 +175,10 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   pushes compare with their main merge base) and on PRs; while a closing PR is
   open, a feature push also runs the PR merge-result check.
 - Text-only changes use scripts/change-scope.mjs: Markdown outside executable
-  paths, root LICENSE/NOTICE and LICENSES. Reduced checks still cover publication,
-  commit text, structural guards and Node tests. Pushes to main run the full CI chain.
+  paths, root LICENSE/NOTICE and LICENSES. A release train that adds only the next
+  X.Y.Z version and its provenance hash and note counts as text. Reduced checks still
+  cover publication, commit text, structural guards and Node tests, including the
+  release tests. Pushes to main run the full CI chain.
 - CI has minimal permissions and no production secrets. Tests require no real
   services, Docker socket or running agent. Guards fail instead of warning.
   Test real gestures or pure logic; do not change behaviour to appease a test bench.

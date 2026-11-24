@@ -163,6 +163,46 @@ test("scope is conservative for executable trees, renames and missing refs", (t)
     "full",
   );
 });
+test("a release train of text, version and its provenance entry takes the text scope", (t) => {
+  const root = scratch(t);
+  const entry = (sha256, deviations) => ({ source: "docklet-next/issues/362", license: "Apache-2.0", deviations, sha256 });
+  const provenance = (sidecars, prefixes = ["third_party/"]) => ({ adoptedPrefixes: prefixes, sidecars });
+  const other = entry("b".repeat(64), "Other input.");
+  stage(root, "deploy/release/version.json", '{"next":"1.0.0"}\n');
+  stage(root, "scripts/provenance.json", JSON.stringify(provenance({ "deploy/release/version.json": entry("a".repeat(64), "Train 1.0.0."), "deploy/release/other.json": other })));
+  const base = rawCommit(root);
+  git(root, "update-ref", "refs/remotes/origin/main", base);
+  const scope = (head) => ciScope(root, "pull_request", { pull_request: { base: { sha: base }, head: { sha: head } } });
+  const push = (head) => prePushScope(`refs/heads/release ${head} refs/heads/release ${"0".repeat(40)}`, root);
+  const train = (version, sidecars, prefixes) => {
+    git(root, "reset", "-q", "--hard", base);
+    stage(root, "README.md", "Status 1.1.0\n");
+    stage(root, "deploy/release/version.json", version);
+    if (sidecars) stage(root, "scripts/provenance.json", JSON.stringify(provenance(sidecars, prefixes)));
+    return rawCommit(root);
+  };
+  const next = { "deploy/release/version.json": entry("c".repeat(64), "Train 1.0.0. Train 1.1.0."), "deploy/release/other.json": other };
+  const accepted = train('{"next":"1.1.0"}\n', next);
+  assert.equal(scope(accepted), "text");
+  assert.equal(push(accepted), "text");
+  assert.equal(scope(train('{"next":"1.1.0"}\n')), "text");
+  for (const head of [
+    train('{"next":"1.1.0","channel":"beta"}\n', next),
+    train('{"next":"1.1.0-rc.1"}\n', next),
+    train('{"next":"1.1.0"}\n', { ...next, "deploy/release/other.json": entry("d".repeat(64), "Other input.") }),
+    train('{"next":"1.1.0"}\n', { ...next, "deploy/release/version.json": { ...next["deploy/release/version.json"], license: "MIT" } }),
+    train('{"next":"1.1.0"}\n', next, ["third_party/", "web/"]),
+  ]) {
+    assert.equal(scope(head), "full");
+    assert.equal(push(head), "full");
+  }
+  git(root, "reset", "-q", "--hard", base);
+  stage(root, "scripts/provenance.json", JSON.stringify(provenance(next)));
+  assert.equal(scope(rawCommit(root)), "full");
+  git(root, "reset", "-q", "--hard", accepted);
+  stage(root, "deploy/release/ca-bundle.json", "{}\n");
+  assert.equal(scope(rawCommit(root)), "full");
+});
 test("hook setup fails for a conflicting path and succeeds idempotently", (t) => {
   const root = scratch(t);
   git(root, "config", "core.hooksPath", ".other-hooks");
