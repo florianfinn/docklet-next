@@ -129,6 +129,9 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	if err != nil || check == nil {
 		return skip(policyCode(err, "update.check-unavailable"))
 	}
+	if withoutRegistryImages(check) {
+		return policyTarget(one.TargetID, st.Succeeded, ""), false
+	}
 	if check.Status == "failed" || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled" {
 		return skip("update.check-unavailable")
 	}
@@ -440,6 +443,11 @@ func (s *UpdaterService) checkPolicyProject(ctx context.Context, env, target str
 	if err != nil {
 		return nil, err
 	}
+	if check != nil && withoutRegistryImages(check) {
+		result := *check
+		result.PolicyCode = ""
+		return &result, nil
+	}
 	if check == nil || check.Status == "failed" || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled" {
 		return check, imageDTO.Failure("update.check-unavailable", 503)
 	}
@@ -492,4 +500,10 @@ func (s *UpdaterService) bookkeepManualPolicyRow(ctx context.Context, p *imagePo
 	}()
 	_, err = s.observeImagePolicy(ctx, p, one, check)
 	return err
+}
+
+// withoutRegistryImages: a project whose services are all built locally has no
+// registry image to check; its summary stays "unknown" but nothing failed.
+func withoutRegistryImages(check *projectDTO.UpdateInfo) bool {
+	return check.ImageCount == 0 && check.Status == "unknown"
 }

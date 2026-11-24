@@ -197,3 +197,34 @@ func TestHostCheckLocalTargetIncludesStacksAndStandaloneContainers(t *testing.T)
 		require.Equal(t, "0", target.EnvironmentID)
 	}
 }
+
+// A project whose services are all built locally has nothing to check: the
+// host check stays succeeded and a manual check answers without a failure.
+func TestBuildOnlyProjectDoesNotFailChecks(t *testing.T) {
+	f := newPolicyFixture(t)
+	f.p.ports.targets = func(context.Context, string) ([]updateTarget, error) {
+		return []updateTarget{{Kind: "stack", ID: "build-only", Name: "build-only", Eligible: true}, {Kind: "stack", ID: "project", Name: "project", Eligible: true}}, nil
+	}
+	f.p.ports.check = func(_ context.Context, _ string, target string) (*projectDTO.UpdateInfo, error) {
+		if target == "build-only" {
+			return &projectDTO.UpdateInfo{Status: "unknown", ImageCount: 0}, nil
+		}
+		return f.check, nil
+	}
+	out, err := f.s.RunUpdateCheckHost(t.Context(), "0")
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", string(out.Status))
+	require.Len(t, out.Targets, 2)
+	for _, target := range out.Targets {
+		require.Equal(t, "succeeded", string(target.Status), target.ID)
+	}
+	result, err := f.s.CheckPolicyProject(t.Context(), "0", "build-only")
+	require.NoError(t, err)
+	require.False(t, result.HasUpdate)
+	// An image that cannot be read still fails the check.
+	f.p.ports.check = func(context.Context, string, string) (*projectDTO.UpdateInfo, error) {
+		return &projectDTO.UpdateInfo{Status: "unknown", ImageCount: 1}, nil
+	}
+	_, err = f.s.CheckPolicyProject(t.Context(), "0", "build-only")
+	require.Error(t, err)
+}

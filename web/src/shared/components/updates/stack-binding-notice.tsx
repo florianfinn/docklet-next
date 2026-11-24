@@ -34,11 +34,12 @@ export function useStackEligibility(stackId: string, enabled = true) {
   const bindings = data?.project ? [data.project] : (data?.services ?? []).flatMap((row) => row.binding ? [row.binding] : []);
   // The whole stack stays offered while one service with an update can still be installed alone.
   const blocksAll = bindings.some((binding) => binding.scope === "project") || (!!updatable && updatable.size > 0 && [...updatable].every((name) => bindings.some((binding) => binding.service === name)));
-  return { ...query, bindings, updatable, relevant: blockingBindings(bindings, "*", updatable), blocksAll, checking: enabled && !!adapter.getUpdateEligibility && read.available && ((hostId !== "0" && hosts.isPending) || supported && query.isPending) };
+  return { ...query, bindings, updatable, blocksAll, checking: enabled && !!adapter.getUpdateEligibility && read.available && ((hostId !== "0" && hosts.isPending) || supported && query.isPending) };
 }
 export function StackBindingNotice({ stackId, enabled = true }: { stackId: string; enabled?: boolean }) {
   const eligibility = useStackEligibility(stackId, enabled);
   // Old agents, unknown versions and failed reads predict nothing; a real refusal explains itself.
   if (!enabled) return null;
-  return <>{eligibility.relevant.map((binding, index) => <BindingRefusal key={`${binding.scope}:${binding.service ?? index}:${binding.reason}`} binding={binding} />)}</>;
+  // Every current binding is explained, also for a service the update leaves out (#594).
+  return <>{eligibility.bindings.map((binding, index) => <BindingRefusal key={`${binding.scope}:${binding.service ?? index}:${binding.reason}`} binding={binding} />)}</>;
 }

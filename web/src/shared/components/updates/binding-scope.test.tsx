@@ -42,7 +42,8 @@ it("offers the whole-stack update when only a service without an update has a bi
   const dialog = within(await screen.findByRole("dialog"));
   await waitFor(() => expect(f.calls.some((call) => call.path.endsWith("/update-eligibility"))).toBe(true));
   await waitFor(() => expect(dialog.getByRole("button", { name: de.common.stackUpdates.update }).hasAttribute("disabled")).toBe(false));
-  expect(document.body.textContent?.includes("app")).toBe(false);
+  // The build service is still explained while the update of its peer stays offered.
+  expect(dialog.queryAllByRole("status").some((node) => node.textContent?.includes("app:") === true)).toBe(true);
 });
 
 it("refuses the whole-stack update when a service with an update has a binding", async () => {
