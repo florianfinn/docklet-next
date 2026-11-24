@@ -83,8 +83,18 @@ func (h *Hub) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, err
 	}
 	err = h.Modules.Admit(ctx, features.Proxy, func(ctx context.Context) error {
 		return h.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var row instanceRow
+			er := tx.First(&row, "id = ?", q.Instance.ID).Error
+			if er == nil {
+				var stored dto.Instance
+				if json.Unmarshal(row.Data, &stored) != nil || stored.Identity != q.Instance.Identity || stored.Kind != q.Instance.Kind || !sameSource(stored.Source, q.Instance.Source) {
+					return dto.Fail(dto.ContainerChanged, 409)
+				}
+			} else if !missing(er) {
+				return er
+			}
 			var held reservation
-			er := tx.First(&held, "instance_id = ?", q.Instance.ID).Error
+			er = tx.First(&held, "instance_id = ?", q.Instance.ID).Error
 			if er == nil {
 				return &dto.Problem{Status: 409, Code: dto.ModuleBusy, OperationID: held.OperationID}
 			}
@@ -396,8 +406,18 @@ func (h *Hub) CreateResolver(ctx context.Context, q dto.ResolverApplyRequest) (d
 	result, _ := marshal(o)
 	err = h.Modules.Admit(ctx, features.Proxy, func(ctx context.Context) error {
 		return h.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var row instanceRow
+			er := tx.First(&row, "id = ?", q.Instance.ID).Error
+			if er == nil {
+				var stored dto.Instance
+				if json.Unmarshal(row.Data, &stored) != nil || stored.Identity != q.Instance.Identity || stored.Kind != q.Instance.Kind || !sameSource(stored.Source, q.Instance.Source) {
+					return dto.Fail(dto.ContainerChanged, 409)
+				}
+			} else if !missing(er) {
+				return er
+			}
 			var held reservation
-			er := tx.First(&held, "instance_id = ?", q.Instance.ID).Error
+			er = tx.First(&held, "instance_id = ?", q.Instance.ID).Error
 			if er == nil {
 				return &dto.Problem{Status: 409, Code: dto.ModuleBusy, OperationID: held.OperationID}
 			}

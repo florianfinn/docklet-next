@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original total catalogue maps for rendered contract enums. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M24 recovery vocabulary classification. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472). M27 proxy contract foundation (#473/#474). M36 tailnet route vocabulary (#573).
 
-import {PROXY_STATE_KEYS,PROXY_REASON_KEYS} from "./wire-catalogue-proxy";
+import {PROXY_ADOPTION_REASON_KEYS,PROXY_ADOPTION_OUTCOME_KEYS,PROXY_STATE_KEYS,PROXY_REASON_KEYS} from "./wire-catalogue-proxy";
 import { MODULE_CODE_KEYS } from "./wire-catalogue-modules";
 import { TAILNET_CODE_KEYS, TAILNET_CONNECTION_KEYS, TAILNET_PROVISIONING_KEYS, TAILNET_PEER_KEYS, TAILNET_TEST_STATE_KEYS } from "./wire-catalogue-tailnet";
 import { RECOVERY_OUTCOME_KEYS } from "./wire-catalogue-update";
@@ -17,6 +17,8 @@ import { CANDIDATE_STATE_KEYS, CANDIDATE_RUN_STATUS_KEYS, BACKUP_STATUS_KEYS, BA
 
 /** Exact property identities are pinned, including equivalent unions on different DTOs. */
 export const GUARDED_WIRE_ENUMS = [
+{name:"PROXY_ADOPTION_REASON_KEYS",keys:PROXY_ADOPTION_REASON_KEYS,properties:["ProxyAdoption.reason"]},
+{name:"PROXY_ADOPTION_OUTCOME_KEYS",keys:PROXY_ADOPTION_OUTCOME_KEYS,properties:["ProxyAdoption.outcome"]},
 {name:"PROXY_STATE_KEYS",keys:PROXY_STATE_KEYS,properties:["ProxyOperation.state"]},
 {name:"PROXY_REASON_KEYS",keys:PROXY_REASON_KEYS,properties:["ProxyProblem.code"]},
 
@@ -63,7 +65,7 @@ export const GUARDED_WIRE_ENUMS = [
 ] as const;
 
 export const EXEMPT_WIRE_ENUMS = [
- ...["ImageBinding.reason", "ProxyAdoption.reason", "ProxyAdoption.outcome"].map((property) => ({ property, reason: "M38 contract foundation: typed total maps IMAGE_BINDING_KEYS and PROXY_ADOPTION_*_KEYS exist; the update-action and proxy-adoption steps add the rendering consumers and move these into GUARDED_WIRE_ENUMS with render proofs." })),
+ ...["ImageBinding.reason"].map((property) => ({ property, reason: "M38 contract foundation: typed total maps IMAGE_BINDING_KEYS and PROXY_ADOPTION_*_KEYS exist; the update-action and proxy-adoption steps add the rendering consumers and move these into GUARDED_WIRE_ENUMS with render proofs." })),
  { property: "ImageRuntimeIdentityPeer.reason", reason: "Validated by runtime-blocker.ts and rendered through common.runtimePeers reason texts by the confirmation dialog and audit mapper; runtime-peer-confirmation.test.tsx exercises both locales." },
  { property: "ProjectDetails.definitionReason", reason: "Rendered by use-stack-definition-hint.ts through common.runtimePeers reason texts; runtime identity marker and repair proofs retain the existing coverage limit." },
  ...["ProxyOperation.phase", "ProxyInstance.kind", "ProxyDiscovery.kind", "ProxyCreateInstanceRequest.kind", "ProxySource.kind", "ProxyReference.kind"].map((property) => ({ property, reason: "S2 contract foundation has no production proxy page; S5 owns these rendered consumers and their render proofs. Total typed bilingual maps are frozen in wire-catalogue-proxy.ts. Outcome state/reason consumers already have guarded render proofs." })),

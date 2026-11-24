@@ -81,6 +81,7 @@ export function Operations({
               {row.state === "pending" && <span>{t(`proxyContract.phases.${row.phase}`)}</span>}
               {row.evidence && <span className="text-sm">{ui(`evidence.${row.evidence}`)}</span>}
             </div>
+            {row.kind === "adoption" && row.adoption && <><p>{t("proxyContract.adoption.operation")}</p><p className="break-all font-mono text-xs">{row.adoption.previousContainerId} → {row.adoption.containerId}</p></>}
             <p className="break-all font-mono text-xs">{row.target}</p>
             <Reason code={row.reason} />
             <Diagnostic value={row.diagnostic} />

@@ -310,6 +310,7 @@ export const deProxyContract = {
     "restoring": "Wiederherstellen"
   },
   "adoption": {
+    "stale": "Veraltet",
     "operation": "Neu erstelltem Container gefolgt",
     "current": "Die Registrierung passt zu ihrem Container.",
     "adopted": "Die Instanz ist ihrem neu erstellten Container gefolgt.",

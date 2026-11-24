@@ -21,11 +21,13 @@ export function decodeProxyOperation(body: unknown): ProxyOperation {
   if (!record(body) || body.success !== true || !record(body.data)) throw new Error("proxy.invalid-response");
   const v = body.data;
   if (!member(states, v.state) || !member(phases, v.phase) || (v.reason !== undefined && v.reason !== "" && !member(reasons, v.reason)) || (v.evidence !== undefined && !member(["routing", "configuration", "load"], v.evidence))) throw new Error("proxy.invalid-response");
-  if (v.kind!==undefined && (typeof v.kind!=="string" || v.kind==="" || (!["route","resolver"].includes(v.kind) && !(["recovery-required","released"].includes(v.state as string)&&v.reason==="unknown-operation-kind")))) throw new Error("proxy.invalid-response");
+  if (v.kind!==undefined && (typeof v.kind!=="string" || v.kind==="" || (!["route","resolver","adoption"].includes(v.kind) && !(["recovery-required","released"].includes(v.state as string)&&v.reason==="unknown-operation-kind")))) throw new Error("proxy.invalid-response");
   if (!validStateForKind(v.kind,v.state)) throw new Error("proxy.invalid-response");
   if ((v.certificate!==undefined&&!certificate(v.certificate)) || (v.probe!==undefined&&!probe(v.probe)) || (v.resolver!==undefined&&!resolverReceipt(v.resolver)) || (v.kind==="resolver"&&v.diagnostic!==undefined)) throw new Error("proxy.invalid-response");
   if (!(typeof v.target==="string" && (v.target!=="" || v.kind==="resolver" || v.reason==="unknown-operation-kind"))) throw new Error("proxy.invalid-response");
-  if (!["id", "instanceId", "generation", "registration", "digest", "createdAt"].every((k) => typeof v[k] === "string" && v[k] !== "") || !fileState(v.old) || !fileState(v.new) || (v.current !== undefined && !fileState(v.current)) || (v.diagnostic !== undefined && !diagnostic(v.diagnostic))) throw new Error("proxy.invalid-response");
+  if (v.kind === "adoption" && !validAdoptionRecord(v)) throw new Error("proxy.invalid-response");
+  if (typeof v.digest !== "string" || (v.digest === "" && !validAdoptionRecord(v))) throw new Error("proxy.invalid-response");
+  if (!["id", "instanceId", "generation", "registration", "createdAt"].every((k) => typeof v[k] === "string" && v[k] !== "") || !fileState(v.old) || !fileState(v.new) || (v.current !== undefined && !fileState(v.current)) || (v.diagnostic !== undefined && !diagnostic(v.diagnostic))) throw new Error("proxy.invalid-response");
   return v as ProxyOperation;
 }
 // Presentation retains route verification and resolver application as distinct outcomes.
@@ -79,6 +81,13 @@ const LAYOUT_REASONS = ["unmanaged-project", "multiple-replicas", "multiple-comp
 
 function validStateForKind(kind:unknown,state:unknown): boolean {
  if (kind===undefined||kind==="route") return member(["pending","verified","applied-unverified","rejected","restored","recovery-required","released","not-applied"],state);
+ if (kind==="adoption") return state==="applied";
  if (kind==="resolver") return member(["pending","applied","rolled-back","refused","recovery-required","released","not-applied"],state);
  return member(["recovery-required","released"],state);
+}
+
+function validAdoptionRecord(v: Record<string, unknown>): boolean {
+ const a=v.adoption;
+ return v.kind==="adoption" && v.state==="applied" && v.phase==="applied" && timestamp(v.finishedAt) && record(a) &&
+ [a.previousContainerId,a.containerId].every(x=>typeof x==="string" && x.length>0 && x.length<=128) && a.previousContainerId!==a.containerId && timestamp(a.startedAt);
 }

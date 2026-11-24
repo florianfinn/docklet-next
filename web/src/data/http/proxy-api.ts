@@ -6,7 +6,7 @@
 
 import { createCsrfClient } from "./csrf-client";
 import { decodeProxyOperation } from "./proxy-decoder";
-import { decodeProxyData } from "./proxy-read-decoder";
+import { decodeProxyData, decodeProxyAdoption } from "./proxy-read-decoder";
 import type { CreateInstance, Instance, OperationRequest, Release, Settings } from "@/features/proxy/types";
 
 export class ProxyError extends Error {
@@ -28,8 +28,8 @@ export function createProxyApi(
   fetcher: typeof fetch = (...args) => fetch(...args),
 ) {
   const client = createCsrfClient("/api", fetcher);
-  async function request(path: string, method = "GET", body?: object): Promise<unknown> {
-    const ownedSignal = typeof signal === "function" ? signal() : signal;
+  async function request(path: string, method = "GET", body?: object, overrideSignal?: AbortSignal): Promise<unknown> {
+    const ownedSignal = overrideSignal ? AbortSignal.any([overrideSignal, typeof signal === "function" ? signal() : signal]) : typeof signal === "function" ? signal() : signal;
     ownedSignal.throwIfAborted();
     const response = await client.fetch(path, {
       method,
@@ -47,6 +47,7 @@ export function createProxyApi(
   }
   const instancePath = (id: string) => `${hub}/instances/${part(id)}`;
   return {
+    adopt: async (id: string, ownedSignal?: AbortSignal) => decodeProxyAdoption(await request(`${instancePath(id)}/adopt`, "POST", undefined, ownedSignal)),
     instances: async () => decodeProxyData("instances", await request(`${hub}/instances`)),
     instance: async (id: string) => decodeProxyData("instance", await request(instancePath(id))),
     discover: async (environment: string) =>
@@ -58,15 +59,15 @@ export function createProxyApi(
     remove: async (id: string) => {
       await request(instancePath(id), "DELETE");
     },
-    inventory: async (i: Instance) =>
+    inventory: async (i: Instance, ownedSignal?: AbortSignal) =>
       decodeProxyData(
         "inventory",
-        await request(`/api/environments/${part(i.environmentId)}/modules/proxy/inventory`, "POST", i),
+        await request(`/api/environments/${part(i.environmentId)}/modules/proxy/inventory`, "POST", i, ownedSignal),
       ),
-    read: async (i: Instance) =>
+    read: async (i: Instance, ownedSignal?: AbortSignal) =>
       decodeProxyData(
         "read",
-        await request(`/api/environments/${part(i.environmentId)}/modules/proxy/read`, "POST", i),
+        await request(`/api/environments/${part(i.environmentId)}/modules/proxy/read`, "POST", i, ownedSignal),
       ),
     operations: async (id: string) => {
       const value = (await request(`${instancePath(id)}/operations`)) as { success?: boolean; data?: unknown[] | null };

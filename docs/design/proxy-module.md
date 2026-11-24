@@ -28,7 +28,16 @@ directory at the same path; it never reads other host paths. Every entry point
 (including a query by a persisted ID) re-inspects the container and its mounts
 and refuses when the identity, the mount source or its kind changed. A restart
 between operations keeps the registration (same container ID and source): each new
-operation fences the `StartedAt` the inventory reads at admission. A transient
+operation fences the `StartedAt` the inventory reads at admission. When no operation
+is reserved or unfinished, the hub may follow a recreated container with the same
+name, proxy kind, mount target, canonical source, source kind, mount mode and
+read-only authority. Discovery uses the same Direct and Edge transport. A single
+transaction fences registration and instance identity, checks ownership, updates
+the identity and writes a finished `adoption` receipt for Recent operations.
+Reads trigger adoption once on `container-changed` and retry with the returned
+instance; writes revalidate before admission. Page/instance open, Refresh and
+window focus or visibility regain (debounced two seconds) trigger reads; there is
+no identity polling. Other differences keep `container-changed`. A transient
 Docker error while classifying a source is an error, not a read-only source; only a
 missing path and a bind-rule refusal classify. The same holds for every identity and
 target read: only a typed refusal or an observed difference (removed or stopped
@@ -66,6 +75,8 @@ Known limits of the first version:
   overlapping but different sources get different keys.
 - A file with extended attributes is refused, which includes every file on hosts
   that label files with SELinux.
+- Adoption refuses while an instance has a reservation or unfinished operation;
+  a container held by another registration stays stale and can be removed.
 - A `recovery-required` operation whose proxy container was removed for good, or
   recreated under another name, cannot be released, because the target cannot be
   read; its reservation blocks switching the module off and deleting its data.
@@ -415,7 +426,7 @@ a failing assertion, never a compile error or timeout.
 | P5 | Proxy rejection | Log fake with the measured error shapes after `published`, and a stale error before it: restored bytes for the current error, no restore for the stale one; failing restore gives `recovery-required`. | Skip restore: target keeps rejected bytes; or ignore the epoch: a stale error restores a good change. |
 | P6 | Delayed effect | Injected clock and a held effect: no `verified` before release; deadline without effect gives `applied-unverified` (`no-observable-difference`). | Report success on the first probe. |
 | P7 | Misleading probe | Real argv builder and `-S` parser: a redirecting backend (only the first response counts), a gateway error, an unchanged response and an auth challenge are classified as specified. | Evaluate the last response of the `-S` output. |
-| P8 | Container identity | Held observation, then restart (new `StartedAt`) and recreation (new ID): `container-changed`, no settlement from old logs. | Drop the fence. |
+| P8 | Container identity | Held observation and restart fence `StartedAt`; recreation follows only the identical-source/name/kind rule with no open operation, with one finished adoption receipt. All other differences retain `container-changed`; old logs never settle new work. | Drop the fence. |
 | P9 | Caddy persistence | Inventory from measured command lines: `--resume` with diverged running config refuses Apply without the acknowledgement and with zero effects; with it, reload from the Caddyfile; `--resume` with `persist_config off` read-only. Restart persistence is checked in acceptance (PX13, PX18). | Skip the comparison: a diverged instance is written without acknowledgement. |
 | P10 | Admin off | Without the restart acknowledgement: refused before any write. With it: validate, publish, restart, observe the new epoch; a container that does not come back restores and restarts again; failing again gives `recovery-required`. | Reload instead of restart, or skip the restore after a failed start. |
 | P11 | One dispatch and generation | Real Direct proxy and Edge tunnel, response dropped: the hub queries and fences, sends Apply exactly once; after an effect the agent journal is replaced: `recovery-required`, never `not-applied`; a stale result from the previous registration is ignored. | Resend Apply on a lost response: two dispatches recorded. Separately accept a fence from another generation: `not-applied` is recorded. |

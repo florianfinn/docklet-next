@@ -7,6 +7,7 @@
 import type { components, operations } from "@/api/generated/schema";
 
 type Schemas = components["schemas"];
+export type Adoption = Schemas["ProxyAdoption"];
 export type Instance = Schemas["ProxyInstance"];
 export type Discovery = Schemas["ProxyDiscovery"];
 export type Inventory = Schemas["ProxyInventory"];

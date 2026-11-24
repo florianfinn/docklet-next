@@ -18,7 +18,7 @@ import { Button } from "@/shared/ui/button";
 import { Choice, ErrorView } from "./controls";
 import { InstanceWorkspace } from "./InstanceWorkspace";
 import { Setup } from "./Setup";
-import type { CreateInstance, Instance } from "./types";
+import type { Adoption, CreateInstance, Instance } from "./types";
 
 /** The page shows exactly one view; the instance Select is derived from it, never the other way round. */
 type View = { kind: "instance"; id: string } | { kind: "setup" };
@@ -46,6 +46,8 @@ function Manager() {
     };
   });
   const api = connection.api;
+  const attempts = useRef(new Set<string>());
+  const [stale,setStale]=useState<Record<string, Adoption>>({});
   const [instances, setInstances] = useState<Instance[]>(),
     [{ view, last }, setPage] = useState<{ view: View; last: string }>({ view: { kind: "setup" }, last: "" }),
     [busy, setBusy] = useState(false),
@@ -111,7 +113,7 @@ function Manager() {
                 {instance ? <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">{t("activeProxy")}</p>
                   <p className="font-semibold [overflow-wrap:anywhere]">{instance.name} · {contract(`kinds.${instance.kind}`)}</p>
-                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2"><span className="font-mono text-xs [overflow-wrap:anywhere]">{instance.identity.containerName}</span><ToneBadge tone="cyan">{hosts.data?.find(h => h.id === instance.environmentId)?.name ?? instance.environmentId}</ToneBadge></div>
+                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2"><span className="font-mono text-xs [overflow-wrap:anywhere]">{instance.identity.containerName}</span>{stale[instance.id] && <ToneBadge tone="warn">{contract("adoption.stale")}</ToneBadge>}<ToneBadge tone="cyan">{hosts.data?.find(h => h.id === instance.environmentId)?.name ?? instance.environmentId}</ToneBadge></div>
                 </div> : <p className="text-sm text-muted-foreground">{t("instance")}</p>}
               </div>
               <div className="w-full min-w-0 md:w-72"><Choice
@@ -124,7 +126,7 @@ function Manager() {
                 options={[
                   ...instances.map(i => ({
                     value: i.id,
-                    label: `${i.name} · ${hosts.data?.find(h => h.id === i.environmentId)?.name ?? i.environmentId} · ${i.identity.containerName}`,
+                    label: `${i.name} · ${hosts.data?.find(h => h.id === i.environmentId)?.name ?? i.environmentId} · ${i.identity.containerName} · ${i.identity.containerId.slice(0,12)}${stale[i.id] ? ` · ${contract("adoption.stale")}` : ""}`,
                   })),
                   { value: SETUP, label: t("newInstanceOption") },
                 ]}
@@ -141,6 +143,15 @@ function Manager() {
                 key={JSON.stringify(instance)}
                 instance={instance}
                 api={api}
+                adoption={{
+                  claim: id => { if (attempts.current.has(id)) return false; attempts.current.add(id);return true; },
+                  result: answer => {
+                    if (answer.outcome !== "refused") return;
+                    setStale(old=>({...old,[answer.instance.id]:answer}));
+                    const next=instances.find(i=>i.id===answer.supersededBy && !attempts.current.has(i.id)) ?? instances.find(i=>i.id!==answer.instance.id && !attempts.current.has(i.id));
+                    if (next) setPage(to({kind:"instance",id:next.id}));
+                  },
+                }}
                 updated={i => setInstances(old => old?.map(row => (row.id === i.id ? i : row)))}
                 removed={() => {
                   const rest = instances.filter(row => row.id !== instance.id);

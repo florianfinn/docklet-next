@@ -9,6 +9,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/danielgtaylor/huma/v2"
 	p "github.com/florianfinn/docklet-next/backend/internal/proxy"
 	"github.com/florianfinn/docklet-next/types/features"
@@ -338,5 +339,65 @@ func TestM27ProxyDiagnosticRealDirectEdge(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, want, stored.Diagnostic)
 		})
+	}
+}
+
+// Adoption runs on the hub; discovery traverses the production Direct sender or
+// the Edge proxy.discover command and returns the same host-owned discovery DTO.
+func TestM38S2RealDirectEdgeAdoption(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		for _, changed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/source-changed=%t", mode, changed), func(t *testing.T) {
+				x, _, tr, q := proxyWireFixture(t, mode)
+				i := q.Instance
+				i.Identity.StartedAt = "2026-11-24T00:00:00Z"
+				i.Source.MountMode = dto.MountReadWrite
+				next := i.Identity
+				next.ContainerID = "example-recreated"
+				next.StartedAt = "2026-11-24T00:01:00Z"
+				source := i.Source
+				if changed {
+					source.Canonical += "-other"
+				}
+				var mu sync.Mutex
+				discoveries := 0
+				x.agentIntercept = func(w http.ResponseWriter, r *http.Request, nextHandler http.Handler) {
+					w.Header().Set("Content-Type", "application/json")
+					switch r.URL.Path {
+					case "/api/environments/0/modules/proxy/inventory":
+						w.WriteHeader(409)
+						require.NoError(t, json.NewEncoder(w).Encode(dto.Problem{Code: dto.ContainerChanged, Status: 409}))
+					case "/api/environments/0/modules/proxy/discover":
+						mu.Lock()
+						discoveries++
+						mu.Unlock()
+						require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"success": true, "data": []dto.Discovery{{Identity: next, Kind: i.Kind, Sources: []dto.Source{source}}}}))
+					default:
+						nextHandler.ServeHTTP(w, r)
+					}
+				}
+				raw, err := json.Marshal(i)
+				require.NoError(t, err)
+				require.NoError(t, x.f.db.Exec("INSERT INTO proxy_instances(id,environment_id,data) VALUES(?,?,?)", i.ID, i.EnvironmentID, raw).Error)
+				m := &p.Module{Hub: &p.Hub{DB: x.f.db.DB, Modules: x.manager, Transport: tr}, Modules: x.manager, Transport: tr}
+				a, err := m.Adopt(t.Context(), i.ID)
+				require.NoError(t, err)
+				mu.Lock()
+				require.Equal(t, 1, discoveries)
+				mu.Unlock()
+				operations, err := m.Operations(t.Context(), i.ID)
+				require.NoError(t, err)
+				if changed {
+					require.Equal(t, dto.AdoptionRefused, a.Outcome)
+					require.Equal(t, dto.AdoptionSourceChanged, a.Reason)
+					require.Empty(t, operations)
+				} else {
+					require.Equal(t, dto.AdoptionAdopted, a.Outcome)
+					require.Equal(t, next, a.Instance.Identity)
+					require.Len(t, operations, 1)
+					require.Equal(t, dto.AdoptionOperation, operations[0].Kind)
+				}
+			})
+		}
 	}
 }

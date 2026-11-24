@@ -35,9 +35,12 @@ func (t *HostTransport) Registration(ctx context.Context, id string) (string, er
 	if err != nil {
 		return "", err
 	}
+	return environmentRegistration(e), nil
+}
+func environmentRegistration(e *environment.Environment) string {
 	b := fmt.Sprintf("%s\x00%s\x00%d\x00%t", e.ID, e.ApiUrl, e.CredentialRevision, e.IsEdge)
 	h := sha256.Sum256([]byte(b))
-	return hex.EncodeToString(h[:]), nil
+	return hex.EncodeToString(h[:])
 }
 func (t *HostTransport) call(ctx context.Context, env, method, p string, in, out any) error {
 	b, err := marshal(in)

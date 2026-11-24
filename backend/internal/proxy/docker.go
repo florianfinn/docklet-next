@@ -473,7 +473,9 @@ func (d *DockerRuntime) Rebind(ctx context.Context, i dto.Instance) (dto.Instanc
 		if err != nil {
 			return i, err
 		}
-		if source.Canonical != i.Source.Canonical || source.Kind != i.Source.Kind || source.ReadOnly != i.Source.ReadOnly {
+		compared := i.Source
+		compared.MountMode = source.MountMode // recovery retains its established proxy-access-independent contract
+		if !sameSource(source, compared) {
 			return i, dto.Fail(dto.ContainerChanged, 409)
 		}
 		current := i

@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original production proxy Manager implementation.
 
+import {PROXY_ADOPTION_REASON_KEYS, PROXY_ADOPTION_OUTCOME_KEYS} from "../wire-catalogue-proxy";
+import type {components} from "@/api/generated/schema";
 import {validProxySourceExtension, validResolverSummary} from "./proxy-decoder";
 import type { Discovery, Instance, Inventory, ReadResult } from "@/features/proxy/types";
 
@@ -97,4 +99,17 @@ const checks = {
 export function decodeProxyData<K extends keyof Results>(kind: K, value: unknown): Results[K] {
   if (!record(value) || value.success !== true || !checks[kind](value.data)) throw new Error("proxy.invalid-response");
   return (value.data ?? []) as Results[K];
+}
+
+export function decodeProxyAdoption(value: unknown): components["schemas"]["ProxyAdoption"] {
+ if (!record(value) || value.success!==true || !record(value.data)) throw new Error("proxy.invalid-response");
+ const v=value.data;
+ if (!member(v.outcome,Object.keys(PROXY_ADOPTION_OUTCOME_KEYS)) || !instance(v.instance) ||
+  (v.reason!==undefined && !member(v.reason,Object.keys(PROXY_ADOPTION_REASON_KEYS))) ||
+  (v.outcome==="refused" && v.reason===undefined) || (v.outcome!=="refused" && v.reason!==undefined) ||
+  (v.supersededBy!==undefined && (v.reason!=="held-by-instance" || typeof v.supersededBy!=="string" || !v.supersededBy)) ||
+  (v.reason==="held-by-instance" && !v.supersededBy) ||
+  (v.outcome==="adopted" && (typeof v.operationId!=="string" || !v.operationId)) ||
+  (v.operationId!==undefined && (v.outcome!=="adopted" || typeof v.operationId!=="string"))) throw new Error("proxy.invalid-response");
+ return v as components["schemas"]["ProxyAdoption"];
 }

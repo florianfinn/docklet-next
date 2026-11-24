@@ -310,6 +310,7 @@ export const enProxyContract = {
     "restoring": "Restoring"
   },
   "adoption": {
+    "stale": "Stale",
     "operation": "Followed recreated container",
     "current": "The registration matches its container.",
     "adopted": "The instance followed its recreated container.",

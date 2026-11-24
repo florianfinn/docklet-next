@@ -10,6 +10,7 @@ import { ProxyError, type ProxyApi } from "@/data/http/proxy-api";
 import { Button } from "@/shared/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { EligibilityView, ErrorView } from "./controls";
+import { AdoptionStatus } from "./AdoptionStatus";
 import { Operations } from "./Operations";
 import { RouteEditor } from "./RouteEditor";
 import { ChangeDialog, type ChangeAction } from "./ChangeDialog";
@@ -17,7 +18,7 @@ import { RouteList } from "./RouteList";
 import { ManualImportHint } from "./ManualImportHint";
 import { Settings } from "./Settings";
 import { canInsertImport, drifted, operationRequest, relativeTarget, routeWritesAllowed } from "./model";
-import type { Acknowledgements, Change, Instance, Inventory, Operation, ReadResult, Route } from "./types";
+import type { Adoption, Acknowledgements, Change, Instance, Inventory, Operation, ReadResult, Route } from "./types";
 
 type Snapshot = { read: ReadResult; inventory: Inventory };
 export function InstanceWorkspace({
@@ -25,11 +26,13 @@ export function InstanceWorkspace({
   api,
   updated,
   removed,
+  adoption,
 }: {
   instance: Instance;
   api: ProxyApi;
   updated: (i: Instance) => void;
   removed: () => void;
+  adoption?: { claim: (id: string) => boolean; result: (value: Adoption) => void };
 }) {
   const t = useTranslations("proxyContract.ui"),
     [snapshot, setSnapshot] = useState<Snapshot>(),
@@ -42,14 +45,41 @@ export function InstanceWorkspace({
   const [editor, setEditor] = useState<{ route?: Route; snapshot: Snapshot }>(),
     [action, setAction] = useState<{ value: ChangeAction; snapshot: Snapshot }>(),
     [refusal, setRefusal] = useState<unknown>();
+  const callbacks = useRef({adoption, updated});
+  useEffect(() => { callbacks.current={adoption,updated}; },[adoption,updated]);
+  const attempted = useRef(false), sequence = useRef(0), controller = useRef(new AbortController());
+  const [adoptionResult, setAdoptionResult] = useState<Adoption>();
   const refresh = useCallback(async () => {
-    const [configuration, operations] = await Promise.allSettled([
-      Promise.all([api.read(instance), api.inventory(instance)]),
+    const {adoption,updated}=callbacks.current;
+    const request = ++sequence.current, ownedController = controller.current;
+    const valid = () => active.current && request === sequence.current && !ownedController.signal.aborted;
+    let [configuration, operations] = await Promise.allSettled([
+      Promise.all([api.read(instance, ownedController.signal), api.inventory(instance, ownedController.signal)]),
       api
         .operations(instance.id)
         .then(rows => Promise.all(rows.map(row => (row.state === "recovery-required" ? api.operation(row.id) : row)))),
     ]);
-    if (!active.current) return false;
+    if (!valid()) return false;
+    if (configuration.status === "rejected" && configuration.reason instanceof ProxyError && configuration.reason.code === "container-changed" &&
+      (adoption ? adoption.claim(instance.id) : !attempted.current)) {
+      attempted.current = true;
+      setSnapshot(undefined);
+      setEditor(undefined);
+      setAction(undefined);
+      try {
+        const answer = await api.adopt(instance.id, ownedController.signal);
+        if (!valid()) return false;
+        setAdoptionResult(answer);
+        adoption?.result(answer);
+        if (answer.outcome !== "refused") {
+          if (JSON.stringify(answer.instance) !== JSON.stringify(instance)) { updated(answer.instance); return false; }
+          [configuration, operations] = await Promise.allSettled([
+            Promise.all([api.read(answer.instance, ownedController.signal), api.inventory(answer.instance, ownedController.signal)]), api.operations(answer.instance.id),
+          ]);
+          if (!valid()) return false;
+        }
+      } catch (e) { if (valid()) setError(e); return false; }
+    }
     if (operations.status === "fulfilled") setRows(operations.value);
     if (configuration.status === "fulfilled") {
       const [read, inventory] = configuration.value;
@@ -66,6 +96,7 @@ export function InstanceWorkspace({
   }, [api, instance]);
   useEffect(() => {
     active.current = true;
+    controller.current = new AbortController();
     let live = true;
     void Promise.resolve().then(() => {
       if (live) return refresh();
@@ -73,8 +104,20 @@ export function InstanceWorkspace({
     return () => {
       live = false;
       active.current = false;
+      controller.current.abort();
     };
   }, [refresh]);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const regain = () => {
+      clearTimeout(timer);
+      if (document.visibilityState === "hidden") return;
+      timer=setTimeout(() => { if (!lock.current && document.visibilityState !== "hidden") void refresh(); },2000);
+    };
+    window.addEventListener("focus",regain);
+    document.addEventListener("visibilitychange",regain);
+    return () => { clearTimeout(timer);window.removeEventListener("focus",regain);document.removeEventListener("visibilitychange",regain); };
+  },[refresh]);
   useEffect(() => {
     if (!rows.some(r => r.state === "pending")) return;
     let stopped = false;
@@ -191,6 +234,7 @@ export function InstanceWorkspace({
           {t("uncertain")}
         </p>
       )}
+      {adoptionResult && <AdoptionStatus value={adoptionResult} />}
       {error !== undefined && <ErrorView error={error} />}
       {!snapshot && error === undefined && <p role="status">{t("loading")}</p>}
       {!snapshot && error !== undefined && settings(undefined)}

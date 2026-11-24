@@ -37,12 +37,12 @@ func deferredReceipt(o dto.Operation, kind dto.OperationKind) dto.Operation {
 func journalReceipt(j Journal) dto.Operation {
 	var prior dto.Operation
 	_ = json.Unmarshal(j.Result, &prior)
-	return dto.Operation{ID: j.ID, InstanceID: prior.InstanceID, Kind: prior.Kind, Resolver: prior.Resolver, Generation: j.Generation, Registration: j.Registration, Digest: j.Digest, State: j.State, Phase: j.Phase, Target: prior.Target, Old: prior.Old, New: prior.New, Current: prior.Current, ReleasedBy: prior.ReleasedBy, Reason: prior.Reason, CreatedAt: j.CreatedAt, FinishedAt: j.FinishedAt}
+	return dto.Operation{ID: j.ID, InstanceID: prior.InstanceID, Kind: prior.Kind, Adoption: prior.Adoption, Resolver: prior.Resolver, Generation: j.Generation, Registration: j.Registration, Digest: j.Digest, State: j.State, Phase: j.Phase, Target: prior.Target, Old: prior.Old, New: prior.New, Current: prior.Current, ReleasedBy: prior.ReleasedBy, Reason: prior.Reason, CreatedAt: j.CreatedAt, FinishedAt: j.FinishedAt}
 }
 func recordReceipt(r Record) dto.Operation {
 	var prior dto.Operation
 	_ = json.Unmarshal(r.Result, &prior)
-	return dto.Operation{ID: r.ID, InstanceID: r.InstanceID, Kind: prior.Kind, Resolver: prior.Resolver, Generation: r.Generation, Registration: r.Registration, Digest: r.Digest, State: r.State, Phase: prior.Phase, Target: prior.Target, Old: prior.Old, New: prior.New, Current: prior.Current, ReleasedBy: prior.ReleasedBy, Reason: prior.Reason, CreatedAt: r.CreatedAt, FinishedAt: r.FinishedAt}
+	return dto.Operation{ID: r.ID, InstanceID: r.InstanceID, Kind: prior.Kind, Adoption: prior.Adoption, Resolver: prior.Resolver, Generation: r.Generation, Registration: r.Registration, Digest: r.Digest, State: r.State, Phase: prior.Phase, Target: prior.Target, Old: prior.Old, New: prior.New, Current: prior.Current, ReleasedBy: prior.ReleasedBy, Reason: prior.Reason, CreatedAt: r.CreatedAt, FinishedAt: r.FinishedAt}
 }
 func deferredOperation(o dto.Operation) bool {
 	return o.Kind.Effective() != dto.RouteOperation && o.Kind != dto.ResolverOperation || o.Reason == dto.UnknownOperationKind
@@ -80,4 +80,19 @@ func decodeResolverPayload(raw, result []byte, id, generation, registration, dig
 		return dto.ApplyRequest{}, dto.Operation{}, false
 	}
 	return q, o, true
+}
+
+// Adoption is a finished hub receipt, never an executor request or recovery job.
+func decodeAdoptionPayload(r Record) (dto.ApplyRequest, dto.Operation, bool) {
+	var q dto.ApplyRequest
+	var o dto.Operation
+	if json.Unmarshal(r.Request, &q) != nil || json.Unmarshal(r.Result, &o) != nil {
+		return q, o, false
+	}
+	a := o.Adoption
+	valid := q.Kind == dto.AdoptionOperation && o.Kind == dto.AdoptionOperation && q.ID == r.ID && o.ID == r.ID && q.Instance.ID == r.InstanceID && o.InstanceID == r.InstanceID && q.Generation == r.Generation && o.Generation == r.Generation && q.Registration == r.Registration && o.Registration == r.Registration && r.Digest == "" && o.Digest == "" && r.State == dto.Applied && o.State == dto.Applied && o.Phase == dto.Phase(dto.Applied) && r.FinishedAt != nil && o.FinishedAt != nil && a != nil
+	if valid {
+		valid = a.PreviousContainerID != "" && a.ContainerID != "" && a.PreviousContainerID != a.ContainerID && a.ContainerID == q.Instance.Identity.ContainerID && a.StartedAt == q.Instance.Identity.StartedAt && o.Target == q.Instance.Identity.ContainerName && o.Target != ""
+	}
+	return q, o, valid
 }

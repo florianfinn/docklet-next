@@ -117,6 +117,12 @@ func decodeRecord(r Record) (dto.ApplyRequest, dto.Operation, error) {
 	var q dto.ApplyRequest
 	o := recordReceipt(r)
 	kind, valid := payloadKind(r.Request)
+	if valid && kind == dto.AdoptionOperation {
+		if binding, result, ok := decodeAdoptionPayload(r); ok {
+			return binding, result, nil
+		}
+	}
+
 	if valid && kind == dto.ResolverOperation {
 		if binding, result, ok := decodeResolverPayload(r.Request, r.Result, r.ID, r.Generation, r.Registration, r.Digest, r.State); ok {
 			return binding, result, nil
