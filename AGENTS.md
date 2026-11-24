@@ -76,9 +76,11 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   acceptance, full base/head SHA, accepted decisions, owned and read-only paths,
   prior findings and objections) and one structured result. Tools never decide
   product, scope or UX questions, and no subagent changes a running system.
-- Ask the maintainer once at milestone start: every open product, scope and
-  interface question with a recommendation, plus the acceptance matrix and its
-  exclusion rule. Each exclusion names the affected behaviour and cells, the
+- At milestone start, the plan and the design notes of risky steps (with their
+  break maps) get one independent design review, then the maintainer is asked once:
+  every open product, scope and interface question with a recommendation, plus the
+  acceptance matrix and its exclusion rule. Implementation starts only after the
+  maintainer agrees to both. Each exclusion names the affected behaviour and cells, the
   baseline evidence or environment limit, the runner's check and the effect on the
   verdict; code age alone is no exclusion. Later questions are decided by the main
   thread with the recommended, reversible and narrower option and posted with how
@@ -149,6 +151,8 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   lint (publication, structure, migrations, API contract, Go formatting and web
   typecheck). CI runs the full lint, test and build once per pushed head: on main
   pushes and on PRs, which compare with their base and check the merge result.
+  GitHub runs no PR checks while a PR has merge conflicts: merge main into the
+  feature branch first and rely only on CI evidence of a mergeable head.
 - Text-only changes use scripts/change-scope.mjs: Markdown outside executable
   paths, root LICENSE/NOTICE and LICENSES. A release train that adds only the next
   X.Y.Z version and its provenance hash and note counts as text. Reduced checks still

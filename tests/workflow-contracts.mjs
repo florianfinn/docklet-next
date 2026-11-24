@@ -83,6 +83,8 @@ export function assertWorkflow(file, text) {
     assert.match(checks, /FULL_RESULT: \$\{\{ needs\.full-checks\.result \}\}/);
     assert.match(checks, /IMAGE_RESULT: \$\{\{ needs\.package-image\.result \}\}/);
     assert.match(checks, /test "\$VERIFY_RESULT" = success/);
+    assert.match(checks, /^          VERIFY_RESULT: \$\{\{ needs\.verify\.result \}\}$/m);
+    assert.match(checks, /^          FULL_RESULT: \$\{\{ needs\.full-checks\.result \}\}$/m);
     assert.match(checks, /text\) test "\$FULL_RESULT" = skipped && test "\$IMAGE_RESULT" = skipped/);
     assert.match(checks, /full\) test "\$FULL_RESULT" = success && test "\$IMAGE_RESULT" = success/);
     assert.equal(text.includes("continue-on-error"), false);
@@ -101,7 +103,8 @@ export function assertWorkflow(file, text) {
   assert.equal((text.match(/persist-credentials: false/g) ?? []).length, file === "checks" ? 4 : 1);
   if (file === "checks") {
     // One run per pushed head: main pushes and PRs; feature branches run through their PR.
-    assert.match(text, /^    branches: \[main\]$/m);
+    assert.ok(text.includes("on:\n  pull_request:\n    types: [opened, synchronize, reopened]\n  push:\n    branches: [main]\n"),
+      "checks triggers");
     assert.equal(text.includes("feature/"), false);
     // Main runs use unique groups; superseded PR runs are cancelled.
     assert.ok(text.includes("  group: checks-${{ github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}\n"));
