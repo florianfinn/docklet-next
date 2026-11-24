@@ -110,15 +110,17 @@ export function mapTopology(rows: (Schema["NetworkInspect"] | Schema["NetworkSum
   for (const c of containers) unreadable.one(c, (c) => {
     if (systemRole(c.labels) !== undefined) return;
     const containerId = inventoryId(hostId, c.id);
-    for (const n of networks) {
-      const endpoint = c.networkSettings?.networks?.[n.name];
+    const endpoints = c.networkSettings?.networks;
+    // Each attachment is a reference entry of its own: one that cannot be read drops only itself (#600).
+    for (const n of networks) unreadable.one(n, (n) => {
+      const endpoint = endpoints?.[n.name];
       const detail = rows.find((r) => typeof r?.id === "string" && `${hostId}~${r.id}` === n.id);
       const raw = detail && "containers" in detail ? detail.containers?.[c.id] : undefined;
-      if (!endpoint && !raw) continue;
+      if (!endpoint && !raw) return;
       const fixed4 = fixedAddress(endpoint?.ipamConfig, "IPv4Address");
       const fixed6 = fixedAddress(endpoint?.ipamConfig, "IPv6Address");
       attachments.push({ containerId, networkId: n.id, ip: endpoint?.ipAddress || raw?.IPv4Address?.split("/")[0] || fixed4, ip6: endpoint?.globalIPv6Address || raw?.IPv6Address?.split("/")[0] || fixed6, staticIp: fixed4 ? true : undefined, staticIp6: fixed6 ? true : undefined, aliases: endpoint?.aliases ?? undefined });
-    }
+    }, (n) => n.name, (n) => `attachment:${n.id}:${c.id}`);
     if (!c.labels?.["com.docker.compose.project"]) return;
     for (const entry of (c.labels?.["com.docker.compose.depends_on"] ?? "").split(",").filter(Boolean)) {
       const service = entry.split(":")[0];

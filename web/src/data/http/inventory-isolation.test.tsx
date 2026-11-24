@@ -345,6 +345,28 @@ describe("#600 structural boundary: reference entries and detail pages", () => {
   });
 });
 
+describe("#600 attachments as reference entries and the administrator detail boundary", () => {
+  it("drops only an attachment it cannot read; the container keeps its other attachments and dependencies", async () => {
+    const f = resourceFixture(); const n = f.state.networks[0]!;
+    f.state.networks = [n, { ...n, id: "badnet", name: "badnet", containers: { web: { IPv4Address: 7 } } }, { ...n, id: "thirdnet", name: "thirdnet", containers: { web: { IPv4Address: "192.0.2.3/24" } } }] as never;
+    const graph = await f.adapter.getTopology();
+    expect(graph.attachments.some((a) => a.containerId === "second~web" && a.networkId === "second~thirdnet")).toBe(true);
+    expect(graph.attachments.some((a) => a.networkId === "second~badnet")).toBe(false);
+    expect(graph.dependencies.some((d) => d.from === "second~web" && d.to === "second~db")).toBe(true);
+    expect((await unreadableOf(f))?.networks?.count).toBe(1);
+  });
+
+  it("answers unreadable when the host returns a list it cannot read, and keeps a transport failure's own outcome", async () => {
+    const malformed = resourceFixture(); alter(malformed, "/api/environments/second/projects", () => ({ broken: true }));
+    await expect(malformed.adapter.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "get-project.unreadable" } });
+    const unnamed = resourceFixture(); alter(unnamed, "/api/environments/second/projects", (rows: object[]) => rows.map((r) => ({ ...r, composeProjectName: 42 })));
+    await expect(unnamed.adapter.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "get-project.unreadable" } });
+    const down = resourceFixture(); const original = down.fetcher.getMockImplementation()!;
+    down.fetcher.mockImplementation(async (input) => new URL(String(input), "https://hub.example.com").pathname === "/api/environments/second/containers" ? new Response(JSON.stringify({ success: false, code: "docker.error" }), { status: 500, headers: { "Content-Type": "application/json" } }) : original(input));
+    await expect(down.adapter.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "docker.error", status: 500 } });
+  });
+});
+
 describe("#600 visible unreadable state", () => {
   afterEach(() => { setPreference("hostSelection", []); setAppLocale("de"); });
   const broken = { count: 1, codes: ["inventory.invalid-project"], names: ["proxy"] };

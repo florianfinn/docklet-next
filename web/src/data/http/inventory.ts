@@ -19,6 +19,15 @@ import { inventoryId, mapContainer, mapStack, splitInventoryId, type ContainerRo
 import { isMaintenanceError } from "../maintenance-retry";
 import { rowCollector, withUnreadable } from "./row-isolation";
 
+/** A successful host answer whose body or pages cannot be read, as opposed to a transport or host failure. */
+function malformedSuccess(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === "AbortError") return false;
+  if (!(error instanceof AdapterOutcomeError)) return true;
+  if (error.outcome.kind !== "error") return false;
+  const { code, status } = error.outcome;
+  return /\.(invalid-page|short-page|invalid-observation)$/.test(code) || (/\.invalid-response$/.test(code) && status !== undefined && status >= 200 && status < 300);
+}
+
 function isUnreadable(error: unknown): boolean {
   return error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "get-project.unreadable";
 }
@@ -99,7 +108,13 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       // file content, which only the compose read carries and which is never cached.
       const [detail, batch, files] = await Promise.all([
         read("get-project", hostId, `projects/${encodeURIComponent(projectId)}`),
-        stackInventory(host, projectId).catch((error) => { if (isMaintenanceError(error) || isUnreadable(error)) throw error; onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] }; }),
+        // The list read belongs to the detail boundary: a malformed successful answer is unreadable; a transport
+        // or host failure keeps its own outcome. Only a requested row that is really absent becomes not-found (#600).
+        stackInventory(host, projectId).catch((error) => {
+          if (isMaintenanceError(error) || isUnreadable(error)) throw error;
+          onState(host.id, inventoryFailure(host.id, error));
+          throw malformedSuccess(error) ? new AdapterOutcomeError({ kind: "error", code: "get-project.unreadable" }) : error;
+        }),
         read("get-project-compose", hostId, `projects/${encodeURIComponent(projectId)}/compose`).then((result) => result.body.data, () => undefined),
       ]);
       // Detail boundary (#600): a missing requested list row is absence; any other failure after the host answered is unreadable.

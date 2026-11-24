@@ -36,14 +36,16 @@ A broken or unusual row affects only itself.
   administrators and assigned users alike.
 - **References are entries of their own.** Inside a row, every entry that points
   to another object (an image's consumer containers and `usedBy` entries, a
-  volume's consumers and Docker usage names, a network's attachments) is read one
+  volume's consumers and Docker usage names, each attachment of a container to a
+  network) is read one
   by one. An entry that cannot be read is left out and counted under the reader's
   kind; the row and its other entries stay. The row's own data (ports, mounts,
   network settings, a stack's runtime services) failing makes the row unreadable.
 - **Detail pages have one boundary.** Once the host has answered, any failure of
   a stack detail (an empty or mismatched detail, a projection error) is
-  `get-project.unreadable` for administrators and assigned users. Only a missing
-  requested list row is `get-project.not-found`; transport and maintenance
+  `get-project.unreadable` for administrators and assigned users; so is a list
+  read the host answered with a body or pages Docklet cannot read. Only a missing
+  requested list row is `get-project.not-found`; transport, host and maintenance
   failures keep their outcomes.
 - **One physical row counts once.** A reader counts a row under its kind once,
   even when several of its parts fail (for example a network's summary and its
@@ -116,7 +118,9 @@ No wire change. The web model gains `Service.buildOnly` and
 | 16 | shared state | malformed network detail; summary and detail of one row both fail | counted once under networks | same | drop the detail count / the row key |
 | 17 | external data | `usedBy` / Docker usage entry that cannot be read | image or volume and other consumers stay; counted once | same | map entries without the collector |
 | 18 | detail | empty stack detail (administrator, assigned user) | `get-project.unreadable` | same | check outside the boundary |
-| 19 | migration | none | — | — | — |
+| 19 | external data | one attachment that cannot be read | the container's other attachments and dependencies stay | same | one collector for all attachments |
+| 20 | detail | malformed successful list read; transport failure of the list read | unreadable; own outcome | same | empty batch (not-found) / everything unreadable |
+| 21 | migration | none | — | — | — |
 
 ## Acceptance cells
 
