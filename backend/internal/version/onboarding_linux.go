@@ -17,7 +17,7 @@ import (
 )
 
 func inspectOnboarding(projectDirectory, dockerHost string) *version.OnboardingChecks {
-	checks := &version.OnboardingChecks{ProjectDirectory: projectDirectory}
+	checks := &version.OnboardingChecks{ProjectDirectory: projectDirectory, AgentUID: new(uint32(os.Geteuid())), AgentGID: new(uint32(os.Getegid()))}
 	if info, err := os.Stat(projectDirectory); err == nil {
 		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
 			checks.OwnerUID = new(stat.Uid)

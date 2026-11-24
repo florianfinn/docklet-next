@@ -62,9 +62,14 @@ func (m *Manager) routeRefusalLocked() string {
 	switch {
 	case !m.cfg.MTLSDisabled:
 		return tailnettypes.CodeMTLSUnsupported
+	case m.enabled && m.conn.State == "error" && (m.conn.Code == tailnettypes.CodeCredentialRejected || m.conn.Code == tailnettypes.CodeTagsNotPermitted):
+		return m.conn.Code
 	case !m.enabled || m.conn.State != "connected" || m.status == nil || hubIPv4(m.status) == "":
 		return tailnettypes.CodeNotConnected
 	case m.cred.Mode == tailnettypes.ModeOAuth && m.prov.State == "rejected":
+		if m.prov.Code == tailnettypes.CodeTagsNotPermitted {
+			return m.prov.Code
+		}
 		return tailnettypes.CodeCredentialRejected
 	}
 	return ""
@@ -73,27 +78,43 @@ func (m *Manager) routeRefusalLocked() string {
 // RouteRefusal returns a typed problem when new hosts cannot use the tailnet route.
 func (m *Manager) RouteRefusal() error {
 	m.mu.Lock()
-	code := m.routeRefusalLocked()
+	problem := m.routeProblemLocked()
 	m.mu.Unlock()
+	if problem == nil {
+		return nil
+	}
+	return problem
+}
+
+func (m *Manager) routeProblemLocked() *tailnettypes.Problem {
+	code := m.routeRefusalLocked()
 	if code == "" {
 		return nil
 	}
-	return &tailnettypes.Problem{Code: code, Status: http.StatusConflict}
+	problem := &tailnettypes.Problem{Code: code, Status: http.StatusConflict}
+	if code == tailnettypes.CodeTagsNotPermitted {
+		if m.conn.Code == code {
+			problem.RefusedTags = m.conn.RefusedTags
+		} else {
+			problem.RefusedTags = m.prov.RefusedTags
+		}
+	}
+	return problem
 }
 
 // ProvisionHostKey returns the one-use key for a new host and the hub URL its installer uses.
 // OAuth mode mints a key; manual mode returns the pasted key unchanged. Nothing is stored.
 func (m *Manager) ProvisionHostKey(ctx context.Context, pasted string) (string, string, error) {
 	m.mu.Lock()
-	code := m.routeRefusalLocked()
+	problem := m.routeProblemLocked()
 	gen, cred := m.gen, m.cred
 	var managerURL string
 	if m.status != nil {
 		managerURL = "http://" + hubIPv4(m.status) + ":" + IngressPort
 	}
 	m.mu.Unlock()
-	if code != "" {
-		return "", "", &tailnettypes.Problem{Code: code, Status: http.StatusConflict}
+	if problem != nil {
+		return "", "", problem
 	}
 	if cred.Mode != tailnettypes.ModeOAuth {
 		key := strings.TrimSpace(pasted)
@@ -167,6 +188,14 @@ func (m *Manager) HostPeer(nodeID string, tagged *bool, observedAt *time.Time) t
 		if !p.Online && !p.LastSeen.IsZero() {
 			seen := p.LastSeen
 			peer.LastSeen = &seen
+		}
+		peer.DNSName = strings.TrimSuffix(p.DNSName, ".")
+		for _, v4 := range []bool{true, false} {
+			for _, addr := range p.TailscaleIPs {
+				if addr.IsValid() && addr.Is4() == v4 && len(peer.Addresses) < 4 {
+					peer.Addresses = append(peer.Addresses, addr.String())
+				}
+			}
 		}
 		peer.Path = peerPath(p)
 		return peer

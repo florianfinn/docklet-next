@@ -244,6 +244,7 @@ func TestCreateTailnetHostRefusalsStoreNothing(t *testing.T) {
 		{"hub not connected", &tailnettypes.Problem{Code: tailnettypes.CodeNotConnected, Status: 409}, tailnettypes.CodeNotConnected},
 		{"mTLS mode", &tailnettypes.Problem{Code: tailnettypes.CodeMTLSUnsupported, Status: 409}, tailnettypes.CodeMTLSUnsupported},
 		{"provider refused", &tailnettypes.Problem{Code: tailnettypes.CodeCredentialRejected, Status: 409, ProviderStatus: 403}, tailnettypes.CodeCredentialRejected},
+		{"tags refused", &tailnettypes.Problem{Code: tailnettypes.CodeTagsNotPermitted, Status: 409, ProviderStatus: 400, RefusedTags: []string{tailnet.AgentTag}}, tailnettypes.CodeTagsNotPermitted},
 		{"mint failed", &tailnettypes.Problem{Code: tailnettypes.CodeKeyMintFailed, Status: 502, ProviderStatus: 503}, tailnettypes.CodeKeyMintFailed},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -254,6 +255,9 @@ func TestCreateTailnetHostRefusalsStoreNothing(t *testing.T) {
 			var problem *tailnettypes.Problem
 			require.ErrorAs(t, err, &problem)
 			require.Equal(t, tc.code, problem.Code)
+			if tc.code == tailnettypes.CodeTagsNotPermitted {
+				require.Equal(t, []string{tailnet.AgentTag}, problem.RefusedTags)
+			}
 			var count int64
 			require.NoError(t, db.Model(&Environment{}).Count(&count).Error)
 			require.Zero(t, count)

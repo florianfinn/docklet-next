@@ -78,7 +78,7 @@ func TestManagerReportsRejectedCredentialWithoutRetrying(t *testing.T) {
 	require.Equal(t, "error", connectionState(m))
 	time.Sleep(60 * time.Millisecond)
 	require.EqualValues(t, 1, fleet.Created.Load(), "a rejected credential needs operator action, not retries")
-	require.Equal(t, tailnettypes.CodeNotConnected, m.Status().RouteCode)
+	require.Equal(t, tailnettypes.CodeCredentialRejected, m.Status().RouteCode)
 }
 
 func TestManagerRetriesUnreachableControlUntilJoined(t *testing.T) {

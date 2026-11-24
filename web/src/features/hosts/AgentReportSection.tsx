@@ -45,7 +45,7 @@ export function AgentReportSection({ host }: { host: Host }) {
           {r.note !== "ok" && (
             <p className={cn("mt-1.5 flex items-start gap-1.5 text-xs", r.note === "root-owned" ? "text-warning" : "text-muted-foreground")}>
               {r.note === "root-owned" && <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />}
-              {t(r.note === "root-owned" ? "root" : "unraid")}
+              {t(r.note === "root-owned" ? "root" : "unraid", { uid: r.projectDirOwner.uid, gid: r.projectDirOwner.gid })}
             </p>
           )}
           <p className="mt-1.5 text-[11px] text-muted-foreground">{t(reportTimeKey, { time: formatRelative(r.reportedAt) })}</p>

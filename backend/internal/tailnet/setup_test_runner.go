@@ -39,7 +39,7 @@ func (m *Manager) Test(ctx context.Context) (dto.TestResult, error) {
 			out.Checks[1] = providerCheck("agent-key", mintErr, dto.CodeProviderUnavailable)
 			switch {
 			case mintErr != nil:
-				if out.Checks[1].Code != dto.CodeMintRefused {
+				if out.Checks[1].Code != dto.CodeMintRefused && out.Checks[1].Code != dto.CodeTagsNotPermitted {
 					out.Checks[2].State = "unknown"
 				}
 			case id == "":
@@ -52,15 +52,19 @@ func (m *Manager) Test(ctx context.Context) (dto.TestResult, error) {
 			}
 		}
 	}
+	current := m.RetryJoin(ctx, revision)
 	// Membership, tags, address and credential identity come from one completion snapshot.
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out.Stale = revision != m.credentialRevisionLocked()
+	out.Stale = !current || revision != m.credentialRevisionLocked()
 	joined := m.conn.State == "connected"
 	hub := []dto.TestCheck{{ID: "hub-joined", State: "skipped"}, {ID: "hub-tag", State: "skipped"}, {ID: "hub-address", State: "skipped"}}
 	if !out.Stale {
 		hub[0].State = "fail"
 		hub[0].Code = dto.CodeNotConnected
+		if m.conn.Code == dto.CodeCredentialRejected || m.conn.Code == dto.CodeTagsNotPermitted {
+			hub[0].Code, hub[0].RefusedTags = m.conn.Code, m.conn.RefusedTags
+		}
 		if joined {
 			hub[0] = dto.TestCheck{ID: "hub-joined", State: "pass"}
 			hub[2] = dto.TestCheck{ID: "hub-address", State: "fail"}
@@ -90,8 +94,8 @@ func providerCheck(id string, err error, fallback string) dto.TestCheck {
 	var problem *dto.Problem
 	if errors.As(err, &problem) {
 		row.ProviderStatus = problem.ProviderStatus
-		if id == "credential" && problem.Code == dto.CodeCredentialRejected || id == "agent-key" && problem.Code == dto.CodeMintRefused {
-			row.Code = problem.Code
+		if problem.Code == dto.CodeTagsNotPermitted || id == "credential" && problem.Code == dto.CodeCredentialRejected || id == "agent-key" && problem.Code == dto.CodeMintRefused {
+			row.Code, row.RefusedTags = problem.Code, problem.RefusedTags
 		}
 	}
 	return row

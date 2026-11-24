@@ -146,7 +146,7 @@ func (p *Provisioner) MintHostKey(ctx context.Context, clientID, clientSecret st
 	defer func() { _ = resp.Body.Close() }()
 	data, readErr := readBounded(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return "", classify(resp.StatusCode)
+		return "", classifyMint(resp.StatusCode, data, readErr, classify(resp.StatusCode))
 	}
 	var key struct {
 		Key string `json:"key"`
@@ -170,10 +170,10 @@ func PolicySnippet() string {
 	return fmt.Sprintf(`{
   "tagOwners": {
     %q: ["autogroup:admin"],
-    %q: ["autogroup:admin"]
+    %q: ["autogroup:admin", %q]
   },
   "grants": [
     {"src": [%q], "dst": [%q], "ip": ["tcp:%s"]}
   ]
-}`, HubTag, AgentTag, AgentTag, HubTag, IngressPort)
+}`, HubTag, AgentTag, HubTag, AgentTag, HubTag, IngressPort)
 }

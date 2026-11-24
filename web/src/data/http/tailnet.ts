@@ -8,7 +8,8 @@ import type { components } from "@/api/generated/schema";
 import { CancelledError } from "@tanstack/react-query";
 import type { TailnetApi, TailnetSettings, TailnetStatus, TestResult, TestCheck } from "@/domain/tailnet";
 import type { CsrfClient } from "./csrf-client";
-import { runtimeResponseError } from "./runtime-mapping";
+import { AdapterOutcomeError } from "../capability";
+import { object, runtimeResponseError } from "./runtime-mapping";
 
 type Environment = components["schemas"]["EnvironmentEnvironment"];
 type PeerProjection = Pick<Environment, "registrationRevision" | "networkRoute" | "tailnet">;
@@ -25,7 +26,8 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
   let lifetime = new AbortController();
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
-  function observe(next: TailnetStatus): boolean {
+  function observe(value: TailnetStatus): boolean {
+    const next = decodeStatus(value);
     if (next.credentialRevision !== undefined && (typeof next.credentialRevision !== "string" || !next.credentialRevision)) return false;
     if (!Number.isSafeInteger(next.generation) || next.generation < 0 || (current && observedEpoch === streamEpoch && next.generation < current.generation)) return false;
     ++revision; observedEpoch = streamEpoch; current = next; notify(); return true;
@@ -37,7 +39,12 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
     catch (error) { if (owner !== identity()) throw new CancelledError(); throw error; }
     const payload = await response.json();
     if (owner !== identity()) throw new CancelledError();
-    if (!response.ok) throw runtimeResponseError(payload, response.status);
+    if (!response.ok) {
+      const envelope = object(payload), data = object(envelope.data), problem = typeof data.code === "string" ? data : typeof object(envelope.error).code === "string" ? object(envelope.error) : envelope;
+      const error = runtimeResponseError(payload, response.status);
+      if (error.outcome.kind === "error" && error.outcome.code.startsWith("tailnet.")) throw new TailnetProblemError(error, decodeRefusedTags(problem.refusedTags));
+      throw error;
+    }
     if (payload.success !== true || !payload.data) throw new Error("tailnet.invalid-response");
     return payload.data;
   }
@@ -97,7 +104,7 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
 
 const checkIds = ["credential", "agent-key", "cleanup", "hub-joined", "hub-tag", "hub-address"] as const;
 const checkStates = ["pass", "fail", "skipped", "unknown"] as const;
-const checkCodes = ["tailnet.credential-rejected", "tailnet.provider-unavailable", "tailnet.not-connected", "tailnet.mint-refused", "tailnet.test-cleanup-failed", "tailnet.test-running"] as const;
+const checkCodes = ["tailnet.credential-rejected", "tailnet.provider-unavailable", "tailnet.not-connected", "tailnet.mint-refused", "tailnet.test-cleanup-failed", "tailnet.test-running", "tailnet.tags-not-permitted"] as const;
 function decodeTest(value: unknown): TestResult {
   const invalid = (): never => { throw new Error("tailnet.invalid-response"); };
   if (!value || typeof value !== "object") invalid();
@@ -110,8 +117,30 @@ function decodeTest(value: unknown): TestResult {
     if (!checkIds.includes(c.id as TestCheck["id"]) || seen.has(c.id as string) || !checkStates.includes(c.state as TestCheck["state"]) ||
       (c.code !== undefined && !checkCodes.includes(c.code as typeof checkCodes[number])) ||
       (c.providerStatus !== undefined && (!Number.isInteger(c.providerStatus) || (c.providerStatus as number) < 100 || (c.providerStatus as number) > 599))) invalid();
+    const refusedTags = decodeRefusedTags(c.refusedTags);
     seen.add(c.id as string);
-    return { id: c.id as TestCheck["id"], state: c.state as TestCheck["state"], ...(c.code === undefined ? {} : { code: c.code as TestCheck["code"] }), ...(c.providerStatus === undefined ? {} : { providerStatus: c.providerStatus as number }) };
+    return { ...(refusedTags === undefined ? {} : { refusedTags }), id: c.id as TestCheck["id"], state: c.state as TestCheck["state"], ...(c.code === undefined ? {} : { code: c.code as TestCheck["code"] }), ...(c.providerStatus === undefined ? {} : { providerStatus: c.providerStatus as number }) };
   });
   return { credentialRevision: row.credentialRevision as string, stale: row.stale as boolean, checks };
+}
+
+/** Tag data stays separate from generic command errors, which intentionally retain no provider body. */
+export class TailnetProblemError extends AdapterOutcomeError {
+  readonly refusedTags: string[] | undefined;
+  constructor(error: AdapterOutcomeError, refusedTags: string[] | undefined) {
+    super(error.outcome);
+    this.refusedTags = refusedTags;
+  }
+}
+
+function decodeRefusedTags(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value) || value.length > 8 || value.some((tag) => typeof tag !== "string" || !/^tag:[a-z0-9-]+$/.test(tag))) throw new Error("tailnet.invalid-response");
+  return [...value] as string[];
+}
+
+function decodeStatus(value: TailnetStatus): TailnetStatus {
+  if (!value || !value.connection || !value.provisioning) throw new Error("tailnet.invalid-response");
+  const connectionTags = decodeRefusedTags(value.connection.refusedTags), provisioningTags = decodeRefusedTags(value.provisioning.refusedTags);
+  return { ...value, connection: { ...value.connection, ...(connectionTags === undefined ? {} : { refusedTags: connectionTags }) }, provisioning: { ...value.provisioning, ...(provisioningTags === undefined ? {} : { refusedTags: provisioningTags }) } };
 }

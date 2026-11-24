@@ -55,13 +55,12 @@ export function tailnetChain(host: Host, status?: TailnetStatus): { link: ChainL
 }
 
 /** The pasted policy names the tags, owner and grant; the form alternative shows the same values field by field. */
-export function policyParts(snippet: string): { tags: string[]; owner: string; src: string; dst: string; port: string } | undefined {
+export function policyParts(snippet: string): { tags: { name: string; owners: string[] }[]; src: string; dst: string; port: string } | undefined {
   try {
     const policy = JSON.parse(snippet) as { tagOwners?: Record<string, string[]>; grants?: { src?: string[]; dst?: string[]; ip?: string[] }[] };
-    const tags = Object.keys(policy.tagOwners ?? {});
+    const tags = Object.entries(policy.tagOwners ?? {}).map(([name, owners]) => ({ name, owners }));
     const grant = policy.grants?.[0];
-    const owner = tags.length ? policy.tagOwners![tags[0]!]?.[0] : undefined;
-    if (!tags.length || !owner || !grant?.src?.[0] || !grant.dst?.[0] || !grant.ip?.[0]) return undefined;
-    return { tags, owner, src: grant.src[0], dst: grant.dst[0], port: grant.ip[0] };
+    if (!tags.length || tags.some((tag) => !Array.isArray(tag.owners) || !tag.owners.length) || !grant?.src?.[0] || !grant.dst?.[0] || !grant.ip?.[0]) return undefined;
+    return { tags, src: grant.src[0], dst: grant.dst[0], port: grant.ip[0] };
   } catch { return undefined; }
 }

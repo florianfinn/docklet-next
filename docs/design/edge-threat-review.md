@@ -497,7 +497,7 @@ configured auth proxy header are removed, so rate limits and logs key on the
 direct tailnet peer address even when `TRUSTED_PROXIES` covers it.
 
 **Credentials.** The hub credential is either an OAuth client (ID and secret,
-scope auth keys, tags `tag:docklet-hub` and `tag:docklet-agent`) or, in manual
+scope Auth keys: write, only tag `tag:docklet-hub`) or, in manual
 mode, a hub auth key. It is stored encrypted with the hub encryption key in the
 internal `tailnetCredential` setting, reported only as configured, never returned,
 streamed or logged; tsnet log text passes through key redaction and log upload is
@@ -527,7 +527,10 @@ new host key is needed. Restart reuses retained state without a key.
 
 **Residual risks.** A compromised coordination server or tailnet admin can add
 nodes or change the policy, which grants network reach only; an attacker still
-needs a host token for any agent surface (T4). The policy snippet Docklet shows
-grants only `tag:docklet-agent` to `tag:docklet-hub:3552`. Peer path, online state
-and failing-link projection are hub-side observations without endpoint addresses
-in DTOs or notifications.
+needs a host token for any agent surface (T4). The policy snippet makes
+`tag:docklet-hub` an owner of `tag:docklet-agent`, alongside `autogroup:admin`,
+so a hub-tagged OAuth client can mint single-tag agent keys. It grants only
+`tag:docklet-agent` to `tag:docklet-hub:3552`. Peer path, online state and
+failing-link projection are hub-side observations. Host DTOs expose the observed
+MagicDNS name and tailnet IPs; underlying peer endpoint addresses remain absent
+from DTOs and notifications.

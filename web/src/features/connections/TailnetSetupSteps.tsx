@@ -9,6 +9,7 @@ import { ChevronRight, Copy } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
 
+import { TailnetProblemError } from "@/data/http/tailnet";
 import { AdapterOutcomeError } from "@/data/capability";
 import { useCommandError } from "@/data/use-command-error";
 import { wireKey } from "@/data/wire-catalogue";
@@ -56,8 +57,7 @@ export function PolicyStep({ settings, done, onCopied }: { settings: TailnetSett
       <CollapsibleTrigger asChild><Button type="button" variant="ghost" className="min-h-10 justify-start px-0">{s("formsToggle")}</Button></CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-2 pt-1">
         <p className="text-xs text-muted-foreground">{s("formsTags")}</p>
-        {parts.tags.map((tag) => <CopyValue key={tag} label={s("tagName")} value={tag.replace(/^tag:/, "")} onCopied={onCopied} />)}
-        <CopyValue label={s("tagOwner")} value={parts.owner} onCopied={onCopied} />
+        {parts.tags.map((tag) => <div key={tag.name} className="flex min-w-0 flex-col gap-2"><CopyValue label={s("tagName")} value={tag.name.replace(/^tag:/, "")} onCopied={onCopied} />{tag.owners.map((owner) => <CopyValue key={owner} label={s("tagOwner")} value={owner} onCopied={onCopied} />)}</div>)}
         <p className="pt-2 text-xs text-muted-foreground">{s("formsGrant")}</p>
         <CopyValue label={s("source")} value={parts.src} onCopied={onCopied} />
         <CopyValue label={s("destination")} value={parts.dst} onCopied={onCopied} />
@@ -72,12 +72,12 @@ export function CredentialStep({ settings, mode, done, onCopied }: { settings: T
   const s = useTranslations("connections.steps");
   const tags = policyParts(settings.policySnippet)?.tags ?? [];
   if (mode === "manual") return <Step title={t("createManual")} where={settings.customControl ? undefined : s("manualWhere")} hint={t("createManualHint")} done={done}>
-    {tags[0] && <CopyValue label={s("tags")} value={tags[0]} onCopied={onCopied} />}
+    {tags[0] && <CopyValue label={s("tags")} value={tags[0].name} onCopied={onCopied} />}
     {!settings.customControl && <Button asChild variant="outline" className="min-h-10 self-start"><a href="https://login.tailscale.com/admin/settings/keys" target="_blank" rel="noreferrer">{t("console")}</a></Button>}
   </Step>;
   return <Step title={t("createOAuth")} where={s("oauthWhere")} hint={t("createOAuthHint")} done={done}>
     <CopyValue label={s("scope")} value={s("scopeValue")} onCopied={onCopied} />
-    {tags.map((tag) => <CopyValue key={tag} label={s("tags")} value={tag} onCopied={onCopied} />)}
+    {tags[0] && <CopyValue label={s("tags")} value={tags[0].name} onCopied={onCopied} />}
     <Button asChild variant="outline" className="min-h-10 self-start"><a href="https://login.tailscale.com/admin/settings/oauth" target="_blank" rel="noreferrer">{t("console")}</a></Button>
   </Step>;
 }
@@ -106,12 +106,12 @@ export function TestStep({ api, saved, revision, manual }: { api: TailnetApi; sa
       if (isCancelledError(error)) setView({ epoch: api.testEpoch(), stale: true });
       else {
         const key = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? wireKey(TAILNET_CODE_KEYS, error.outcome.code) : undefined;
-        setView({ epoch, error: key ? all(key) : commandError(error) });
+        setView({ epoch, error: key ? `${all(key)}${error instanceof TailnetProblemError && error.refusedTags?.length ? ` ${t("refusedTags", { tags: error.refusedTags.join(", ") })}` : ""}` : commandError(error) });
       }
     } finally { setBusy(false); }
   }
-  // The explicit test does not retry on its own; the generic provider text describes background provisioning.
-  const codeText = (code: NonNullable<TestResult["checks"][number]["code"]>) => code === "tailnet.provider-unavailable" ? t("testProviderUnavailable") : all(TAILNET_CODE_KEYS[code]);
+  // The explicit test retries a rejected hub join once; provider checks do not retry automatically.
+  const codeText = (code: NonNullable<TestResult["checks"][number]["code"]>) => code === "tailnet.provider-unavailable" ? t("testProviderUnavailable") : code === "tailnet.not-connected" ? t("hubNotJoined") : all(TAILNET_CODE_KEYS[code]);
   return <Step title={t("testTitle")} hint={t(manual ? "testHintManual" : "testHint")} done={verified ? "verified" : undefined}>
     <Button type="button" className="min-h-10 self-start" disabled={!saved || busy} aria-busy={busy || undefined} onClick={() => void run()}>{t(busy ? "testRunning" : "testRun")}</Button>
     {!saved && <p className="text-xs text-muted-foreground">{t("testSaveFirst")}</p>}
@@ -123,6 +123,8 @@ export function TestStep({ api, saved, revision, manual }: { api: TailnetApi; sa
         <ToneBadge tone={check.state === "pass" ? "ok" : check.state === "fail" ? "err" : "gray"}>{all(TAILNET_TEST_STATE_KEYS[check.state])}</ToneBadge>
         <span>{all(TAILNET_TEST_CHECK_KEYS[check.id])}</span>
         {check.code && <span className="w-full text-xs text-muted-foreground">{codeText(check.code)}</span>}
+        {check.refusedTags?.length ? <span className="w-full font-mono text-xs">{t("refusedTags", { tags: check.refusedTags.join(", ") })}</span> : null}
+        {check.id === "hub-joined" && (check.code === "tailnet.credential-rejected" || check.code === "tailnet.tags-not-permitted") && <span className="w-full text-xs text-muted-foreground">{t("joinRetry")}</span>}
         {check.providerStatus !== undefined && <span className="w-full text-xs text-muted-foreground">{all("connections.providerStatus", { status: check.providerStatus })}</span>}
         {check.id === "cleanup" && check.state === "unknown" && <span className="w-full text-xs text-muted-foreground">{t("cleanupUnknown")}</span>}
       </li>)}

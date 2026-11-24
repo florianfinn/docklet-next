@@ -35,10 +35,10 @@ func (p *Provisioner) MintTestKey(ctx context.Context, token string) (string, er
 		return "", testProviderError(0)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", testProviderError(resp.StatusCode)
-	}
 	data, err := readBounded(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", classifyMint(resp.StatusCode, data, err, testProviderError(resp.StatusCode))
+	}
 	if err != nil {
 		return "", testProviderError(0)
 	}

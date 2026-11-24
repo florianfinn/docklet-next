@@ -176,9 +176,14 @@ func (m *Manager) Apply(ctx context.Context, enabled bool, cred Credential) {
 		return
 	}
 	m.mu.Lock()
-	if m.cred != cred || m.enabled != enabled || !enabled {
-		m.credCounter++
-	}
+	m.credCounter++
+	gen, old, fns := m.restartLocked(enabled, cred)
+	m.mu.Unlock()
+	m.startGeneration(ctx, gen, old, fns, enabled, cred)
+}
+
+// restartLocked reserves the generation before releasing the lifecycle lock.
+func (m *Manager) restartLocked(enabled bool, cred Credential) (int64, *run, []func()) {
 	m.gen++
 	gen := m.gen
 	old := m.run
@@ -196,8 +201,11 @@ func (m *Manager) Apply(ctx context.Context, enabled bool, cred Credential) {
 		m.conn = tailnettypes.Connection{State: "off"}
 	}
 	fns := m.notifyLocked()
-	m.mu.Unlock()
 
+	return gen, old, fns
+}
+
+func (m *Manager) startGeneration(ctx context.Context, gen int64, old *run, fns []func(), enabled bool, cred Credential) {
 	stopRun(ctx, old)
 	fire(fns)
 	if !enabled || !cred.configured() {
@@ -288,7 +296,9 @@ func (m *Manager) Close(ctx context.Context) {
 	m.gen++
 	old := m.run
 	m.run = nil
+	fns := m.notifyLocked()
 	m.mu.Unlock()
+	fire(fns)
 	stopRun(ctx, old)
 }
 
@@ -362,8 +372,8 @@ func (m *Manager) recordProvisioning(gen, seq int64, cred Credential, err error,
 	case err == nil:
 		m.setProvisioning(gen, seq, cred, tailnettypes.Provisioning{State: "ok"})
 		return true
-	case errors.As(err, &problem) && problem.Code == tailnettypes.CodeCredentialRejected:
-		m.setProvisioning(gen, seq, cred, tailnettypes.Provisioning{State: "rejected", Code: problem.Code, ProviderStatus: problem.ProviderStatus})
+	case errors.As(err, &problem) && (problem.Code == tailnettypes.CodeCredentialRejected || problem.Code == tailnettypes.CodeTagsNotPermitted):
+		m.setProvisioning(gen, seq, cred, tailnettypes.Provisioning{State: "rejected", Code: problem.Code, ProviderStatus: problem.ProviderStatus, RefusedTags: problem.RefusedTags})
 		return true
 	}
 	slog.Debug("Tailnet provisioning failed without a refusal", "error", redactSecrets(err.Error(), cred.secrets()...))
@@ -416,15 +426,15 @@ func (m *Manager) runNode(ctx context.Context, r *run, cred Credential) {
 		if ctx.Err() != nil {
 			return
 		}
-		if joinRejected(err) {
-			slog.Warn("Tailnet credential rejected", "error", redactSecrets(err.Error(), cred.secrets()...))
-			m.setConnection(r.gen, tailnettypes.Connection{State: "error", Code: tailnettypes.CodeCredentialRejected})
+		if problem := joinRejected(err); problem != nil {
+			slog.Warn("Tailnet credential rejected", "code", problem.Code)
+			m.setConnection(r.gen, tailnettypes.Connection{State: "error", Code: problem.Code, RefusedTags: problem.RefusedTags})
 			if cred.Mode == tailnettypes.ModeOAuth {
-				m.setProvisioning(r.gen, m.beginProvisioning(), cred, tailnettypes.Provisioning{State: "rejected", Code: tailnettypes.CodeCredentialRejected})
+				m.setProvisioning(r.gen, m.beginProvisioning(), cred, tailnettypes.Provisioning{State: "rejected", Code: problem.Code, ProviderStatus: problem.ProviderStatus, RefusedTags: problem.RefusedTags})
 			}
 			return
 		}
-		slog.Info("Tailnet join failed; retrying", "error", redactSecrets(err.Error(), cred.secrets()...), "retryIn", delay, "enroll", enroll)
+		slog.Info("Tailnet join failed; retrying", "code", tailnettypes.CodeCoordinationUnreachable, "retryIn", delay, "enroll", enroll)
 		m.setConnection(r.gen, tailnettypes.Connection{State: "joining", Code: tailnettypes.CodeCoordinationUnreachable})
 		select {
 		case <-ctx.Done():
@@ -444,23 +454,7 @@ func needsLogin(ctx context.Context, node Node) bool {
 }
 
 // joinRejected recognises control refusing the key (backend error) or the OAuth exchange refusing the secret.
-func joinRejected(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	if strings.Contains(msg, "backend:") {
-		return true
-	}
-	if strings.Contains(msg, "resolving auth key") {
-		for _, marker := range []string{"401", "403", "400", "unauthorized", "invalid", "forbidden"} {
-			if strings.Contains(msg, marker) {
-				return true
-			}
-		}
-	}
-	return false
-}
+func joinRejected(err error) *tailnettypes.Problem { return joinRefusal(err) }
 
 func (m *Manager) serve(ctx context.Context, r *run, node Node) {
 	listener, err := node.Listen("tcp", ":"+IngressPort)

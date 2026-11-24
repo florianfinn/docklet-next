@@ -32,7 +32,7 @@ class Source {
 export const PRODUCER_POLICY = `{
   "tagOwners": {
     "tag:docklet-hub": ["autogroup:admin"],
-    "tag:docklet-agent": ["autogroup:admin"]
+    "tag:docklet-agent": ["autogroup:admin", "tag:docklet-hub"]
   },
   "grants": [
     {"src": ["tag:docklet-agent"], "dst": ["tag:docklet-hub"], "ip": ["tcp:3552"]}

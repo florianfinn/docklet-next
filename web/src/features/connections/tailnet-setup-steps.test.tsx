@@ -33,8 +33,9 @@ it("orders the steps policy, credential, paste and test, with places and values 
   const places = [...view.container.querySelectorAll('[data-slot="step-where"]')].map((p) => p.textContent);
   expect(places).toEqual(["Tailscale admin console›Access controls›JSON editor".replaceAll("›", ""), "Settings›Trust credentials›New credential›OAuth›Custom scopes".replaceAll("›", "")]);
   expect(screen.getByRole("link", { name: "Open access controls" }).getAttribute("href")).toBe("https://login.tailscale.com/admin/acls/file");
-  // Values to paste have their own copy buttons: scope and both tags.
-  for (const value of ["Keys → Auth keys: write", "tag:docklet-hub", "tag:docklet-agent"]) expect(screen.getByRole("button", { name: new RegExp(`^Copy (Scope|Tag) ${value}$`) }) !== null).toBe(true);
+  // Values to paste have their own copy buttons: scope and only the hub tag.
+  for (const value of ["Keys → Auth keys: write", "tag:docklet-hub"]) expect(screen.getByRole("button", { name: new RegExp(`^Copy (Scope|Tag) ${value}$`) }) !== null).toBe(true);
+  expect(screen.queryByRole("button", { name: "Copy Tag tag:docklet-agent" }) === null).toBe(true);
   // Before a credential is saved, there is no test to run.
   expect(screen.queryByRole("button", { name: "Run test" }) === null).toBe(true);
 });
@@ -45,8 +46,8 @@ it("offers the policy as form values for consoles without the JSON editor", asyn
   expect(f.state.settings.policySnippet).toBe(PRODUCER_POLICY);
   renderWithApp(<TailnetConnection />, f.adapter);
   await user.click(await screen.findByRole("button", { name: "No JSON editor? Use the forms" }));
-  for (const [label, value] of [["Tag name", "docklet-hub"], ["Tag name", "docklet-agent"], ["Tag owner", "autogroup:admin"], ["Source", "tag:docklet-agent"], ["Destination", "tag:docklet-hub"], ["Port and protocol", "tcp:3552"]] as const) {
-    await user.click(screen.getByRole("button", { name: `Copy ${label} ${value}` }));
+  for (const [label, value] of [["Tag owner", "tag:docklet-hub"], ["Tag name", "docklet-hub"], ["Tag name", "docklet-agent"], ["Tag owner", "autogroup:admin"], ["Source", "tag:docklet-agent"], ["Destination", "tag:docklet-hub"], ["Port and protocol", "tcp:3552"]] as const) {
+    await user.click(screen.getAllByRole("button", { name: `Copy ${label} ${value}` })[0]!);
     expect(copied).toHaveBeenLastCalledWith(value);
   }
   expect(await screen.findByText("Port and protocol copied") !== null).toBe(true);
@@ -89,6 +90,7 @@ it("drops a result when the credential is replaced while the test runs, and hide
   await waitFor(() => expect(f.writes.some((w) => w.path === "/api/tailnet/test")).toBe(true));
   // A same-mode credential replaces the connected run while the test is held (generation kept by the hub).
   await user.click(screen.getByRole("button", { name: "Credential and policy" }));
+  await user.click(screen.getByRole("button", { name: "Replace" }));
   await user.type(screen.getByLabelText("Client secret"), "test-only-new");
   await user.click(screen.getByRole("button", { name: "Save credential" }));
   await waitFor(() => expect(f.writes.some((w) => w.path === "/api/settings/connections/tailnet")).toBe(true));
@@ -99,6 +101,7 @@ it("drops a result when the credential is replaced while the test runs, and hide
   f.state.test = undefined;
   await user.click(screen.getByRole("button", { name: "Run test" }));
   expect(await screen.findByRole("list", { name: "4. Test the setup" }) !== null).toBe(true);
+  await user.click(screen.getByRole("button", { name: "Replace" }));
   await user.type(screen.getByLabelText("Client secret"), "test-only-third");
   await user.click(screen.getByRole("button", { name: "Save credential" }));
   await waitFor(() => expect(checks() === null).toBe(true));

@@ -20,6 +20,8 @@ func TestOnboardingChecksEffectiveIdentity(t *testing.T) {
 	directory := t.TempDir()
 	checks := inspectOnboarding(directory, "unix://"+filepath.Join(directory, "absent.sock"))
 	require.Equal(t, directory, checks.ProjectDirectory)
+	require.Equal(t, uint32(os.Geteuid()), *checks.AgentUID)
+	require.Equal(t, uint32(os.Getegid()), *checks.AgentGID)
 	require.NotNil(t, checks.OwnerUID)
 	require.NotNil(t, checks.OwnerGID)
 	require.NotNil(t, checks.Writable)

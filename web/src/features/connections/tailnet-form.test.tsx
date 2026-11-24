@@ -24,13 +24,16 @@ it("never prefills read secrets and clears the credential after save", async () 
   Object.assign(f.state.settings, { clientSecret: "test-only", authKey: "example" });
   renderWithApp(<TailnetConnection />, f.adapter);
   await userEvent.click(await screen.findByRole("button", { name: "Credential and policy" }));
+  expect((screen.getByLabelText("Client secret") as HTMLInputElement).readOnly).toBe(true);
+  await userEvent.click(screen.getByRole("button", { name: "Replace" }));
   const input = screen.getByLabelText("Client secret") as HTMLInputElement;
   expect(input.value).toBe("");
   expect(document.body.textContent?.includes("test-only")).toBe(false);
   await userEvent.type(input, "test-only");
   await userEvent.click(screen.getByRole("button", { name: "Save credential" }));
   await screen.findByText("Credential saved. Connection status updates live.");
-  expect((screen.getByLabelText("Client secret") as HTMLInputElement).value).toBe("");
+  expect((screen.getByLabelText("Client secret") as HTMLInputElement).value).toBe("••••••••");
+  expect((screen.getByLabelText("Client secret") as HTMLInputElement).readOnly).toBe(true);
   expect(f.writes[0]?.body).toEqual({ enabled: true, mode: "oauth", clientId: "example-client", clientSecret: "test-only" });
 });
 
@@ -132,4 +135,45 @@ it("tells the operator when the provider cannot check the credential", async () 
   renderWithApp(<TailnetConnection />, f.adapter);
   const line = await screen.findByText(/cannot check the credential right now/);
   expect(line.textContent).toContain("existing hosts stay connected");
+});
+
+it.each(["en-US", "de"] as const)("keeps the masked saved state on reload and supports empty replacement and cancel in %s", async (locale) => {
+  setAppLocale(locale);
+  const f = tailnetFixture({ ...connectedStatus(), connection: { state: "error" } });
+  let view = renderWithApp(<TailnetConnection />, f.adapter);
+  const label = /Client[- ]secret/i;
+  const replace = locale === "de" ? "Ersetzen" : "Replace";
+  const cancel = locale === "de" ? "Abbrechen" : "Cancel";
+  const saved = await screen.findByLabelText(label) as HTMLInputElement;
+  expect(saved.readOnly).toBe(true);
+  expect(saved.value).toBe("••••••••");
+  expect(screen.queryByRole("button", { name: /Show password|Passwort anzeigen/ }) === null).toBe(true);
+  await userEvent.click(screen.getByRole("button", { name: replace }));
+  const typed = screen.getByLabelText(label) as HTMLInputElement;
+  expect(typed.readOnly).toBe(false); expect(typed.value).toBe("");
+  await userEvent.type(typed, "example-replacement");
+  await userEvent.click(screen.getByRole("button", { name: cancel }));
+  expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe("••••••••");
+  view.unmount();
+  view = renderWithApp(<TailnetConnection />, f.adapter);
+  expect((await screen.findByLabelText(label) as HTMLInputElement).readOnly).toBe(true);
+  expect(screen.getByRole("button", { name: replace }) !== null).toBe(true);
+  expect(view.container.textContent?.includes("example-replacement")).toBe(false);
+});
+
+it("shows Saved after the first credential save and after remount without reading the value", async () => {
+  const f = tailnetFixture({ ...connectedStatus(), enabled: false, connection: { state: "off" } });
+  f.state.settings.secretConfigured = false;
+  const view = renderWithApp(<TailnetConnection />, f.adapter);
+  const input = await screen.findByLabelText("Client secret") as HTMLInputElement;
+  expect(input.value).toBe(""); expect(input.readOnly).toBe(false);
+  await userEvent.type(input, "example-first-secret");
+  await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+  await screen.findByText("Saved");
+  expect((screen.getByLabelText("Client secret") as HTMLInputElement).readOnly).toBe(true);
+  expect((screen.getByLabelText("Client secret") as HTMLInputElement).value).toBe("••••••••");
+  expect(view.container.textContent?.includes("example-first-secret")).toBe(false);
+  view.unmount();
+  renderWithApp(<TailnetConnection />, f.adapter);
+  expect((await screen.findByLabelText("Client secret") as HTMLInputElement).readOnly).toBe(true);
 });

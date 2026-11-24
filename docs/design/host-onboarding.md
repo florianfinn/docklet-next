@@ -118,6 +118,12 @@ An Edge host records how its agent reaches the hub in `environments.network_rout
 embedded Tailscale route). Hosts created before migration 007 keep `NULL` and stay
 unclassified; nothing guesses a route from their URL. Direct hosts have no route.
 
+The policy assigns `tag:docklet-hub` to `autogroup:admin` and assigns
+`tag:docklet-agent` to both `autogroup:admin` and `tag:docklet-hub`. Create an
+OAuth trust credential with scope **Auth keys: write** and only
+`tag:docklet-hub`; that owner chain permits single-tag agent keys. A client
+holding both tags cannot mint the single-tag keys Docklet requests.
+
 Create requests send `route` with `useApiKey=true` and `isEdge=true`. The tailnet
 route is available only while the hub node is connected, Edge mTLS is
 `disabled` and, in OAuth mode, the credential is not rejected; otherwise the
@@ -137,7 +143,9 @@ notification dispatch all dial through the tailnet node and ignore proxy
 variables; registry, Docker, mail and local agent traffic keep normal routing.
 Retained node state lets later starts join without a key. Host reads add
 `networkRoute` and, for tailnet hosts, `tailnet` with the observed peer state,
-path and the first failing link of hub → peer → tunnel. Security boundaries are in
+path, MagicDNS name (without its trailing dot), tailnet addresses (IPv4 first)
+and the first failing link of hub → peer → tunnel. The host card shows the name
+and IPv4 address alongside the Tailscale route. Security boundaries are in
 the [threat review](edge-threat-review.md#tailnet-route-for-edge-hosts-573).
 
 ## Token lifecycle
@@ -212,6 +220,12 @@ Generator rules for M5:
 - `PROJECTS_DIRECTORY` in `.env` equals the mounted project directory.
 
 ## Directories and permissions
+
+The connected agent reports its effective UID/GID and tests the project directory
+by creating and removing a temporary file. A root agent with a writable directory
+needs no owner warning. A non-root agent without write access should use PUID/PGID
+matching the directory owner, or the operator should change that owner. For older
+agents without effective IDs, only a failed write check triggers the warning.
 
 ### Checks before installation
 
@@ -644,7 +658,13 @@ not prove the tailnet access policy. Manual mode skips the provider checks.
 - `tailnet.test-cleanup-failed`: the test key could not be deleted or its ID was
   missing. The requested expiry is five minutes.
 - `tailnet.test-running`: another setup test owns the hub's single test slot (409).
-- `tailnet.credential-rejected`: the provider rejected the credential.
+- `tailnet.tags-not-permitted`: the provider refused the named tags. Use a client
+  holding only `tag:docklet-hub` and the owner chain above. A definite refusal
+  created no key, so cleanup has nothing to delete.
+- `tailnet.credential-rejected`: the provider rejected the credential. After fixing
+  the console, save the credential again or run the setup test again. The test
+  retries a rejected hub join with the stored credential before reading membership;
+  a concurrent credential save or reset makes the result stale.
 - `tailnet.provider-unavailable`: provider transport or response failure. An
   ambiguous mint leaves cleanup unknown; the test never retries a mint.
 - `tailnet.not-connected`: the observed hub membership, tag or address check failed.

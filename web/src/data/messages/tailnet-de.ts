@@ -8,7 +8,7 @@ import type { enTailnetContract } from "./tailnet-en";
 
 export const deTailnetContract: typeof enTailnetContract = {
   "codes": {
-    "credential-rejected": "Der Tailscale-Zugang ist ungültig oder widerrufen. Unter Einstellungen → Verbindungen ersetzen.",
+    "credential-rejected": "Die Tailscale-Zugangsdaten wurden abgelehnt. Speichere sie erneut oder starte den Einrichtungstest nach der Korrektur in der Tailscale-Konsole erneut.",
     "coordination-unreachable": "Der Tailscale-Koordinationsserver ist nicht erreichbar. Docklet versucht es weiter; den Internetzugang des Hubs prüfen.",
     "not-connected": "Der Hub ist nicht mit dem Tailnet verbunden. Tailscale unter Einstellungen → Verbindungen einschalten oder warten, bis die Verbindung steht.",
     "key-mint-failed": "Tailscale konnte keinen Schlüssel für diesen Host erstellen. Gleich noch einmal versuchen.",

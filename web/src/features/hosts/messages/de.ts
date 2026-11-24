@@ -44,7 +44,7 @@ export const deHosts: typeof enHosts = {
       fileIdsValue: "{uid}:{gid} · {source, select, manual {selbst festgelegt} other {vom Verzeichnisbesitzer übernommen}}",
       socket: "Docker-Socket-Gruppe",
       socketValue: "GID {gid} · {source, select, manual {selbst festgelegt} other {lokal erkannt}} · getrennt von PUID/PGID",
-      root: "Projektverzeichnis gehört root. Docklet ändert keine Rechte; bei Bedarf IDs bewusst festlegen.",
+      root: "Der Agent kann nicht in das Projektverzeichnis schreiben. Setze PUID/PGID auf den Verzeichniseigentümer {uid}:{gid} oder ändere den Eigentümer.",
       unraid: "Unraid-Share (nobody:users) – typisch für Unraid.",
     },
     systemComponent: {

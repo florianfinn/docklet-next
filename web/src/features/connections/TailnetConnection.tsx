@@ -15,6 +15,7 @@ import type { TailnetSettings } from "@/domain/tailnet";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { ChoiceCards, TextField } from "@/shared/components/form-field";
 import { ToneBadge } from "@/shared/components/tone";
+import { Input } from "@/shared/ui/input";
 import { Button } from "@/shared/ui/button";
 import { CredentialStep, PolicyStep, Step, TestStep } from "./TailnetSetupSteps";
 
@@ -39,6 +40,7 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
   const [mode, setMode] = useState<"oauth" | "manual">(settings.mode === "manual" || settings.customControl ? "manual" : "oauth");
   const [clientId, setClientId] = useState(settings.clientId ?? "");
   const [secret, setSecret] = useState("");
+  const [replacing, setReplacing] = useState(false);
   const [open, setOpen] = useState(false);
   const [reset, setReset] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -47,7 +49,8 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
   const routeHosts = useHosts().data?.filter((host) => host.networkRoute === "tailnet").length;
   if (!api || !status) return null;
   const mtls = status.routeCode === "tailnet.mtls-unsupported";
-  const rejected = status.provisioning.state === "rejected" || status.connection.code === "tailnet.credential-rejected";
+  const rejected = status.provisioning.state === "rejected" || (status.connection.code === "tailnet.credential-rejected" || status.connection.code === "tailnet.tags-not-permitted");
+ const tagRefusal = status.connection.code === "tailnet.tags-not-permitted" ? status.connection : status.provisioning.code === "tailnet.tags-not-permitted" ? status.provisioning : undefined;
   const connected = status.connection.state === "connected";
   const expanded = setup || open || rejected || !connected;
   const sameMode = mode === settings.mode;
@@ -59,7 +62,7 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
     setBusy(true); setFeedback("");
     try {
       const saved = await api.save(enabled ? { enabled, mode, ...(mode === "oauth" ? { clientId: clientId.trim(), clientSecret: secret } : { authKey: secret }) } : { enabled: false });
-      setSecret(""); client.setQueryData(["tailnet-settings"], saved); setFeedback(t("saved"));
+      setSecret(""); setReplacing(false); client.setQueryData(["tailnet-settings"], saved); setFeedback(t("saved"));
 
     } catch (error) { setFeedback(commandError(error)); }
     finally { setSecret(""); setBusy(false); }
@@ -72,7 +75,7 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
       </div>
     </header>
     {mtls && <p role="alert" className="border-b p-4 text-sm text-warning">{t("mtls")}</p>}
-    {rejected && <div role="alert" className="border-b p-4 text-sm text-destructive"><p>{t(connected ? "rejected" : "rejectedDisconnected")}</p>{status.provisioning.providerStatus && <p>{t("providerStatus", { status: status.provisioning.providerStatus })}</p>}</div>}
+    {rejected && <div role="alert" className="border-b p-4 text-sm text-destructive"><p>{t(tagRefusal ? "tags-not-permitted" : connected ? "rejected" : "rejectedDisconnected")}</p>{tagRefusal?.refusedTags?.length ? <p className="font-mono">{t("steps.refusedTags", { tags: tagRefusal.refusedTags.join(", ") })}</p> : null}{!connected && <p>{t("steps.joinRetry")}</p>}{status.provisioning.providerStatus && <p>{t("providerStatus", { status: status.provisioning.providerStatus })}</p>}</div>}
     {status.provisioning.state === "checking" && <p role="status" className="p-4 text-sm">{t("checking")}</p>}
     {status.provisioning.state === "unavailable" && <p role="status" className="border-b p-4 text-sm">{wire("codes.provider-unavailable")}</p>}
     {(connected || status.connection.state === "control-unreachable") && <dl className="grid min-w-0 gap-2 border-b p-4 text-sm sm:grid-cols-[10rem_minmax(0,1fr)]">
@@ -86,14 +89,18 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
     </ul>}
     {!setup && connected && !rejected && <Button variant="ghost" className="min-h-10 w-full justify-start rounded-none px-4" aria-expanded={expanded} onClick={() => setOpen(!open)}>{t("accessDetails")}</Button>}
     {expanded && <fieldset disabled={mtls || busy} className="flex min-w-0 flex-col gap-5 p-4 [&_input]:min-h-10">
-      <ChoiceCards value={mode} onChange={(next) => { setMode(next); setSecret(""); }} label={t("registration")} options={[
+      <ChoiceCards value={mode} onChange={(next) => { setMode(next); setSecret(""); setReplacing(false); }} label={t("registration")} options={[
         { value: "oauth", title: t("oauth"), description: t("oauthHint"), badge: <ToneBadge tone="accent">{t("recommended")}</ToneBadge> },
         { value: "manual", title: t("manual"), description: t("manualHint") },
       ]} />
       <PolicyStep settings={settings} done={connected && !rejected ? "setUp" : undefined} onCopied={setFeedback} />
       <CredentialStep settings={settings} mode={mode} done={stored && !rejected ? "setUp" : undefined} onCopied={setFeedback} />
       <Step title={t("paste")} done={stored && status.enabled ? "setUp" : undefined}>{mode === "oauth" && <TextField id="tailnet-client-id" label={t("clientId")} value={clientId} onChange={setClientId} />}
-        <TextField id="tailnet-secret" type="password" autoComplete="new-password" label={t(mode === "oauth" ? "credentialLabel" : "authKey")} value={secret} onChange={setSecret} description={t(stored ? "stored" : "credentialHint")} />
+        {stored && !replacing ? <div className="flex flex-col gap-2">
+          <label htmlFor="tailnet-secret" className="text-sm font-medium">{t(mode === "oauth" ? "credentialLabel" : "authKey")}</label>
+          <div className="flex flex-wrap items-center gap-2"><Input id="tailnet-secret" readOnly value="••••••••" aria-describedby="tailnet-secret-saved" className="min-w-0 flex-1" /><span id="tailnet-secret-saved" className="text-sm">{t("savedValue")}</span><Button type="button" variant="outline" onClick={() => { setSecret(""); setReplacing(true); }}>{t("replaceValue")}</Button></div>
+          <p className="text-sm text-muted-foreground">{t("credentialHint")}</p>
+        </div> : <TextField id="tailnet-secret" type="password" autoComplete="new-password" label={t(mode === "oauth" ? "credentialLabel" : "authKey")} value={secret} onChange={setSecret} description={t("credentialHint")} trailing={stored ? <Button type="button" variant="outline" onClick={() => { setSecret(""); setReplacing(false); }}>{t("cancelReplace")}</Button> : undefined} />}
       </Step>
       <Button className="min-h-10 self-start" disabled={!ready || busy || mtls || settings.customControl && mode === "oauth"} onClick={() => void save(true)}>{t(setup || !status.enabled ? "connect" : "save")}</Button>
     </fieldset>}

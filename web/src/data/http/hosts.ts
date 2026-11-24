@@ -25,7 +25,7 @@ function mapReport(row: Environment): AgentReport | undefined {
   if (!report.version || typeof report.reportedAt !== "string" || !Number.isFinite(Date.parse(report.reportedAt))) throw new Error("hosts.invalid-report");
   const checks = report.version.onboardingChecks;
   if (checks) {
-    for (const value of [checks.ownerUid, checks.ownerGid, checks.socketGroup]) {
+    for (const value of [checks.ownerUid, checks.ownerGid, checks.socketGroup, checks.agentUid, checks.agentGid]) {
       if (value != null && (!Number.isInteger(value) || value < 0)) throw new Error("hosts.invalid-checks");
     }
     if (checks.writable != null && typeof checks.writable !== "boolean") throw new Error("hosts.invalid-checks");
@@ -36,7 +36,8 @@ function mapReport(row: Environment): AgentReport | undefined {
     projectDirOwner: { uid: checks.ownerUid, gid: checks.ownerGid, name: `${checks.ownerUid}:${checks.ownerGid}` },
     projectDirWritable: checks.writable,
     ...(checks.socketGroup == null ? {} : { socketGid: checks.socketGroup, socketGidSource: "detected" as const }),
-    note: checks.ownerUid === 0 ? "root-owned" : "ok",
+    // The legacy note discriminant carries the permission warning; owner 0 alone is harmless.
+    note: !checks.writable && checks.agentUid !== 0 ? "root-owned" : "ok",
     simulated: false,
   };
 }
@@ -44,6 +45,11 @@ function mapReport(row: Environment): AgentReport | undefined {
 export function mapHost(row: Environment): Host {
   if (!row || typeof row.id !== "string" || !row.id || typeof row.apiUrl !== "string" || typeof row.enabled !== "boolean") throw new Error("hosts.invalid-response");
   if (row.lastSeen && !Number.isFinite(Date.parse(row.lastSeen))) throw new Error("hosts.invalid-last-seen");
+  if (row.tailnet) {
+    const { dnsName, addresses } = row.tailnet;
+    if (dnsName != null && (typeof dnsName !== "string" || dnsName.length > 253 || /[\s/]/.test(dnsName))) throw new Error("hosts.invalid-peer");
+    if (addresses != null && (!Array.isArray(addresses) || addresses.length > 4 || addresses.some((ip) => typeof ip !== "string" || !validPeerIP(ip)))) throw new Error("hosts.invalid-peer");
+  }
   const status = mapStatus(row.status);
   const report = mapReport(row);
   const checks = row.agentReport?.version.onboardingChecks;
@@ -62,4 +68,13 @@ export function mapHost(row: Environment): Host {
     lastSeen: row.lastSeen ?? "",
     ...(report ? { agentReport: report } : {}),
   };
+}
+
+function validPeerIP(ip: string): boolean {
+  if (ip.includes(":")) {
+    if (!/^[a-fA-F0-9:]+$/.test(ip)) return false;
+    try { return new URL(`http://[${ip}]/`).hostname.startsWith("["); } catch { return false; }
+  }
+  const octets = ip.split(".");
+  return octets.length === 4 && octets.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255);
 }
