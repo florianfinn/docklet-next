@@ -26,7 +26,7 @@ import { isMajorAction } from "./action-policy";
 import { openActivity } from "./activity-store";
 import { ActionToastView } from "./ActionToastView";
 import { ActionDetail } from "./ActionDetail";
-import { isScanRun } from "./scan-counts";
+import { classifiedCopy, isScanRun } from "./scan-counts";
 import { ScanGroupToast } from "./ScanGroupToast";
 import { createStore, useStore, type Store } from "@/shared/lib/store";
 import type { ActionRun } from "@/domain/model";
@@ -57,7 +57,7 @@ function ActionToast({ id, toastId, onClose }: { id: string; toastId: string | n
   );
   // Visible scan toasts own their counters even after the Security page unmounts.
   return run.kind === "scan" || run.sourceOperation === "vulnerability.candidate-scan"
-    ? <ActionDetail run={run} fallback={view(run)} pending={view(run, true)}>{(full) => view(full)}</ActionDetail> : view(run);
+    ? <ActionDetail run={run} fallback={view(run)} pending={view(run, true)}>{(full, failed) => view(classifiedCopy(run, full, failed))}</ActionDetail> : view(run);
 }
 
 interface ScanGroupState { ids: readonly string[]; persistent: ReadonlySet<string>; classified: ReadonlySet<string> }

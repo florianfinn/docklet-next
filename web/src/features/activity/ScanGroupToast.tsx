@@ -15,7 +15,7 @@ import { ActionDetail } from "./ActionDetail";
 import { RunIconTile } from "./ActionSteps";
 import { LifeTrack } from "./ActionToastView";
 import { RUN_ICON, RUN_TONE } from "./run-phase";
-import { scanPersistent, useScanCounts } from "./scan-counts";
+import { classifiedCopy, scanPersistent, useScanCounts } from "./scan-counts";
 import { useRunTarget } from "./use-run-target";
 
 const own = (event: MouseEvent) => event.stopPropagation();
@@ -64,7 +64,7 @@ function Row({ run, classified, onOpen, onOutcome }: { run: ActionRun; classifie
  */
 function Member({ run, onOpen, onOutcome }: { run: ActionRun; onOpen: (run: ActionRun) => void; onOutcome: Outcome }) {
   return <ActionDetail run={run} pending={<Row run={run} classified={false} onOpen={onOpen} onOutcome={onOutcome} />}
-    fallback={<Row run={run} classified onOpen={onOpen} onOutcome={onOutcome} />}>{(full) => <Row run={full} classified onOpen={onOpen} onOutcome={onOutcome} />}</ActionDetail>;
+    fallback={<Row run={run} classified onOpen={onOpen} onOutcome={onOutcome} />}>{(full, failed) => <Row run={classifiedCopy(run, full, failed)} classified onOpen={onOpen} onOutcome={onOutcome} />}</ActionDetail>;
 }
 
 export interface ScanGroupToastProps {

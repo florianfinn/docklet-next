@@ -25,6 +25,13 @@ export const scanPersistent = (run: ActionRun) =>
   isScanRun(run) && (run.status === "failed" || ["partial", "failed", "interrupted"].includes(run.scan?.summary?.status ?? "")
     || (run.candidateScan !== undefined && (run.candidateScan.deferred > 0 || run.candidateScan.failed > 0)));
 
+/**
+ * The copy a scan notification classifies: a failed detail refresh that kept a non-terminal copy yields to the
+ * settled listed run (its outcome is known, its result is not), so the ordinary lifetime applies.
+ */
+export const classifiedCopy = (listed: ActionRun, detail: ActionRun, failed: boolean) =>
+  failed && (detail.status === "running" || detail.status === "queued") && listed.status !== "running" && listed.status !== "queued" ? listed : detail;
+
 /** "6 images scanned · 2 critical · 15 high · 56 s", plus failed images and a partial marker when they apply. */
 export function scanResultLine(summary: ScanRunSummary, t: Translate): string {
   const ms = summary.finishedAt ? Date.parse(summary.finishedAt) - Date.parse(summary.startedAt) : NaN;

@@ -50,7 +50,8 @@ function harness(initial: CodedActionRun[] = [], details: Record<string, Partial
   const identityListeners = new Set<() => void>();
   registerIdentityLifetime(adapter.subscribeChanges, { version: () => version, active: () => true, listen: (l) => { identityListeners.add(l); return () => { identityListeners.delete(l); }; } });
   // Held runs get no terminal detail until released (a slow durable-outcome read); `failing` runs get a detail read error.
-  const held = new Set<string>(), failing = new Set<string>(), silent = new Set<string>();
+  const held = new Set<string>(), failing = new Set<string>(), silent = new Set<string>(), stale = new Set<string>();
+  const lastRunning = new Map<string, CodedActionRun>();
   let current = initial;
   const listeners = new Set<(runs: CodedActionRun[]) => void>();
   const observers: { id: string; listener: (state: ActionDetailState) => void; active: boolean }[] = [];
@@ -61,6 +62,9 @@ function harness(initial: CodedActionRun[] = [], details: Record<string, Partial
     const run = current.find((r) => r.id === o.id);
     if (!run || !o.active || silent.has(o.id) || (held.has(o.id) && run.status !== "running")) return;
     if (failing.has(o.id) && run.status !== "running") { o.listener({ status: "error", error: new Error("detail unavailable") }); return; }
+    // The real detail owner keeps its last good (running) copy on a failed refresh.
+    if (stale.has(o.id) && run.status !== "running") { o.listener({ status: "error", error: new Error("detail unavailable"), run: lastRunning.get(o.id) }); return; }
+    if (run.status === "running") lastRunning.set(o.id, run);
     o.listener({ status: "ready", run: { ...run, ...(run.status === "running" ? {} : details[o.id]) } });
   };
   adapter.observeActionDetail = (_host, id, listener) => {
@@ -73,7 +77,7 @@ function harness(initial: CodedActionRun[] = [], details: Record<string, Partial
   renderWithApp(<><Grab /><ActionToasts /><AppToaster /></>, adapter);
   return {
     publish, observers,
-    hold: (id: string) => { held.add(id); }, fail: (id: string) => { failing.add(id); }, silence: (id: string) => { silent.add(id); },
+    hold: (id: string) => { held.add(id); }, fail: (id: string) => { failing.add(id); }, silence: (id: string) => { silent.add(id); }, failStale: (id: string) => { stale.add(id); },
     release: (id: string) => act(() => { held.delete(id); observers.filter((o) => o.id === id).forEach(deliver); }),
     rotate: () => act(() => { version++; identityListeners.forEach((l) => l()); }),
   };
@@ -384,4 +388,17 @@ it.each([["host", {}], ["candidate", { type: "vulnerability.candidate-scan" }]] 
   await f.publish([scan("a", "first", "success", change)]);
   await tick(50);
   expect([toasts().length, toasts()[0]?.dataset.status, lifeTrack() === null]).toEqual([1, "succeeded", true]);
+});
+
+// CXR-04: a failed detail refresh that keeps the running copy still lets a settled scan close normally.
+it.each(["group", "single"] as const)("starts the %s countdown when a failed detail refresh kept the running copy", async (shape) => {
+  const f = harness();
+  await f.publish([]);
+  const running = shape === "group" ? [scan("b", "second", "running"), scan("a", "first", "running")] : [scan("a", "first", "running")];
+  await f.publish(running);
+  await tick();
+  f.failStale("a");
+  await f.publish(running.map((r) => scan(r.id, r.hostId!, "success")));
+  await tick(50);
+  expect([toasts().length, toasts()[0]?.dataset.status, lifeTrack() !== null]).toEqual([1, "succeeded", true]);
 });
