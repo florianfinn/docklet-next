@@ -14,7 +14,9 @@ import { useImageError } from "@/features/images/use-image-error";
 import type { ImageBinding } from "@/data/http/update-binding";
 import { AdapterOutcomeError } from "@/data/capability";
 
-export function useUpdateAction(ownerKey = "") {
+/** `unknownText` marks a repeatable action (a manual check): an unknown outcome
+ * shows that text and leaves the control usable instead of blocking it. */
+export function useUpdateAction(ownerKey = "", unknownText?: string) {
   const adapter = useAdapter(), errorText = useImageError(), t = useTranslations("activity.runtime");
   const [binding, setBinding] = useState<ImageBinding>();
   const [error, setError] = useState<string>(), [busy, setBusy] = useState(false), [blocked, setBlocked] = useState(false);
@@ -33,7 +35,7 @@ export function useUpdateAction(ownerKey = "") {
     const owns = () => currentOwner.current === owner && mounted.current && ticket === sequence.current && generation === life.version() && life.active();
     setIntentOwner(owner); setBusy(true); setError(undefined); setBinding(undefined); setBlocked(false);
     try { const result = await action(); if (owns()) done?.(result); }
-    catch (e) { if (owns() && !isCancelledError(e)) { setBinding(e instanceof AdapterOutcomeError && e.outcome.kind === "error" ? e.outcome.binding : undefined); if (e instanceof AdapterOutcomeError && e.outcome.kind === "error" && (e.outcome.status === 403 || e.outcome.status === 401 || (e.outcome.code === "runtime.admission-unknown" || e.outcome.code === "runtime.outcome-unknown"))) setBlocked(true); failed?.(e); setError(isRunBusy(e) ? t("busy") : e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "runtime.admission-unknown" ? t("ambiguous") : e instanceof AdapterOutcomeError && e.outcome.kind === "conflict" ? t(e.outcome.code === "run.cancelling" ? "cancellingConflict" : e.outcome.code === "run.request-mismatch" ? "mismatch" : "busy") : errorText(e)); } }
+    catch (e) { if (owns() && !isCancelledError(e)) { setBinding(e instanceof AdapterOutcomeError && e.outcome.kind === "error" ? e.outcome.binding : undefined); const unknown = e instanceof AdapterOutcomeError && e.outcome.kind === "error" && (e.outcome.code === "runtime.admission-unknown" || e.outcome.code === "runtime.outcome-unknown"); if (e instanceof AdapterOutcomeError && e.outcome.kind === "error" && (e.outcome.status === 403 || e.outcome.status === 401 || (unknown && unknownText === undefined))) setBlocked(true); failed?.(e); setError(unknown && unknownText !== undefined ? unknownText : isRunBusy(e) ? t("busy") : e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "runtime.admission-unknown" ? t("ambiguous") : e instanceof AdapterOutcomeError && e.outcome.kind === "conflict" ? t(e.outcome.code === "run.cancelling" ? "cancellingConflict" : e.outcome.code === "run.request-mismatch" ? "mismatch" : "busy") : errorText(e)); } }
     finally { if (owns()) setBusy(false); }
   }
   return { binding: intentOwner === ownerKey ? binding : undefined, error: intentOwner === ownerKey ? error : undefined, busy: intentOwner === ownerKey && (busy || blocked), run, reset };

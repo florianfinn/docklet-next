@@ -56,7 +56,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const busy = !!stack.busyActionId;
   const updateTimes = useStackUpdateTimes(stack);
   const eligibility = useStackEligibility(stack.id, adapter.kind === "http" && stack.services.some((service) => hasUpdate(service.update)));
-  const blockedReason = eligibility.bindings.length ? t("actions.updateUnsupported") : eligibility.checking ? t("actions.checkingSupport") : undefined;
+  const blockedReason = eligibility.blocksAll ? t("actions.updateUnsupported") : eligibility.checking ? t("actions.checkingSupport") : undefined;
   const allStopped = stack.services.every((s) => s.state === "stopped");
   return (
     <header className="mb-5 flex flex-col gap-3">

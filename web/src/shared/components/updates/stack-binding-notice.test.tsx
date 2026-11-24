@@ -23,10 +23,13 @@ it("renders the typed service binding before any dialog or write",async()=>{
  await screen.findByText(/SERVICE_IMAGE/);expect(document.body.textContent).toContain("app");expect(f.writes()).toHaveLength(0);
  expect(f.calls.filter(call=>call.path.endsWith("/update-eligibility"))).toHaveLength(1);
 });
-it("uses generic text for a v22 agent without sending an unsupported eligibility command",async()=>{
+it("predicts no refusal for a v22 agent and sends no unsupported eligibility command",async()=>{
  const f=updateFixture();await f.adapter.getCurrentUser();const host=(await createDemoAdapter().listHosts())[0]!;
- host.id="direct";host.componentVersion={...host.componentVersion,agentContractVersion:22} as NonNullable<typeof host.componentVersion>;f.adapter.listHosts=async()=>[host];
+ host.id="direct";host.componentVersion={...host.componentVersion,agentContractVersion:22} as NonNullable<typeof host.componentVersion>;let hostsRead=false;f.adapter.listHosts=async()=>{hostsRead=true;return [host];};
  renderWithApp(<StackBindingNotice stackId="direct~project" />,f.adapter);
- await waitFor(()=>expect(document.body.textContent).toContain(catalogs.de.containers.updateCheck.generic));
+ await waitFor(()=>expect(hostsRead).toBe(true));
+ await new Promise(resolve=>setTimeout(resolve,100));
+ expect(document.body.textContent?.includes(catalogs.de.containers.updateCheck.generic)).toBe(false);
+ expect(document.body.textContent?.includes(catalogs.de.containers.updateCheck.notOffered.split(":")[0]!)).toBe(false);
  expect(f.calls.filter(call=>call.path.endsWith("/update-eligibility"))).toHaveLength(0);expect(f.writes()).toHaveLength(0);
 });

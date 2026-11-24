@@ -58,23 +58,28 @@ func TestManualContainerCheckFreshHostScopedAndActivity(t *testing.T) {
 	row, err := f.p.store.Policy(t.Context(), "example-host", "example-registration", "app", "container")
 	require.NoError(t, err)
 	require.NotNil(t, row.CheckedAt)
+	// Use the real activity service DTO, with stable public fixture identity/time.
+	detail, err := f.s.deps.Activity.GetActivityDetail(t.Context(), "example-host", activities[0].ID, 50)
+	require.NoError(t, err)
+	fixture := detail.Activity
+	fixture.ID = "example-update-check"
+	fixture.CreatedAt = time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
+	fixture.StartedAt = fixture.CreatedAt
+	fixture.EndedAt = &fixture.CreatedAt
+	fixture.UpdatedAt = &fixture.CreatedAt
+	fixture.DurationMs = nil
+	body, err := json.MarshalIndent(fixture, "", "  ")
+	require.NoError(t, err)
+	path := filepath.Join("..", "..", "..", "web", "src", "features", "containers", "testdata")
+	// The checked-in web fixture must equal the current producer output;
+	// UPDATE_WEB_FIXTURES=1 regenerates it.
+	fixturePath := filepath.Join(path, "manual-update-activity.json")
 	if os.Getenv("UPDATE_WEB_FIXTURES") == "1" {
-		// Use the real activity service DTO, with stable public fixture identity/time.
-		detail, err := f.s.deps.Activity.GetActivityDetail(t.Context(), "example-host", activities[0].ID, 50)
-		require.NoError(t, err)
-		fixture := detail.Activity
-		fixture.ID = "example-update-check"
-		fixture.CreatedAt = time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
-		fixture.StartedAt = fixture.CreatedAt
-		fixture.EndedAt = &fixture.CreatedAt
-		fixture.UpdatedAt = &fixture.CreatedAt
-		fixture.DurationMs = nil
-		body, err := json.MarshalIndent(fixture, "", "  ")
-		require.NoError(t, err)
-		path := filepath.Join("..", "..", "..", "web", "src", "features", "containers", "testdata")
-		require.NoError(t, os.MkdirAll(path, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(path, "manual-update-activity.json"), append(body, '\n'), 0644))
+		require.NoError(t, os.WriteFile(fixturePath, append(body, '\n'), 0644))
 	}
+	checkedIn, err := os.ReadFile(fixturePath)
+	require.NoError(t, err)
+	require.JSONEq(t, string(checkedIn), string(body))
 }
 
 func TestManualContainerCheckRefusesForeignAndUnmanagedInstances(t *testing.T) {

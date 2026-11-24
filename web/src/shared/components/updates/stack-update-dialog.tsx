@@ -11,7 +11,7 @@ import { useStack } from "@/data/queries";
 import { AdapterOutcomeError } from "@/data/capability";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { BindingRefusal } from "./binding-refusal";
-import { StackBindingNotice, useStackEligibility } from "./stack-binding-notice";
+import { StackBindingNotice, blockingBindings, useStackEligibility } from "./stack-binding-notice";
 import { useUpdateAction } from "./use-update-action";
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 
@@ -41,7 +41,7 @@ export function StackUpdateDialog({ stackId, point, services: initialServices, a
   const action = useUpdateAction(`${stackId}:${baseline.data?.targetIdentity}:${baseline.data?.savedRevision}:${service}`);
   const data = baseline.data;
   const eligibility = useStackEligibility(stackId, !point);
-  const bindingBlocked = !point && eligibility.bindings.some((binding) => binding.scope === "project" || service === "*" || binding.service === service);
+  const bindingBlocked = !point && blockingBindings(eligibility.bindings, service, eligibility.updatable).length > 0;
   // Mutations bind the current, successfully read revision; a status without one is shown only.
   const revisionReady = !baseline.isError && /^[a-f0-9]{64}$/.test(data?.savedRevision ?? "");
   // Consent belongs to one target revision and is dropped whenever that changes or becomes unusable.

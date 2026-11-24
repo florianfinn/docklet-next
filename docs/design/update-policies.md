@@ -25,6 +25,13 @@ or writes. A refusal identifies its project or service scope and a declared reas
 a variable reference includes only the variable name. Eligibility explains the
 current safety boundary and does not edit interpolation, defaults or `.env` files.
 
+The web refuses a selection only for bindings that admission would refuse: a
+project-scoped binding, the selected service, or for the whole stack a service
+with a pending update. The stack header hides its update action only when every
+service with an update is bound. Agents without the eligibility read, unknown
+versions and failed reads predict nothing; an actual refusal shows its reason.
+A manual check with an unknown outcome stays repeatable.
+
 ## Policy trigger state table
 
 | State / event | Admission and durable result |

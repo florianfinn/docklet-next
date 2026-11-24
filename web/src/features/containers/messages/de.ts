@@ -2,7 +2,7 @@
 import type { enContainers } from "./en";
 
 export const deContainers: typeof enContainers = {
-  updateCheck: { serviceReason: "{service} — {reason}", check: "Nach Updates suchen", checking: "Updates werden geprüft…", available: "Update verfügbar: {version}", current: "Kein Update", hostResult: "{stacks} Stacks und {containers} Container haben Updates", notOffered: "Update nicht angeboten: {reason}", generic: "Diese Image-Zuordnung unterstützt das gewählte Update nicht sicher." },
+  updateCheck: { unfinished: "Die Prüfung wurde nicht abgeschlossen. Bitte erneut versuchen.", serviceReason: "{service} — {reason}", check: "Nach Updates suchen", checking: "Updates werden geprüft…", available: "Update verfügbar: {version}", current: "Kein Update", hostResult: "{stacks} Stacks und {containers} Container haben Updates", notOffered: "Update nicht angeboten: {reason}", generic: "Diese Image-Zuordnung unterstützt das gewählte Update nicht sicher." },
   terminal: {
     title: "Terminal", shell: "Shell", auto: "Automatisch (bash oder sh)", sh: "sh", bash: "bash", reconnect: "Neu verbinden",
     checking: "Shell-Verfügbarkeit wird geprüft…", connecting: "Verbindung wird hergestellt…", live: "Verbunden", ended: "Shell beendet (Exit-Code {code}).", unknownCode: "unbekannt", input: "Container-Terminaleingabe",

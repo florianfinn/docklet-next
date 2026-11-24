@@ -187,19 +187,24 @@ func TestHostJobActivityProducer(t *testing.T) {
 	require.Equal(t, hostUpdateCheckJob, *detail.Activity.ResourceID)
 	require.Equal(t, hostUpdateCheckJob, detail.Activity.Metadata["jobId"])
 	require.Equal(t, run.ID, detail.Activity.Metadata["runId"])
+	row := detail.Activity
+	row.ID = "example-host-check"
+	row.Metadata["runId"] = "example-run"
+	row.BatchID = new("example-run")
+	row.Metadata["runUpdatedAt"] = "2026-11-24T00:00:00Z"
+	row.CreatedAt = time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
+	row.StartedAt = row.CreatedAt
+	row.UpdatedAt = nil
+	body, err := json.MarshalIndent(row, "", "  ")
+	require.NoError(t, err)
+	path := filepath.Join("..", "..", "..", "web", "src", "features", "stacks", "testdata")
+	// The checked-in web fixture must equal the current producer output;
+	// UPDATE_WEB_FIXTURES=1 regenerates it.
+	fixturePath := filepath.Join(path, "host-update-activity.json")
 	if os.Getenv("UPDATE_WEB_FIXTURES") == "1" {
-		row := detail.Activity
-		row.ID = "example-host-check"
-		row.Metadata["runId"] = "example-run"
-		row.BatchID = new("example-run")
-		row.Metadata["runUpdatedAt"] = "2026-11-24T00:00:00Z"
-		row.CreatedAt = time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
-		row.StartedAt = row.CreatedAt
-		row.UpdatedAt = nil
-		body, err := json.MarshalIndent(row, "", "  ")
-		require.NoError(t, err)
-		path := filepath.Join("..", "..", "..", "web", "src", "features", "stacks", "testdata")
-		require.NoError(t, os.MkdirAll(path, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(path, "host-update-activity.json"), append(body, '\n'), 0644))
+		require.NoError(t, os.WriteFile(fixturePath, append(body, '\n'), 0644))
 	}
+	checkedIn, err := os.ReadFile(fixturePath)
+	require.NoError(t, err)
+	require.JSONEq(t, string(checkedIn), string(body))
 }
