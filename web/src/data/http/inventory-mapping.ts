@@ -103,9 +103,13 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
   });
   const services: Service[] = (runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
     const container = members.find((item) => item.id === inventoryId(hostId, runtime.containerId || "absent"));
+    const common = { name: runtime.name, ...(runtime.status === "not-created" ? { containersRemoved: true } : runtime.containerId ? { containerId: inventoryId(hostId, runtime.containerId) } : {}), state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
+      ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0 } as const;
+    // A service with `build:` and no `image:` that was never created has no image and no container: the project list
+    // reports it "not-created", the project detail "stopped" (#600).
+    if (!runtime.image && !runtime.containerId) return { ...common, image: { repository: "", tag: "" }, buildOnly: true as const, update: { state: "local" as const, current: { repository: "", tag: "" } } };
     const image = imageVersion(runtime.image);
-    return { name: runtime.name, image, ...(runtime.status === "not-created" ? { containersRemoved: true } : runtime.containerId ? { containerId: inventoryId(hostId, runtime.containerId) } : {}), state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
-      ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0,
+    return { ...common, image,
       update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale), incomplete } };
   });
   const url = stackAddress(row.urls);

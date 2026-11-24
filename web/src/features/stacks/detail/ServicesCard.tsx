@@ -31,6 +31,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
   const t = useTranslations("stacks.overview");
   const stopText = useTranslations("stacks.stopMode");
   const ts = useTranslations("common.status");
+  const servicesText = useTranslations("common.services");
   const navigate = useNavigate();
   const cmd = useStackCommands();
   const user = useIsUser();
@@ -51,8 +52,10 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
           {svc.containersRemoved && <p className="mt-1 text-xs text-muted-foreground">{stopText("containersRemoved")}</p>}
         </TableCell>
         <TableCell className="max-w-56">
-          <span className="block truncate font-mono text-xs">{versionLabel(svc.image)}</span>
-          <span className="block truncate text-[11px] text-muted-foreground">{svc.image.repository}</span>
+          {!svc.buildOnly ? <>
+            <span className="block truncate font-mono text-xs">{versionLabel(svc.image)}</span>
+            <span className="block truncate text-[11px] text-muted-foreground">{svc.image.repository}</span>
+          </> : <span className="block truncate text-xs text-muted-foreground">{servicesText("buildOnly")}</span>}
         </TableCell>
         <TableCell className="font-mono text-xs text-muted-foreground">{formatPorts(svc.ports) || "–"}</TableCell>
         <TableCell>

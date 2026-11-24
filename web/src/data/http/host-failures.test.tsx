@@ -14,6 +14,7 @@ import { at, resourceFixture } from "./resources.test-support";
 afterEach(() => vi.useRealTimers());
 
 const operations = ["listStacks", "listContainers", "listImages", "listVolumes", "getTopology"] as const;
+const KINDS = { listStacks: "stacks", listContainers: "containers", listImages: "images", listVolumes: "volumes", getTopology: "networks" } as const;
 it.each(operations.flatMap((operation) => ["http", "mapping"].map((failure) => ({ operation, failure }))))("isolates $failure failures in $operation and renders the host reason", async ({ operation, failure }) => {
   const f = resourceFixture(); f.state.failure = failure;
   const data = await f.adapter[operation]();
@@ -21,10 +22,14 @@ it.each(operations.flatMap((operation) => ["http", "mapping"].map((failure) => (
   expect(rows.length).toBeGreaterThan(0);
   expect(rows.every((row) => row.hostId === "first")).toBe(true);
   const hosts = await f.adapter.listHosts();
-  expect(hosts.find((h) => h.id === "second")?.inventory).toEqual({ stale: true, reason: failure === "http" ? "inventory.read-error" : "inventory.mapping-error" });
-  renderWithApp(<InventoryNotice hosts={hosts} items={rows} />, f.adapter);
+  const kind = KINDS[operation];
+  // #600: a row that cannot be mapped is left out and counted; only a failed read marks the whole host.
+  if (failure === "http") expect(hosts.find((h) => h.id === "second")?.inventory).toEqual({ stale: true, reason: "inventory.read-error" });
+  // The topology also reads each listed network; that inspect of the malformed row fails and keeps its own stale mark.
+  else expect(hosts.find((h) => h.id === "second")?.inventory).toMatchObject({ ...(operation === "getTopology" ? {} : { stale: false }), unreadable: { [kind]: { count: 1 } } });
+  renderWithApp(<InventoryNotice hosts={hosts} items={rows} kinds={[kind]} />, f.adapter);
   expect(screen.getByRole("status").textContent).toContain("second");
-  expect(screen.getByRole("status").textContent).toContain(failure === "http" ? "Inventar konnte nicht gelesen werden" : "Ungültige Inventardaten");
+  expect(screen.getByRole("status").textContent).toContain(failure === "http" ? "Inventar konnte nicht gelesen werden" : "second: 1 Eintrag konnte nicht gelesen werden");
   expect(screen.getByRole("status").textContent).not.toContain("first:");
 });
 
@@ -41,9 +46,10 @@ it.each(["http", "mapping"])("isolates %s failures in the metrics subscription w
     expect(snapshot?.hosts.first?.cpu).toBe(25);
     expect(snapshot?.containers["first~web"]).toEqual({ cpu: 2.5, memMb: 100 });
     expect(Object.keys(snapshot?.containers ?? {}).some((id) => id.startsWith("second~"))).toBe(false);
-    const reason = failure === "http" ? "inventory.read-error" : "inventory.mapping-error";
+    // #600: a malformed row drops only its own sample; only a failed read marks the host.
+    const reason = failure === "http" ? "inventory.read-error" : undefined;
     expect((await f.adapter.listHosts()).find((h) => h.id === "second")?.inventory?.reason).toBe(reason);
-    expect(snapshot?.hosts.second?.inventory).toMatchObject({ stale: true, reason });
+    if (reason) expect(snapshot?.hosts.second?.inventory).toMatchObject({ stale: true, reason });
     expect(errors).not.toHaveBeenCalled();
   } finally { stop(); window.removeEventListener("docklet:adapter-error", errors); }
 });

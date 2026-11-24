@@ -10,13 +10,18 @@ import { inventoryReadBudget } from "./host-read-deadline";
 
 import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError } from "@/data/capability";
-import type { Host, InventoryObservation } from "@/domain/model";
+import type { Host, InventoryObservation, Stack } from "@/domain/model";
 import { withoutSystem } from "@/domain/system";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { createConditionReader, withConditions, type ConditionReader } from "./runtime-conditions";
 import { normalizeProjectName } from "./project-ownership";
 import { inventoryId, mapContainer, mapStack, splitInventoryId, type ContainerRow, type ProjectRow } from "./inventory-mapping";
 import { isMaintenanceError } from "../maintenance-retry";
+import { rowCollector, withUnreadable } from "./row-isolation";
+
+function isUnreadable(error: unknown): boolean {
+  return error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "get-project.unreadable";
+}
 
 export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void, readConditions: ConditionReader = createConditionReader(baseUrl, fetcher).read): Pick<DockletAdapter, "listStacks" | "listContainers" | "getStack"> {
   const { read, list } = createInventoryTransport(baseUrl, fetcher, onState);
@@ -24,12 +29,15 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
   async function hostInventory(host: Host, signal?: AbortSignal) {
     const [projects, containers, conditions] = await Promise.all([list("list-projects", host.id, "projects", undefined, signal), list("list-containers", host.id, "containers", undefined, signal), readConditions(host.id, signal)]);
     signal?.throwIfAborted();
-    const observation: InventoryObservation = mergeInventoryObservations([projects.observation, containers.observation]);
-    onState(host.id, observation);
+    const merged: InventoryObservation = mergeInventoryObservations([projects.observation, containers.observation]);
     const projectRows = projects.rows as ProjectRow[];
     const containerRows = containers.rows as ContainerRow[];
-    const allContainers = containerRows.map((row) => mapContainer(row, host.id, projectRows, observation));
-    const stacks = withoutSystem(projectRows.map((row) => mapStack(row, host.id, allContainers, observation)));
+    // One row that cannot be mapped never empties the host (#600).
+    const stackRows = rowCollector("stacks"), containerRowsRead = rowCollector("containers");
+    const allContainers = containerRowsRead.each(containerRows, (row) => mapContainer(row, host.id, projectRows, merged), (row) => row?.names?.[0]?.replace(/^\//, ""));
+    const stacks = withoutSystem(stackRows.each(projectRows, (row) => mapStack(row, host.id, allContainers, merged), (row) => row?.name));
+    const observation = withUnreadable(merged, stackRows, containerRowsRead);
+    onState(host.id, observation);
     return { ...withConditions({ stacks, containers: withoutSystem(allContainers) }, conditions), observation };
   }
 
@@ -48,8 +56,12 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
     }
     const observation: InventoryObservation = mergeInventoryObservations([projects.observation, containers.observation]);
     onState(host.id, observation);
-    const allContainers = (containers.rows as ContainerRow[]).map((row) => mapContainer(row, host.id, projectRows, observation));
-    return withConditions({ stacks: withoutSystem([mapStack(project, host.id, allContainers, observation)]), containers: withoutSystem(allContainers) }, conditions);
+    const allContainers = rowCollector("containers").each(containers.rows as ContainerRow[], (row) => mapContainer(row, host.id, projectRows, observation));
+    // The requested project itself is the page: a row that cannot be mapped is reported as unreadable, not as missing.
+    let stack: Stack;
+    try { stack = mapStack(project, host.id, allContainers, observation); }
+    catch (error) { return fail(error instanceof Error && error.message.startsWith("inventory.") ? "get-project.unreadable" : "get-project.invalid-detail"); }
+    return withConditions({ stacks: withoutSystem([stack]), containers: withoutSystem(allContainers) }, conditions);
   }
 
   async function aggregate(operation: string, onPartial?: (batches: Awaited<ReturnType<typeof hostInventory>>[], tag: <T extends object>(data: T) => T) => void, parent?: AbortSignal) {
@@ -83,7 +95,7 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       // file content, which only the compose read carries and which is never cached.
       const [detail, batch, files] = await Promise.all([
         read("get-project", hostId, `projects/${encodeURIComponent(projectId)}`),
-        stackInventory(host, projectId).catch((error) => { if (isMaintenanceError(error)) throw error; onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] }; }),
+        stackInventory(host, projectId).catch((error) => { if (isMaintenanceError(error) || isUnreadable(error)) throw error; onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] }; }),
         read("get-project-compose", hostId, `projects/${encodeURIComponent(projectId)}/compose`).then((result) => result.body.data, () => undefined),
       ]);
       if (!detail.body.data || detail.body.data.id !== projectId) return fail("get-project.invalid-detail");
@@ -91,7 +103,10 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       if (!listed) return fail("get-project.not-found");
       const loaded = files?.id === projectId && typeof files.composeContent === "string" ? files : undefined;
       // Plain detail omits stored checks; the already-read list owns service/update projections.
-      return { ...mapStack(detail.body.data, hostId, batch.containers, detail.observation), services: listed.services, compose: loaded?.composeContent ?? "", env: loaded?.envContent ?? "", ...(loaded ? {} : { filesUnavailable: true }), deployments: [], restorePoints: [] };
+      let mapped: Stack;
+      try { mapped = mapStack(detail.body.data, hostId, batch.containers, detail.observation); }
+      catch { return fail("get-project.unreadable"); }
+      return { ...mapped, services: listed.services, compose: loaded?.composeContent ?? "", env: loaded?.envContent ?? "", ...(loaded ? {} : { filesUnavailable: true }), deployments: [], restorePoints: [] };
     },
   };
 }

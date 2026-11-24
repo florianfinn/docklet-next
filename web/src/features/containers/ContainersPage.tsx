@@ -166,7 +166,7 @@ export default function ContainersPage() {
   return (
     <>
       <PageHeader compact title={t("title")} description={t("description", { scope })} />
-      <InventoryNotice hosts={hosts.visible} items={containers.visible} />
+      <InventoryNotice hosts={hosts.visible} items={containers.visible} kinds={["containers"]} />
       <UnraidHiddenHint count={containers.hiddenUnraid} />
       <StatStrip compact
         items={[

@@ -24,6 +24,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Run gate and single-hub operation](run-gate.md) | Activity states, gated admission, cancellation, restart recovery and one hub per database |
 | [Runtime control and log lifecycle](runtime-control.md) | Opaque-key retries, bounded outcome evidence and unknown recovery, logs/session closure and staged v4 foundation activation |
 | [Independent stacks and recorded env files](stack-env-and-peers.md) | Unreadable or duplicate stacks never block other stacks; env files recorded by Compose |
+| [Per-row inventory isolation](inventory-row-isolation.md) | M38 decision: build-only services, one unreadable row never empties a host, visible unreadable counts |
 | [Simpler everyday use](everyday-use.md) | Truthful update and run feedback, fewer confirmations, readable phone lists (M35) |
 | [In-app updates](app-updates.md) | Narrow Compose helper, correlated hub/agent operations, frozen recovery contract and manual failure recovery |
 | [Images and updates](images-updates.md) | Host image guards, safe registry credentials, update policies, scheduled apply, restore points and lifecycle prerequisites |

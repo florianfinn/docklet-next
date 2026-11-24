@@ -56,7 +56,12 @@ export interface InventoryObservation {
   observedAt?: string;
   stale: boolean;
   reason?: "agent.unavailable" | "agent.invalid-token" | "agent.update-required" | "inventory.read-error" | "inventory.mapping-error";
+  /** Rows left out of this host's lists because they could not be read; set per kind by the reader that owns the kind. */
+  unreadable?: Partial<Record<UnreadableKind, UnreadableRows>>;
 }
+
+export type UnreadableKind = "stacks" | "containers" | "images" | "volumes" | "networks";
+export interface UnreadableRows { count: number; codes: string[]; names: string[] }
 
 /** Docker daemon facts of a host, plus the hub's own project directory for the local host. */
 export interface HostDetails {
@@ -165,7 +170,9 @@ export interface Service {
   containersRemoved?: boolean;
   containerId?: string;
   name: string;
+  /** Empty for a service that is only built locally and was never created (`build:` without `image:`, `buildOnly`). */
   image: ImageVersion;
+  buildOnly?: true;
   state: ContainerState;
   health: Health;
   ports: PortMapping[];

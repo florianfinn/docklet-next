@@ -1,0 +1,115 @@
+{
+  "projects": [
+    {
+      "composeProjectName": "builder",
+      "tags": [],
+      "updateInfo": {
+        "serviceUpdates": {
+          "cache": {
+            "imageRef": "registry.example.com/cache:7"
+          }
+        },
+        "status": "unknown",
+        "hasUpdate": false,
+        "imageCount": 1,
+        "checkedImageCount": 0,
+        "imagesWithUpdates": 0,
+        "imagesNotPulled": 0,
+        "errorCount": 0,
+        "imageRefs": [
+          "registry.example.com/cache:7"
+        ]
+      },
+      "status": "stopped",
+      "dirName": "builder",
+      "name": "builder",
+      "relativePath": "builder",
+      "id": "project-build",
+      "path": "/srv/projects/builder",
+      "updatedAt": "",
+      "createdAt": "",
+      "runtimeServices": [
+        {
+          "name": "app",
+          "image": "",
+          "status": "not-created",
+          "redeployDisabled": false
+        },
+        {
+          "name": "cache",
+          "image": "registry.example.com/cache:7",
+          "status": "not-created",
+          "redeployDisabled": false
+        }
+      ],
+      "runningCount": 0,
+      "serviceCount": 2,
+      "isDiscovered": false,
+      "isArchived": false,
+      "hasBuildDirective": false,
+      "redeployDisabled": false
+    },
+    {
+      "composeProjectName": "plain",
+      "tags": [],
+      "updateInfo": {
+        "serviceUpdates": {
+          "web": {
+            "imageRef": "registry.example.com/web:1.2.3"
+          }
+        },
+        "status": "unknown",
+        "hasUpdate": false,
+        "imageCount": 1,
+        "checkedImageCount": 0,
+        "imagesWithUpdates": 0,
+        "imagesNotPulled": 0,
+        "errorCount": 0,
+        "imageRefs": [
+          "registry.example.com/web:1.2.3"
+        ]
+      },
+      "status": "stopped",
+      "dirName": "plain",
+      "name": "plain",
+      "relativePath": "plain",
+      "id": "project-plain",
+      "path": "/srv/projects/plain",
+      "updatedAt": "",
+      "createdAt": "",
+      "runtimeServices": [
+        {
+          "name": "web",
+          "image": "registry.example.com/web:1.2.3",
+          "status": "not-created",
+          "redeployDisabled": false
+        }
+      ],
+      "runningCount": 0,
+      "serviceCount": 1,
+      "isDiscovered": false,
+      "isArchived": false,
+      "hasBuildDirective": false,
+      "redeployDisabled": false
+    }
+  ],
+  "detail": {
+    "composeProjectName": "builder",
+    "tags": [],
+    "status": "stopped",
+    "dirName": "builder",
+    "composeFileName": "compose.yaml",
+    "name": "builder",
+    "relativePath": "builder",
+    "id": "project-build",
+    "path": "/srv/projects/builder",
+    "updatedAt": "",
+    "createdAt": "",
+    "runningCount": 0,
+    "serviceCount": 2,
+    "isDiscovered": false,
+    "isArchived": false,
+    "hasBuildDirective": false,
+    "redeployDisabled": false
+  }
+}

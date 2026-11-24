@@ -386,6 +386,7 @@ export const enCommon = {
     download: "Download",
   },
   services: {
+    buildOnly: "Built locally · not created",
     count: "{running}/{total}",
     label: "{running} of {total} services running",
     title: "Services",

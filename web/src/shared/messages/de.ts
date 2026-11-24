@@ -387,6 +387,7 @@ export const deCommon: typeof enCommon = {
     download: "Herunterladen",
   },
   services: {
+    buildOnly: "Lokal gebaut · nicht erstellt",
     count: "{running}/{total}",
     label: "{running} von {total} Services laufen",
     title: "Services",

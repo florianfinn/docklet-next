@@ -60,6 +60,7 @@ export const deDashboard: typeof enDashboard = {
     },
     hostStacks: "{count, plural, one {# Stack} other {# Stacks}}",
     hostContainers: "{count, plural, one {# Container} other {# Container}}",
+    hostUnreadable: "{count, plural, one {# Eintrag} other {# Einträge}} nicht lesbar",
     pending: "Wartet auf die erste Agent-Verbindung – Onboarding unter Hosts fortsetzen",
     offline: "Nicht erreichbar · zuletzt {time}",
     stale: "Werte veraltet",

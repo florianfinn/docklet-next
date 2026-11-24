@@ -60,6 +60,7 @@ export const deHosts: typeof enHosts = {
     system: "System",
     lastSeen: "Letzter Kontakt",
     usage: "{stacks, plural, one {# Stack} other {# Stacks}} · {containers, plural, one {# Container} other {# Container}}",
+    unreadable: "{count, plural, one {# Eintrag} other {# Einträge}} nicht lesbar",
     usageUnknown: "Stacks und Container: unbekannt",
     check: "Verbindung prüfen",
     checking: "Wird geprüft …",

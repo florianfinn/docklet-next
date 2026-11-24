@@ -225,7 +225,7 @@ export default function DashboardPage() {
           </>
         }
       />
-      <InventoryNotice hosts={hosts.visible} items={[...stacks.visible, ...containers.visible, ...Object.values(metrics ?? {})]} />
+      <InventoryNotice hosts={hosts.visible} items={[...stacks.visible, ...containers.visible, ...Object.values(metrics ?? {})]} kinds={["stacks", "containers"]} />
       {coreLoading ? (
         <DashboardSkeleton sizes={visible.map((id) => widgetSize(layout, id))} />
       ) : stacks.isError || containers.isError ? (

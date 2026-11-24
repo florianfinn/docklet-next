@@ -11,9 +11,11 @@ import { ToneBadge, ToneDot } from "@/shared/components/tone";
 import { cn } from "@/shared/lib/utils";
 
 import { smoothHistory } from "./smooth-history";
+import { unreadableRows } from "@/domain/unreadable";
 
 /** Host resource samples remain visible with their observation notice on disconnect. */
 export function HostPulse({ host, stacks, containers, className }: { host: Host; stacks: number; containers: number; className?: string }) {
+  const unreadable = unreadableRows(host.inventory, ["stacks", "containers"]).count;
   const t = useTranslations("dashboard.summary");
   const td = useTranslations("dashboard");
   const tc = useTranslations("common.host");
@@ -48,6 +50,7 @@ export function HostPulse({ host, stacks, containers, className }: { host: Host;
           <div>{host.os}</div>
           <div>
             {t("hostStacks", { count: stacks })} · {t("hostContainers", { count: containers })}
+            {unreadable > 0 && <span className="text-warning"> · {t("hostUnreadable", { count: unreadable })}</span>}
           </div>
         </div>
         {m && <Sparkline data={smoothHistory(m.cpuHistory)} type="bar" slots={METRICS_HISTORY_SAMPLES} color={offline ? "var(--muted-foreground)" : host.color} domain={[0, 100]} className="h-auto min-h-9 w-[45%] max-w-64 min-w-28 self-stretch" label={t("cpuHistory", { name: host.name })} />}

@@ -731,8 +731,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
     catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }
   }
-  function observeHost(hostId: string, state: InventoryObservation) {
+  function observeHost(hostId: string, observed: InventoryObservation) {
     const old = observations.get(hostId);
+    // Each reader owns the unreadable-row kinds it maps (a count of 0 clears its kind); other kinds keep their counts.
+    const unreadable = Object.fromEntries(Object.entries({ ...old?.unreadable, ...observed.unreadable }).filter(([, rows]) => rows.count > 0));
+    const { unreadable: _reported, ...rest } = observed;
+    const state: InventoryObservation = Object.keys(unreadable).length ? { ...rest, unreadable } : rest;
     observations.set(hostId, state);
     if (JSON.stringify(old) !== JSON.stringify(state)) changeListeners.forEach((listener) => listener(["hosts"]));
   }

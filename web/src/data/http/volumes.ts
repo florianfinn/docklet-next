@@ -19,6 +19,7 @@ import { inventoryId, splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapVolumes } from "./resource-mapping";
 import { isMaintenanceError } from "../maintenance-retry";
+import { rowCollector, withUnreadable } from "./row-isolation";
 
 type Read = "get-volume" | "get-volume-sizes" | "list-volume-binds";
 // The host-wide size scan (Docker disk usage) can take minutes on large hosts; a volume detail waits this long
@@ -61,7 +62,9 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
     return volume;
   }
   function map(row: Schema["VolumeVolume"], hostId: string, ctx: Awaited<ReturnType<typeof context>>, inventory: InventoryObservation): Volume {
-    return supplement(mapVolumes([row], hostId, ctx.containers, ctx.projects, inventory)[0]!, row, hostId);
+    const volume = mapVolumes([row], hostId, ctx.containers, ctx.projects, inventory)[0];
+    if (!volume) throw new Error("inventory.invalid-volume");
+    return supplement(volume, row, hostId);
   }
   /** Bind rows come from container mounts; the agent's bind list adds kind, path-rule verdict and sizes. */
   async function bindList(hostId: string, signal?: AbortSignal): Promise<Map<string, BindInfo> | undefined> {
@@ -94,12 +97,14 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
           const { combined, observation } = await budget(async (signal) => {
             const [volumes, ctx, binds] = await Promise.all([transport.list("list-volumes", host.id, "volumes", undefined, signal), context(host.id, signal), bindList(host.id, signal)]);
             signal.throwIfAborted(); check();
-            const rows = mapVolumes(volumes.rows, host.id, ctx.containers, ctx.projects, volumes.observation);
-            const byName = new Map(volumes.rows.map((row) => [row.name, row]));
-            const mapped = rows.map((v) => v.kind === "volume" ? supplement(v, byName.get(v.name)!, host.id) : withBind(v, binds));
+            const volumeRows = rowCollector("volumes");
+            const rows = mapVolumes(volumes.rows, host.id, ctx.containers, ctx.projects, volumes.observation, volumeRows);
+            const byName = new Map(volumes.rows.flatMap((row) => typeof row?.name === "string" ? [[row.name, row] as const] : []));
+            // Supplementing one volume with the Docker usage list never drops another volume (#600).
+            const mapped = rows.map((v) => v.kind === "volume" ? volumeRows.one(v, (v) => supplement(v, byName.get(v.name)!, host.id), (v) => v.name) ?? v : withBind(v, binds));
             const combined = await decorate(host.id, mapped, signal);
             signal.throwIfAborted(); check();
-            return { combined, observation: volumes.observation };
+            return { combined, observation: withUnreadable(volumes.observation, volumeRows) };
           });
           check();
           retained.set(host.id, combined); batches.set(host.id, combined);

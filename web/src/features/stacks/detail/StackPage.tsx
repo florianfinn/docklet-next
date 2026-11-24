@@ -12,6 +12,7 @@ import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useAdapter } from "@/data/use-adapter";
+import { AdapterOutcomeError } from "@/data/capability";
 import { useStack, useStacks } from "@/data/queries";
 import type { StackDetail } from "@/domain/model";
 import { EmptyState, QueryError } from "@/shared/components/page";
@@ -176,6 +177,9 @@ export default function StackPage() {
       ) : stack.isError ? (
         stack.error.message === "not-found" ? (
           <EmptyState icon={<Layers />} title={t("notFound")} description={t("notFoundBody")} />
+        ) : stack.error instanceof AdapterOutcomeError && stack.error.outcome.kind === "error" && stack.error.outcome.code === "get-project.unreadable" ? (
+          // Only this stack could not be read; nothing on the page can act on it (#600).
+          <EmptyState icon={<Layers />} title={t("unreadable")} description={t("unreadableBody")} />
         ) : (
           <QueryError error={stack.error} onRetry={() => void stack.refetch()} />
         )

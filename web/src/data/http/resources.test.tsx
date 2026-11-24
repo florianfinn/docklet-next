@@ -70,10 +70,10 @@ it.each(["agent.update-required", "agent.invalid-token"])("keeps reason %s witho
   expect(await f.adapter.listImages()).toEqual([]);
   expect((await f.adapter.listHosts())[0]?.inventory).toEqual({ stale: true, reason });
 });
-it("marks malformed resource data with a host-local reason", async () => {
+it("leaves out malformed resource rows and counts them per host (#600)", async () => {
   const f = resourceFixture(); f.state.malformed = true;
   expect(await f.adapter.listImages()).toEqual([]);
-  expect((await f.adapter.listHosts()).every((h) => h.inventory?.reason === "inventory.mapping-error")).toBe(true);
+  expect((await f.adapter.listHosts()).every((h) => !h.inventory?.reason && h.inventory?.unreadable?.images?.count === 1)).toBe(true);
 });
 it("blocks all storage and image writes without sending a request", async () => {
   const f = resourceFixture();

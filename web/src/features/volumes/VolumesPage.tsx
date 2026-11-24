@@ -134,7 +134,7 @@ export default function VolumesPage() {
           </>
         }
       />
-      <InventoryNotice hosts={hosts.visible} items={visible} />
+      <InventoryNotice hosts={hosts.visible} items={visible} kinds={["volumes"]} />
       <UnraidHiddenHint count={hiddenUnraid} />
       <StatStrip compact
         className="md:grid-cols-5"

@@ -59,6 +59,7 @@ export const enHosts = {
     system: "System",
     lastSeen: "Last contact",
     usage: "{stacks, plural, one {# stack} other {# stacks}} · {containers, plural, one {# container} other {# containers}}",
+    unreadable: "{count, plural, one {# entry} other {# entries}} not readable",
     usageUnknown: "Stacks and containers: unknown",
     check: "Check connection",
     checking: "Checking …",

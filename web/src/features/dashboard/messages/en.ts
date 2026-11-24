@@ -59,6 +59,7 @@ export const enDashboard = {
     },
     hostStacks: "{count, plural, one {# stack} other {# stacks}}",
     hostContainers: "{count, plural, one {# container} other {# containers}}",
+    hostUnreadable: "{count, plural, one {# entry} other {# entries}} not readable",
     pending: "Waiting for the first agent connection – continue onboarding under Hosts",
     offline: "Unreachable · last seen {time}",
     stale: "Values outdated",

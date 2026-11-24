@@ -8,6 +8,7 @@ import { systemRole } from "@/domain/system";
 import { METRICS_HISTORY_SAMPLES, type Host, type HostMetrics, type InventoryObservation, type MetricsSnapshot } from "@/domain/model";
 import { inventoryId, mapContainer } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
+import { rowCollector } from "./row-isolation";
 
 export interface MetricsSocket {
   onmessage: ((event: MessageEvent) => void) | null;
@@ -124,13 +125,15 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
           const result = await list("list-containers", h.id, "containers", { sort: "cpuUsage" }, signal);
           if (current !== generation) return;
           const samples: MetricsSnapshot["containers"] = {};
-          for (const row of result.rows) {
+          // A container row or sample that cannot be read drops only its own sample (#600).
+          rowCollector("containers").each(result.rows, (row) => {
             mapContainer(row, h.id, [], result.observation);
             const sample = row.resourceSample;
-            if (!sample || systemRole(row.labels) !== undefined) continue;
+            if (!sample || systemRole(row.labels) !== undefined) return true;
             if (![sample.cpuPercent, sample.memoryUsageBytes].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) throw new Error("metrics.invalid-sample");
             samples[inventoryId(h.id, row.id)] = { cpu: sample.cpuPercent, memMb: sample.memoryUsageBytes / 1024 ** 2 };
-          }
+            return true;
+          });
           for (const id of Object.keys(containers)) if (id.startsWith(`${h.id}~`)) delete containers[id];
           Object.assign(containers, samples);
           onState(h.id, result.observation);

@@ -28,7 +28,7 @@ export function ServicesHover({ services, host, name, className }: { services: S
                 <li key={s.name} className="flex items-center gap-2">
                   <ToneDot tone={RUNTIME_TONE[rt]} pulse={rt === "unhealthy"} />
                   <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-                  <span className="font-mono text-[11px] text-muted-foreground">{versionLabel(s.image)}</span>
+                  <span className="font-mono text-[11px] text-muted-foreground">{s.buildOnly ? t("services.buildOnly") : versionLabel(s.image)}</span>
                 </li>
               );
             })}

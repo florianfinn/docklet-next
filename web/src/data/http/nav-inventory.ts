@@ -14,6 +14,7 @@ import { inventoryReadBudget } from "./host-read-deadline";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapContainer } from "./inventory-mapping";
 import { isMaintenanceError } from "../maintenance-retry";
+import { rowCollector } from "./row-isolation";
 
 /** Host registration changes invalidate retained totals without discarding counts on availability changes. */
 export function createNavInventoryState() {
@@ -48,7 +49,8 @@ export function createNavInventory(baseUrl: string, fetcher: typeof fetch, hosts
         // Reuse the container read already in flight before admitting another host request.
         const inventoryRead = budget(async (signal) => {
           const result = await transport.list("list-containers", host.id, "containers", undefined, signal);
-          return { containers: result.rows.map((row) => mapContainer(row, host.id, [], result.observation)), observation: result.observation };
+          // Counts leave out only a row that cannot be mapped (#600).
+          return { containers: rowCollector("containers").each(result.rows, (row) => mapContainer(row, host.id, [], result.observation)), observation: result.observation };
         });
         const [inventory, count] = await Promise.allSettled([
           inventoryRead,

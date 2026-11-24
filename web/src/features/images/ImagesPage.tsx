@@ -123,7 +123,7 @@ export default function ImagesPage() {
           </>
         }
       />
-      <InventoryNotice hosts={hosts.visible} items={visible} />
+      <InventoryNotice hosts={hosts.visible} items={visible} kinds={["images"]} />
       <UnraidHiddenHint count={hiddenUnraid} />
       <StatStrip compact
         className="md:grid-cols-5"

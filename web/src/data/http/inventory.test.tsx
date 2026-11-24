@@ -99,13 +99,14 @@ describe("host inventory HTTP reads", () => {
     expect((await f.adapter.listHosts())[0]?.inventory?.reason).toBe(reason);
   });
 
-  it("reads a scoped stack detail and rejects malformed list responses", async () => {
+  it("reads a scoped stack detail and leaves out malformed list rows (#600)", async () => {
     const f = fixture();
     const detail = await f.adapter.getStack(inventoryId("second", "project"));
     expect(detail).toMatchObject({ hostId: "second", labels: ["example"], compose: "name: app\nservices: {}", env: "EXAMPLE=value", deployments: [], restorePoints: [] });
     f.state.malformed = true;
     expect(await f.adapter.listContainers()).toEqual([]);
-    expect((await f.adapter.listHosts()).every((h) => h.inventory?.reason === "inventory.mapping-error")).toBe(true);
+    expect((await f.adapter.listStacks()).map((s) => s.id)).toEqual(["first~project", "second~project"]);
+    expect((await f.adapter.listHosts()).every((h) => !h.inventory?.reason && h.inventory?.unreadable?.containers?.count === 1)).toBe(true);
   });
 
   it("requires explicit command capabilities and never posts an ungranted inventory mutation", async () => {
