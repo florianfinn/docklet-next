@@ -23,7 +23,9 @@ export function assertWorkflow(file, text) {
     assert.match(scope, /outputs:\n      value: \$\{\{ steps\.detect\.outputs\.scope \}\}/);
     assert.match(scope, /node scripts\/change-scope\.mjs --ci/);
     assert.match(verify, /^    name: verify$/m);
-    assert.match(verify, /^    needs: \[scope, full-checks\]$/m);
+    // verify runs parallel to the full checks; only the checks job waits for both.
+    assert.match(verify, /^    needs: \[scope\]$/m);
+    assert.equal(/full-checks|FULL_RESULT/.test(verify), false);
     assert.match(verify, /^    if: always\(\)$/m);
     assert.match(verify, /^    timeout-minutes: 15$/m);
     assert.match(verify, /run: node scripts\/check-publication\.mjs --history/);
@@ -75,12 +77,10 @@ export function assertWorkflow(file, text) {
     for (const gate of [verify, checks]) {
       assert.match(gate, /SCOPE: \$\{\{ needs\.scope\.outputs\.value \}\}/);
       assert.match(gate, /SCOPE_RESULT: \$\{\{ needs\.scope\.result \}\}/);
-      assert.match(gate, /FULL_RESULT: \$\{\{ needs\.full-checks\.result \}\}/);
       assert.match(gate, /test "\$SCOPE_RESULT" = success/);
-      assert.match(gate, /text\) test "\$FULL_RESULT" = skipped/);
-      assert.match(gate, /full\) test "\$FULL_RESULT" = success/);
       assert.match(gate, /\*\) exit 1/);
     }
+    assert.match(checks, /FULL_RESULT: \$\{\{ needs\.full-checks\.result \}\}/);
     assert.match(checks, /IMAGE_RESULT: \$\{\{ needs\.package-image\.result \}\}/);
     assert.match(checks, /test "\$VERIFY_RESULT" = success/);
     assert.match(checks, /text\) test "\$FULL_RESULT" = skipped && test "\$IMAGE_RESULT" = skipped/);
@@ -100,8 +100,10 @@ export function assertWorkflow(file, text) {
   assert.equal(text.includes("secrets."), false);
   assert.equal((text.match(/persist-credentials: false/g) ?? []).length, file === "checks" ? 4 : 1);
   if (file === "checks") {
-    assert.match(text, /^    branches: \[main, "feature\/\*\*"\]$/m);
-    // Main runs use unique groups; superseded PR and feature runs are cancelled.
+    // One run per pushed head: main pushes and PRs; feature branches run through their PR.
+    assert.match(text, /^    branches: \[main\]$/m);
+    assert.equal(text.includes("feature/"), false);
+    // Main runs use unique groups; superseded PR runs are cancelled.
     assert.ok(text.includes("  group: checks-${{ github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}\n"));
     assert.match(text, /^  cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}$/m);
   } else assert.match(text, /branches: \[main\]/);

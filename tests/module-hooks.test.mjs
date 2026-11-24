@@ -33,12 +33,13 @@ const expected = [
   { program: "pnpm", args: ["--dir", "web", "run", "test"], cwd: "" },
 ];
 
-const lintCalls = expected.slice(0, 3);
+// The pre-push subset formats Go and typechecks web; vet, lint and suites run in CI.
+const pushCalls = [expected[0], { program: "pnpm", args: ["--dir", "web", "run", "typecheck"], cwd: "" }];
 
-test("real pre-push invokes Go and web lint but not the test suites", (t) => {
+test("real pre-push invokes gofmt and the web typecheck but not vet, lint or the suites", (t) => {
   const { root, env, input } = modules(t);
   ok(invoke(root, "sh", [".githooks/pre-push"], { env, input }));
-  assert.deepEqual(calls(root), lintCalls);
+  assert.deepEqual(calls(root), pushCalls);
 });
 
 test("full test mode still invokes Go and web lint and tests", (t) => {
@@ -49,13 +50,13 @@ test("full test mode still invokes Go and web lint and tests", (t) => {
 });
 
 for (const [index, command] of ["go run ./scripts/gofmt-check.go -- scripts/core-license-files.go scripts/go-command.go scripts/gofmt-check.go",
-  "go vet ./...", "pnpm --dir web run lint"].entries()) {
+  "pnpm --dir web run typecheck"].entries()) {
   test(`real pre-push propagates module failure: ${command}`, (t) => {
     const { root, env, input } = modules(t);
     fails(invoke(root, "sh", [".githooks/pre-push"], {
       input, env: { ...env, MODULE_CHECK_FAIL: command },
     }), "check-error");
-    assert.deepEqual(calls(root), expected.slice(0, index + 1));
+    assert.deepEqual(calls(root), pushCalls.slice(0, index + 1));
   });
 }
 

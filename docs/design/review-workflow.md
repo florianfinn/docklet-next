@@ -23,11 +23,12 @@ tree before first publication, with acceptance owned separately from implementat
 Self-check before the first push. Search for the meaning of removed/changed
 behaviour in code, catalogues, docs and comments, not only old identifiers. Verify
 new factual claims. Run focused tests; the pre-push hook runs publication,
-provenance and lint, and CI runs the full suite. Push and PR
+provenance and the push subset of lint, and CI runs the full suite. Push and PR
 creation still require explicit instruction. Remove generated session-link
 footers immediately. PR reviews start after green pr-text; commit-range reviews of
-feature-branch steps start after the step head's CI run is green and
-`node scripts/check-publication.mjs --history <base>..<head>` passes for the range.
+feature-branch steps start on the committed step head once
+`node scripts/check-publication.mjs --history <base>..<head>` passes for the range,
+parallel to its CI; the head's CI must be green before merge.
 
 Implementation and independent review use different providers. The reviewer
 receives a fresh context: AGENTS.md, this procedure, task, issues, acceptance

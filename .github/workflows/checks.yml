@@ -2,15 +2,15 @@
 # Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Feature-branch push runs, no rerun when a draft PR is marked ready, superseded-run cancellation, separate root check budgets, pinned toolchains (also for text-scope Node tests), baseline comparison, Docker-isolated default SQLite checks and a separate package-image smoke gate.
+# Deviations: One run per pushed head (main pushes and PRs; feature branches through their PR), no rerun when a draft PR is marked ready, superseded-run cancellation, history publication check parallel to the full checks, separate root check budgets, pinned toolchains (also for text-scope Node tests), baseline comparison, Docker-isolated default SQLite checks and a separate package-image smoke gate.
 name: Repository checks
 on:
   pull_request:
     types: [opened, synchronize, reopened]
   push:
-    branches: [main, "feature/**"]
-# Main runs get unique groups (never cancelled or replaced while queued); PR and
-# feature-branch runs cancel their superseded runs.
+    branches: [main]
+# Main runs get unique groups (never cancelled or replaced while queued); PR runs
+# cancel their superseded runs.
 concurrency:
   group: checks-${{ github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -32,23 +32,23 @@ jobs:
           node-version: 24
       - id: detect
         run: echo "scope=$(node scripts/change-scope.mjs --ci)" >> "$GITHUB_OUTPUT"
+  # Runs parallel to the full checks; the checks job gates on both.
   verify:
     name: verify
-    needs: [scope, full-checks]
+    needs: [scope]
     if: always()
     timeout-minutes: 15
     runs-on: ubuntu-24.04
     steps:
-      - name: Require successful applicable checks
+      - name: Require a successful scope
         env:
           SCOPE: ${{ needs.scope.outputs.value }}
           SCOPE_RESULT: ${{ needs.scope.result }}
-          FULL_RESULT: ${{ needs.full-checks.result }}
         run: |
           test "$SCOPE_RESULT" = success
           case "$SCOPE" in
-            text) test "$FULL_RESULT" = skipped ;;
-            full) test "$FULL_RESULT" = success ;;
+            text) true ;;
+            full) true ;;
             *) exit 1 ;;
           esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -121,7 +121,7 @@ jobs:
             third_party/arcane/**/go.sum
             third_party/francis/go.sum
       - name: Select the comparison base
-        # PRs compare with their base; feature pushes with their main merge base.
+        # PRs compare with their base; other non-main runs with their main merge base.
         run: |
           base="$PR_BASE_SHA"
           if [ -z "$base" ] && [ "$GITHUB_REF" != refs/heads/main ]; then

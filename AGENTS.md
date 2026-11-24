@@ -63,80 +63,56 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   before resuming; never silently expand the current issue into another module.
 - Shared foundations (OpenAPI, run schema, migrations, adapter port, preferences)
   have exactly one owning step, merged before dependent work. Recheck planning with
-  the maintainer at milestone start and after foundation follow-ups.
+  the maintainer at milestone start; after a foundation follow-up the main thread
+  rechecks the plan and reports changes on the milestone closing issue.
 - docs/design/ describes decisions and rationale, not task status. Dated measurements
   are evidence. Historical plans belong in the docs/history/ index.
 
 ## Agent coordination
 
-- One main thread runs a milestone: it plans, writes design notes, implements,
-  fixes and integrates, and is the only writer of the feature branch. Fix rounds
-  stay in the main thread, also for steps a tool built. Subagents are
-  tools with one brief and one structured result: independent review, sandbox and
-  acceptance runs, wide searches, and large bounded steps in their own worktree,
-  which the main thread checks and integrates. Tools never decide product, scope or
-  UX questions; they return them with options and a recommendation.
-- At milestone start, write the plan and the design notes of risky steps (with
-  their break map) and run one bundled design review over them, then ask the
-  maintainer every open product, scope and interface question at once, each with a
-  recommendation, together with the acceptance matrix and its exclusion rule, and
-  obtain agreement to both before implementation. Each exclusion names the affected
-  behaviour and matrix cells, the baseline evidence or named environment limit, the
-  evidence the runner checks and its effect on the verdict. Code predating the
-  milestone is not by itself an exclusion; regressions and required milestone
-  behaviour remain subject to acceptance. Read accepted decisions first; handle
-  routine implementation choices autonomously. Except for unresolved
-  acceptance-scope or exclusion decisions, a question that appears later is decided by the main thread with the recommended, reversible
-  and narrower option, recorded with how to reverse it and reported to the
-  maintainer without pausing, as a comment on the milestone closing issue; such a
-  decision never widens scope, publishes, weakens security, deploys or sets an
-  acceptance verdict.
-- Give each agent a self-contained brief: goal and acceptance, full base/head SHA,
-  target branch, accepted decisions, prerequisites and contract owner, owned paths
-  and read-only boundaries, known traps, checks and accessible evidence/report paths.
-  Never rely on access to the parent conversation. Review rounds receive prior
-  findings, responses and unresolved objections alongside the current exact SHA.
-  Put the current context first and link complete relevant reports once through
-  verified accessible paths; avoid recursively copying earlier briefs. Preserve
-  critical decisions and objections when working within tool input limits.
-- Use parallel tools only with independent scope, disjoint ownership and isolated
-  worktrees. Group work into coherent,
-  usable deliveries; local checkpoints and file-count heuristics do not require
-  additional PRs, scouts or review rounds. Retain the required foundation, risk
-  and closing reviews. Use focused construction checks and required integrated
-  checks; repeat successful full suites only when changes or failures justify it.
-- For a correctness fix, map the affected producer, transport/DTO and actual
-  consumer before implementation. Cover initial failure, partial state, latency,
-  identity changes and restart where relevant. Synchronise asynchronous assertions
-  with the actual effect. Each break-map row (persisted transitional states,
-  external data entry points, identity changes, new codes, Direct/Edge parity,
-  migrations) and each blocker fix needs a test with red proof; other code gets
-  ordinary tests. Compiler errors, timeouts and equivalent mutations do not
-  demonstrate that a behavioural guard works.
-- Check dependency graphs, fixtures, metadata and policy guards early. Record
-  flaky failures and reruns honestly and track their repair. Evidence reuse never
-  permits bypassing required hooks or checks without an explicit policy change.
-- After each review, disposition findings once: blockers, selected related fixes
-  grouped into one correction, and tracked deferrals with rationale. After PASS,
-  accepted nonblocking improvements do not trigger additional review loops.
-  Signal new product questions promptly through the active coordination channel.
-- Implementation tools default to GPT-6.1 Sol. Start Astra agents only when
-  strictly necessary and state the concrete reason. Review always comes from a
-  different provider than the implementation, including main-thread work.
-- Continue through the authorised completion boundary. Worker reports and green
-  local checks are intermediate results. After interruptions, inspect actual task,
-  Git and command results before retrying; preserve the next allowed step in
-  handovers. Keep required review, checks, acceptance and external-action approvals.
-  Verify the actual mounted worktree, toolchain and environment before execution.
-  Retain real exit codes. Before ending a turn with pending work, establish an
-  app-owned continuation or PR watch and record its ID and next action. After an
-  interrupted push, inspect the remote ref before retrying; do not duplicate work.
+- One main thread runs a milestone and is the only writer of its feature branch: it
+  plans, writes design notes, implements, fixes and integrates, also for steps a
+  tool built. Subagents are tools with one self-contained brief (goal and
+  acceptance, full base/head SHA, accepted decisions, owned and read-only paths,
+  prior findings and objections) and one structured result. Tools never decide
+  product, scope or UX questions, and no subagent changes a running system.
+- Ask the maintainer once at milestone start: every open product, scope and
+  interface question with a recommendation, plus the acceptance matrix and its
+  exclusion rule. Each exclusion names the affected behaviour and cells, the
+  baseline evidence or environment limit, the runner's check and the effect on the
+  verdict; code age alone is no exclusion. Later questions are decided by the main
+  thread with the recommended, reversible and narrower option and posted with how
+  to reverse it on the closing issue; such a decision never widens scope,
+  publishes, weakens security, deploys or sets an acceptance verdict. Unresolved
+  acceptance-scope or exclusion decisions go to the maintainer; only the affected
+  step waits.
+- Parallel tools only with independent scope, disjoint ownership and isolated
+  worktrees. Group work into coherent deliveries; repeat successful full suites
+  only when changes or failures justify it.
+- For a correctness fix, map producer, transport/DTO and actual consumer first;
+  fixtures follow the real producer. Cover initial failure, partial state, latency,
+  identity changes and restart where relevant, and synchronise asynchronous
+  assertions with the actual effect. Each break-map row (persisted transitional
+  states, external data entry points, identity changes, new codes, Direct/Edge
+  parity, migrations) and each blocker fix needs a test with red proof; compiler
+  errors, timeouts and equivalent mutations are no red proof.
+- Review depth follows risk: foundations, contracts, migrations, auth, restore,
+  agent surfaces and the interim-review kinds in docs/design/review-workflow.md get
+  an independent review; other steps use self-checks and CI. Implementation and
+  review use different providers. After PASS, nonblocking improvements do not
+  trigger further review rounds.
+- Record flaky failures and reruns honestly and track their repair; never bypass
+  required hooks or checks. Worker reports and green local checks are intermediate
+  results. Retain real exit codes; after an interruption inspect task, Git and
+  remote-ref state before retrying. Before ending a turn with pending work,
+  establish an app-owned continuation (a running tool or a PR watch).
 
 ## Branches, review and completion
 
 - Read docs/design/review-workflow.md before push, PR creation, review and merge.
 - One feature branch per milestone, written only by its main thread; steps arrive
-  as pushed commits without step PRs, and CI runs on every pushed head. The closing
+  as pushed commits without step PRs. The draft closing PR opens with the first
+  push, so CI runs on every pushed head. The closing
   PR integrates the complete milestone into main and lists every completed issue
   with Closes.
 - Merge main into feature branches; never rebase or force-push shared history.
@@ -169,11 +145,10 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 
 - Pre-commit checks publication and structure against staged blobs and policies.
 - Stage new files before checks. core.hooksPath must be .githooks. Before push run
-  focused tests of the touched modules; the pre-push hook runs pnpm run lint
-  (publication, structure, migrations, Go vet, web lint and typechecks). CI runs the
-  full lint, test and build on every pushed head of main and feature/** (feature
-  pushes compare with their main merge base) and on PRs; while a closing PR is
-  open, a feature push also runs the PR merge-result check.
+  focused tests of the touched modules; the pre-push hook runs the push subset of
+  lint (publication, structure, migrations, API contract, Go formatting and web
+  typecheck). CI runs the full lint, test and build once per pushed head: on main
+  pushes and on PRs, which compare with their base and check the merge result.
 - Text-only changes use scripts/change-scope.mjs: Markdown outside executable
   paths, root LICENSE/NOTICE and LICENSES. A release train that adds only the next
   X.Y.Z version and its provenance hash and note counts as text. Reduced checks still
