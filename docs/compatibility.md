@@ -65,10 +65,11 @@ candidates; the hub shows their candidate scans without counts.
 
 Contract 23 adds the update eligibility read, which explains before any update
 dialog why an image cannot be updated, and the agent's effective user and group
-IDs in onboarding. Agents on contract 18 to 22 keep updating; for them the hub
-shows no explanation before a refusal, and the local agent check cannot name an
-unwritable project directory. Proxy adoption, the container update check and
-the per-host update check run on the hub.
+IDs in onboarding. Agents on contract 18 to 22 keep updating without a
+pre-update eligibility explanation. Their onboarding reports still show
+project-directory write access and can warn when it is unavailable; their
+effective user and group IDs remain unknown. Proxy adoption, the container
+update check and the per-host update check run on the hub.
 
 Each Edge peer advertises its own protocol marker. A missing, malformed or
 duplicate marker counts as protocol 1. This release records the marker without
