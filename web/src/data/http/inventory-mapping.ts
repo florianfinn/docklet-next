@@ -13,6 +13,7 @@ import type { ContainerInfo, ContainerState, Health, ImageVersion, InventoryObse
 import { SYSTEM_LABEL, systemRole } from "@/domain/system";
 import { mapUpdateInfo } from "./update-mapping";
 import { composeProjectOwner } from "./project-ownership";
+import { representableId } from "./row-isolation";
 
 export type ProjectRow = components["schemas"]["ProjectDetails"];
 export type ContainerRow = components["schemas"]["ContainerSummary"];
@@ -53,7 +54,7 @@ function mountSpec(mount: NonNullable<ContainerRow["mounts"]>[number]): string {
   return source ? `${source}:${mount.destination}${mount.rw === false ? ":ro" : ""}` : mount.destination;
 }
 export function mapContainer(row: ContainerRow, hostId: string, projects: ProjectRow[], inventory: InventoryObservation): InventoryContainer {
-  if (!row || !row.id || !Array.isArray(row.names) || !row.names[0] || typeof row.state !== "string" || typeof row.status !== "string") throw new Error("inventory.invalid-container");
+  if (!row || !representableId(row.id) || !Array.isArray(row.names) || typeof row.names[0] !== "string" || !row.names[0] || typeof row.state !== "string" || typeof row.status !== "string") throw new Error("inventory.invalid-container");
   const labels = row.labels ?? {};
   const project = labels["com.docker.compose.project"];
   const service = labels["com.docker.compose.service"];
@@ -91,7 +92,7 @@ export function stackAddress(urls: readonly string[] | null | undefined): string
 }
 
 export function mapStack(row: ProjectRow, hostId: string, containers: ContainerInfo[], inventory: InventoryObservation): Stack {
-  if (!row?.id || !row.name || typeof row.status !== "string") throw new Error("inventory.invalid-project");
+  if (!representableId(row?.id) || typeof row.name !== "string" || !row.name || typeof row.status !== "string") throw new Error("inventory.invalid-project");
   if (row.updateInfo) checkResult(row.updateInfo);
   const incomplete = !!row.updateInfo && (row.updateInfo.checkedImageCount < row.updateInfo.imageCount || row.updateInfo.errorCount > 0 || row.updateInfo.imagesNotPulled > 0);
   const members = containers.filter((item) => item.stackId === inventoryId(hostId, row.id));

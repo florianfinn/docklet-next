@@ -15,7 +15,7 @@ import { AdapterOutcomeError } from "@/data/capability";
 import type { Host, InventoryObservation, Topology } from "@/domain/model";
 import { splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
-import { mapImage, mapTopology, mapVolumes } from "./resource-mapping";
+import { mapImage, mapTopology, mapVolumes, networkKey } from "./resource-mapping";
 import { isMaintenanceError } from "../maintenance-retry";
 import { representableId, rowCollector, withUnreadable, type RowCollector } from "./row-isolation";
 
@@ -140,18 +140,22 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
           const ctx = contextual.status === "fulfilled" ? contextual.value : { containers: [], projects: [], observations: [inventoryFailure(h.id, contextual.reason)] };
           // A summary without a representable identity is left out and counted before any detail read (#600).
           const networkRows = rowCollector("networks");
-          const summaries = networkRows.each(networks.rows, (summary) => { if (!representableId(summary?.id)) throw new Error("inventory.invalid-network"); return summary; }, (summary) => summary?.name);
+          const summaries = networkRows.each(networks.rows, (summary) => { if (!representableId(summary?.id)) throw new Error("inventory.invalid-network"); return summary; }, (summary) => summary?.name, networkKey);
           const details = await Promise.all(summaries.map(async (summary) => {
+            let detail: Awaited<ReturnType<typeof read<"get-network">>>;
+            try { detail = await read("get-network", h.id, `networks/${encodeURIComponent(summary.id)}`); }
+            catch (error) { if (isMaintenanceError(error)) throw error; return { row: summary, observation: inventoryFailure(h.id, error), unavailable: true }; }
             try {
-              const detail = await read("get-network", h.id, `networks/${encodeURIComponent(summary.id)}`);
-              if (detail.body.data.id !== summary.id) throw new Error("inventory.invalid-network");
+              if (detail.body.data?.id !== summary.id) throw new Error("inventory.invalid-network");
               // Invalid detail projections are local to this listed identity, too.
               const check = rowCollector("networks");
               mapTopology([detail.body.data], h.id, [], ctx.projects, detail.observation, [summary], undefined, check);
-              if (check.result().count > 0) throw new Error("inventory.invalid-network");
+              if (check.result().count > 0) throw new Error(check.result().codes[0] ?? "inventory.invalid-network");
               return { row: detail.body.data, observation: detail.observation, unavailable: false };
             } catch (error) {
-              if (isMaintenanceError(error)) throw error; return { row: summary, observation: inventoryFailure(h.id, error), unavailable: true };
+              // A detail that cannot be read counts once under networks; its summary still shows the network (#600).
+              networkRows.one(summary, () => { throw error; }, (row) => row.name, networkKey);
+              return { row: summary, observation: inventoryFailure(h.id, error), unavailable: true };
             }
           }));
           const base = combine([...ctx.observations, networks.observation, ...details.filter((d) => !d.unavailable).map((d) => d.observation)]);

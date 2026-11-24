@@ -28,7 +28,16 @@ A broken or unusual row affects only itself.
   (`representableId`, the same rule as `inventoryId`). A project row also needs a
   string name (`readableProject`). An unreadable project never wins Compose
   ownership, so it cannot fail every Compose container on the host. A network
-  summary without such an ID is left out and counted before any detail read.
+  summary without such an ID is left out and counted before any detail read, and
+  a container without one is never matched as a dependency target.
+- **Every mapper checks its own row first.** A row's identity must be
+  representable and the name it displays must be non-empty text; otherwise the
+  row is unreadable. This holds for list rows and for stack details of
+  administrators and assigned users alike.
+- **One physical row counts once.** A reader counts a row under its kind once,
+  even when several of its parts fail (for example a network's summary and its
+  inspected detail). A network whose detail cannot be read still shows from its
+  summary and is counted.
 - **Counts are visible.** The host observation carries
   `unreadable[kind] = {count, codes, names}`. A count of 0 clears its kind, and
   other kinds keep their counts.
@@ -91,7 +100,10 @@ No wire change. The web model gains `Service.buildOnly` and
 | 11 | detail | unrelated null project; requested row without name or with malformed runtime entries | detail readable / `get-project.unreadable` | same | unguarded find, no readable check, unguarded runtime scan |
 | 12 | external data | null bind metadata row | every volume stays; counted under volumes | same | map bind rows without the collector |
 | 13 | shared state | consumer, placement and metrics failures | counted under the owning kind; recovery clears | same | discard the collector / invalid sample counted |
-| 14 | migration | none | — | — | — |
+| 14 | shared context | dependency target with `~` in its id | healthy dependencies stay | same | match unvalidated targets |
+| 15 | detail | stack detail name not text (administrator, assigned user) | `get-project.unreadable` | same | truthy name check |
+| 16 | shared state | malformed network detail; summary and detail of one row both fail | counted once under networks | same | drop the detail count / the row key |
+| 17 | migration | none | — | — | — |
 
 ## Acceptance cells
 

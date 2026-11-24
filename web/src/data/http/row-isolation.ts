@@ -19,9 +19,12 @@ const MAX_NAMES = 8;
 
 export interface RowCollector {
   readonly kind: UnreadableKind;
-  /** Maps one row; a throw is recorded for this row only. `name` labels the row in the notice when it is readable. */
-  one<T, R>(row: T, map: (row: T) => R, name?: (row: T) => unknown): R | undefined;
-  each<T, R>(rows: readonly T[], map: (row: T) => R, name?: (row: T) => unknown): R[];
+  /**
+   * Maps one row; a throw is recorded for this row only. `name` labels the row in the notice when it is readable.
+   * `key` names the physical row: a second failure with the same key is not counted again.
+   */
+  one<T, R>(row: T, map: (row: T) => R, name?: (row: T) => unknown, key?: (row: T) => string | undefined): R | undefined;
+  each<T, R>(rows: readonly T[], map: (row: T) => R, name?: (row: T) => unknown, key?: (row: T) => string | undefined): R[];
   result(): UnreadableRows;
 }
 
@@ -29,11 +32,15 @@ export function rowCollector(kind: UnreadableKind): RowCollector {
   let count = 0;
   const codes: string[] = [];
   const names: string[] = [];
+  const seen = new Set<string>();
   const collector: RowCollector = {
     kind,
-    one(row, map, name) {
+    one(row, map, name, key) {
       try { return map(row); }
       catch (error) {
+        let id: string | undefined;
+        try { id = key?.(row); } catch { id = undefined; }
+        if (id !== undefined) { if (seen.has(id)) return undefined; seen.add(id); }
         count += 1;
         const code = error instanceof Error && CODE.test(error.message) ? error.message : "inventory.mapping-error";
         if (!codes.includes(code)) codes.push(code);
@@ -43,10 +50,10 @@ export function rowCollector(kind: UnreadableKind): RowCollector {
         return undefined;
       }
     },
-    each(rows, map, name) {
+    each(rows, map, name, key) {
       const out: ReturnType<typeof map>[] = [];
       for (const row of rows) {
-        const value = collector.one(row, map, name);
+        const value = collector.one(row, map, name, key);
         if (value !== undefined) out.push(value);
       }
       return out;

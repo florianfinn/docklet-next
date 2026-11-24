@@ -260,6 +260,54 @@ describe("#600 context rows and reader ownership", () => {
   });
 });
 
+/** Rewrites the data of one response path. */
+function alter(f: ReturnType<typeof resourceFixture>, path: string, change: (data: never) => unknown) {
+  const original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (input) => {
+    const response = await original(input);
+    if (new URL(String(input), "https://hub.example.com").pathname !== path || response.status !== 200) return response;
+    const body = await response.json();
+    return new Response(JSON.stringify({ ...body, data: change(body.data as never) }), { status: 200, headers: response.headers });
+  });
+}
+
+describe("#600 own-row identity, context targets and single counting", () => {
+  it("a dependency target whose id cannot be represented never suppresses a healthy dependency", async () => {
+    const f = resourceFixture(); alter(f, "/api/environments/second/containers", (rows: unknown[]) => [rows[0], { ...(rows[1] as object), id: "bad~id" }, rows[1]]);
+    const graph = await f.adapter.getTopology();
+    expect(graph.dependencies.filter((d) => d.from === "second~web")).toEqual([{ from: "second~web", to: "second~db" }]);
+    expect((await unreadableOf(f))?.networks?.count).toBe(1);
+  });
+
+  it("counts a malformed network detail once under networks while its summary keeps the network", async () => {
+    const f = resourceFixture(); const healthy = f.fetcher.getMockImplementation()!;
+    alter(f, "/api/environments/second/networks/net", (row: object) => ({ ...row, ipam: null }));
+    const graph = await f.adapter.getTopology();
+    expect(graph.networks.some((n) => n.id === "second~net")).toBe(true);
+    expect((await unreadableOf(f))?.networks?.count).toBe(1);
+    f.fetcher.mockImplementation(healthy);
+    await f.adapter.getTopology();
+    expect(await unreadableOf(f)).toBeUndefined();
+  });
+
+  it("counts one network row once when its summary and its detail both fail", async () => {
+    const f = resourceFixture();
+    alter(f, "/api/environments/second/networks/net", (row: object) => ({ ...row, ipam: null }));
+    alter(f, "/api/environments/second/networks", (rows: { id: string }[]) => rows.map((row) => row.id === "net" ? { ...row, name: undefined } : row));
+    const graph = await f.adapter.getTopology();
+    expect(graph.networks.some((n) => n.id === "second~net")).toBe(false);
+    expect((await unreadableOf(f))?.networks?.count).toBe(1);
+  });
+
+  it("reports an administrator stack detail or list row whose own name is not text as unreadable", async () => {
+    const f = resourceFixture(); alter(f, "/api/environments/second/projects/project", (row: object) => ({ ...row, name: 42 }));
+    await expect(f.adapter.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "get-project.unreadable" } });
+    const listed = resourceFixture(); inject(listed, "/api/environments/second/projects", [{ id: "project", name: { text: "app" }, status: "running" }], "replace");
+    await listed.adapter.listStacks();
+    expect((await unreadableOf(listed))?.stacks?.count).toBe(1);
+  });
+});
+
 describe("#600 visible unreadable state", () => {
   afterEach(() => { setPreference("hostSelection", []); setAppLocale("de"); });
   const broken = { count: 1, codes: ["inventory.invalid-project"], names: ["proxy"] };
@@ -305,5 +353,17 @@ describe("#600 assigned-user reader", () => {
       ? new Response(JSON.stringify({ success: true, data: { id: "broken-project", status: "running" } }), { headers: { "Content-Type": "application/json", "X-Docklet-Observed-At": "2026-10-17T12:00:00Z" } })
       : original(input));
     await expect(user.getStack("second~broken-project")).rejects.toMatchObject({ outcome: { code: "get-project.unreadable" } });
+  });
+
+  it("reports an assigned stack detail whose own name is not text as unreadable", async () => {
+    const f = resourceFixture();
+    const hosts = await f.adapter.listHosts();
+    const principal = () => ({ id: "u", username: "user", requiresPasswordChange: false, isAdmin: false, locale: null, assignments: [{ environmentId: "second", projectId: "project", level: "restricted" }] }) as never;
+    const user = createUserInventory("/api", f.fetcher as typeof fetch, async () => hosts, principal, () => undefined, async () => new Map());
+    const original = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (input) => new URL(String(input), "https://hub.example.com").pathname === "/api/environments/second/projects/project/runtime"
+      ? new Response(JSON.stringify({ success: true, data: { id: "project", name: 42, status: "running" } }), { headers: { "Content-Type": "application/json", "X-Docklet-Observed-At": "2026-10-17T12:00:00Z" } })
+      : original(input));
+    await expect(user.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "get-project.unreadable" } });
   });
 });
