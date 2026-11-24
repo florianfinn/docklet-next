@@ -17,6 +17,7 @@ import { createDisconnectedAdapter } from "@/data/disconnected-adapter";
 import { createHttpAdapter } from "@/data/http/http-adapter";
 import { AdapterContext } from "@/data/use-adapter";
 import { useHubVersionHint } from "@/data/queries";
+import { queryKeys } from "@/data/query-keys";
 import type { DockletAdapter } from "@/data/adapter";
 import { SidebarProvider } from "@/shared/ui/sidebar";
 import { TooltipProvider } from "@/shared/ui/tooltip";
@@ -24,12 +25,13 @@ import { renderRoutes } from "@/test/render";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => { cleanup(); cleanups.splice(0).forEach(f => f()); vi.useRealTimers(); });
-function hintFixture(admin: boolean | undefined = true, kind: DockletAdapter["kind"] = "http") {
+// "pending" keeps the identity read open; an explicit undefined would take the default and sign in an admin.
+function hintFixture(admin: boolean | "pending" = true, kind: DockletAdapter["kind"] = "http") {
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "https://hub.example.com").pathname;
     const json = (data: unknown) => new Response(JSON.stringify(data), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
     if (path.endsWith("/auth/mode")) return json({ success: true, data: { mode: "none" } });
-    if (path.endsWith("/auth/me")) return admin === undefined ? new Promise<Response>(() => {}) : json({ success: true, data: { id: "admin", username: "operator", requiresPasswordChange: false, isAdmin: admin } });
+    if (path.endsWith("/auth/me")) return admin === "pending" ? new Promise<Response>(() => {}) : json({ success: true, data: { id: "admin", username: "operator", requiresPasswordChange: false, isAdmin: admin } });
     if (path.endsWith("/app-version")) return json({ updateAvailable: true, newestVersion: "1.0.1" });
     return json({ success: true, data: [] });
   });
@@ -39,10 +41,13 @@ function hintFixture(admin: boolean | undefined = true, kind: DockletAdapter["ki
   return { adapter, fetcher, client };
 }
 function Probe() { return <p>{useHubVersionHint() ?? "no hint"}</p>; }
-it.each([[false, "http"], [undefined, "http"], [true, "demo"], [true, "disconnected"]] as const)("B10 hint makes zero version requests for admin=%s kind=%s", async (admin, kind) => {
+it.each([[false, "http"], ["pending", "http"], [true, "demo"], [true, "disconnected"]] as const)("B10 hint makes zero version requests for admin=%s kind=%s", async (admin, kind) => {
   const f = hintFixture(admin, kind);
   render(<AdapterContext.Provider value={f.adapter}><QueryClientProvider client={f.client}><Probe /></QueryClientProvider></AdapterContext.Provider>);
-  await act(async () => {}); expect(f.adapter.getHubVersionHint).not.toHaveBeenCalled(); expect(f.fetcher.mock.calls.filter(([path]) => String(path).endsWith("/app-version"))).toHaveLength(0);
+  // Wait for the identity answer (or its open request), then let a newly enabled query dispatch.
+  if (kind === "http" && admin === "pending") await waitFor(() => expect(f.fetcher.mock.calls.some(([path]) => String(path).endsWith("/auth/me"))).toBe(true));
+  if (kind === "http" && admin === false) await waitFor(() => expect(f.client.getQueryData<{ isAdmin?: boolean }>(queryKeys.currentUser)?.isAdmin).toBe(false));
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); }); expect(f.adapter.getHubVersionHint).not.toHaveBeenCalled(); expect(f.fetcher.mock.calls.filter(([path]) => String(path).endsWith("/app-version"))).toHaveLength(0);
   expect(screen.queryByText("no hint") !== null).toBe(true);
 });
 it("B10 hint is hidden while a hub update runs", async () => {
