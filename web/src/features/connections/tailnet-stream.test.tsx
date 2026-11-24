@@ -207,3 +207,15 @@ it("lets a catalogue read after the latest frame show the newer peer state", asy
   await waitFor(() => expect(dialog.querySelector('[data-link="peer"]')?.getAttribute("data-state")).toBe("failed"));
   expect(notify).toHaveBeenLastCalledWith("Example agent disconnected: Agent in the tailnet.");
 });
+
+it("applies the host rows of a frame whose tailnet status breaks the contract, and keeps the last status", async () => {
+  const f = tailnetFixture();
+  renderWithApp(<Hosts />, f.adapter);
+  await screen.findByRole("link", { name: /Tailscale: Connected · 1 host/ });
+  const rows = [{ ...peerHost, status: "offline", tailnet: { ...peerHost.tailnet!, state: "offline" as const, failingLink: "peer" } }];
+  let thrown = false;
+  try { await act(async () => f.send({ ...connectedStatus(), hostCount: 2, connection: undefined } as never, rows)); } catch { thrown = true; }
+  expect(thrown).toBe(false);
+  await screen.findByRole("button", { name: "Show cause" });
+  expect(screen.queryByRole("link", { name: /Tailscale: Connected · 1 host/ }) !== null).toBe(true);
+});

@@ -95,9 +95,10 @@ export function createTailnet(baseUrl: string, client: CsrfClient, identity: () 
     ++testEpoch; ++streamEpoch; ++revision; peers.clear();
     if (current) await status();
   }
+  /** A stream frame that violates the contract is skipped on its own; request paths stay strict. */
   function observeStream(next: TailnetStatus): boolean {
     for (const write of writes) if (write.epoch === streamEpoch && next.generation <= write.floor) return false;
-    return observe(next);
+    try { return observe(next); } catch { return false; }
   }
   return { api, observe: observeStream, observeHosts, frame: () => frame, project, reconnect, clear: () => { ++testEpoch; ++revision; peers.clear(); lifetime.abort(); lifetime = new AbortController(); current = undefined; notify(); } };
 }

@@ -75,7 +75,7 @@ function TailnetForm({ settings, setup, onContinue, onSkip, connectionLabel }: {
       </div>
     </header>
     {mtls && <p role="alert" className="border-b p-4 text-sm text-warning">{t("mtls")}</p>}
-    {rejected && <div role="alert" className="border-b p-4 text-sm text-destructive"><p>{t(tagRefusal ? "tags-not-permitted" : connected ? "rejected" : "rejectedDisconnected")}</p>{tagRefusal?.refusedTags?.length ? <p className="font-mono">{t("steps.refusedTags", { tags: tagRefusal.refusedTags.join(", ") })}</p> : null}{!connected && <p>{t("steps.joinRetry")}</p>}{status.provisioning.providerStatus && <p>{t("providerStatus", { status: status.provisioning.providerStatus })}</p>}</div>}
+    {rejected && <div role="alert" className="border-b p-4 text-sm text-destructive"><p>{t(tagRefusal ? "tags-not-permitted" : connected ? "rejected" : "rejectedDisconnected")}</p>{tagRefusal?.refusedTags?.length ? <p className="font-mono">{t("steps.refusedTags", { tags: tagRefusal.refusedTags.join(", ") })}</p> : null}<p>{t("steps.joinRetry")}</p>{status.provisioning.providerStatus && <p>{t("providerStatus", { status: status.provisioning.providerStatus })}</p>}</div>}
     {status.provisioning.state === "checking" && <p role="status" className="p-4 text-sm">{t("checking")}</p>}
     {status.provisioning.state === "unavailable" && <p role="status" className="border-b p-4 text-sm">{wire("codes.provider-unavailable")}</p>}
     {(connected || status.connection.state === "control-unreachable") && <dl className="grid min-w-0 gap-2 border-b p-4 text-sm sm:grid-cols-[10rem_minmax(0,1fr)]">

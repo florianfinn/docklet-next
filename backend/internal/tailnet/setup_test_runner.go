@@ -22,7 +22,7 @@ func (m *Manager) Test(ctx context.Context) (dto.TestResult, error) {
 	}
 	defer m.testMu.Unlock()
 	m.mu.Lock()
-	cred, revision := m.cred, m.credentialRevisionLocked()
+	cred, revision, gen := m.cred, m.credentialRevisionLocked(), m.gen
 	m.mu.Unlock()
 	out := dto.TestResult{CredentialRevision: revision, Checks: []dto.TestCheck{
 		{ID: "credential", State: "skipped"}, {ID: "agent-key", State: "skipped"}, {ID: "cleanup", State: "skipped"},
@@ -33,9 +33,13 @@ func (m *Manager) Test(ctx context.Context) (dto.TestResult, error) {
 		cancel()
 		out.Checks[0] = providerCheck("credential", err, dto.CodeProviderUnavailable)
 		if err == nil {
+			seq := m.beginProvisioning()
 			mintCtx, stop := context.WithTimeout(ctx, providerTimeout)
 			id, mintErr := m.cfg.Provisioner.MintTestKey(mintCtx, token)
 			stop()
+			// The test mints the same host key the route mints: its answer (ok or a definite refusal)
+			// is the provisioning state for this credential, so a passing test clears an earlier refusal.
+			m.recordProvisioning(gen, seq, cred, mintErr, false)
 			out.Checks[1] = providerCheck("agent-key", mintErr, dto.CodeProviderUnavailable)
 			switch {
 			case mintErr != nil:
