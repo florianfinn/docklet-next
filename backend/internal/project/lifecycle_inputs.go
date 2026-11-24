@@ -302,7 +302,8 @@ func lifecycleVersionFiles(snapshot *life.Snapshot, selections []dto.ImageSelect
 	found := false
 	for i, f := range desired.Files {
 		if f.Path == primary {
-			// The resolved model cannot prove an interpolated source was literal.
+			// The resolved model cannot prove an interpolated source was literal. Only the
+			// selected services are written; an unselected interpolated image stays as it is.
 			var document yaml.Node
 			if yaml.Unmarshal(f.Content, &document) != nil {
 				return nil, bindingFailure("", "unparsable")
@@ -310,6 +311,9 @@ func lifecycleVersionFiles(snapshot *life.Snapshot, selections []dto.ImageSelect
 			serviceMap := lifecycleYAMLField(document.Content[0], "services", 0)
 			if serviceMap != nil {
 				for j := 0; j+1 < len(serviceMap.Content); j += 2 {
+					if _, selected := validations[serviceMap.Content[j].Value]; !selected {
+						continue
+					}
 					image := lifecycleYAMLField(serviceMap.Content[j+1], "image", 0)
 					if image != nil && strings.Contains(image.Value, "$") {
 						return nil, referenceBindingFailure(serviceMap.Content[j].Value, image.Value)
