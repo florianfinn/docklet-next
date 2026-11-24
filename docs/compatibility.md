@@ -3,7 +3,7 @@ Source: docklet-next/issues/363
 Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 Retrieved: 2026-11-09
 License: Apache-2.0
-Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472); agent contract 21 (#568); agent contract 22 (#586).
+Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472); agent contract 21 (#568); agent contract 22 (#586); agent contract 23 (#602).
 -->
 
 # Compatibility
@@ -31,14 +31,14 @@ that external Compose version. Updates require the supported layout described in
 
 | Boundary | This release |
 | --- | --- |
-| Agent contract advertised by hub and agent (`AgentHubVersion`) | `22` |
+| Agent contract advertised by hub and agent (`AgentHubVersion`) | `23` |
 | Minimum accepted agent contract (`MinimumAgentVersion`) | `18` |
 | Edge protocol marker | `edge-protocol/1` |
 | Minimum Edge marker value | `1` |
 
 Contract numbers are wire-contract versions, not product SemVer. Agents with
 contracts older than 18 cannot become compatible hosts; the hub reports
-`update-required` and `agent.update-required`. Contracts 18 to 22 must also have
+`update-required` and `agent.update-required`. Contracts 18 to 23 must also have
 their expected schema fingerprints. Health/version reads and the agent update
 recovery routes remain available with authentication. This is the first release
 compatibility boundary for both Direct and Edge agents.
@@ -62,6 +62,13 @@ reporting the generic reason, and the hub shows the generic hint for them.
 Contract 22 adds the read of a retained candidate scan run, which supplies the
 final counts of a candidate scan. Agents on contract 18 to 21 keep scanning
 candidates; the hub shows their candidate scans without counts.
+
+Contract 23 adds the update eligibility read, which explains before any update
+dialog why an image cannot be updated, and the agent's effective user and group
+IDs in onboarding. Agents on contract 18 to 22 keep updating; for them the hub
+shows no explanation before a refusal, and the local agent check cannot name an
+unwritable project directory. Proxy adoption, the container update check and
+the per-host update check run on the hub.
 
 Each Edge peer advertises its own protocol marker. A missing, malformed or
 duplicate marker counts as protocol 1. This release records the marker without

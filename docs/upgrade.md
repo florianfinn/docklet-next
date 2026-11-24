@@ -145,6 +145,13 @@ Upgrading to 1.5.0: there is no migration and no new environment variable. Updat
 every agent to 1.5.0 afterwards. Agents on contract 18 to 21 keep working; their
 candidate scans show no counts until they are updated.
 
+Upgrading to 1.6.0: there is no migration and no new environment variable. Update
+every agent to 1.6.0 afterwards. Agents on contract 18 to 22 keep working; they
+show no update explanation before a refusal until they are updated. A Tailscale
+OAuth client with only `tag:docklet-hub` needs the owner chain from the setup
+policy snippet (`tag:docklet-hub` owns `tag:docklet-agent`); existing setups keep
+working.
+
 ## Recover a failed in-app update
 
 The helper keeps a per-operation backup beside the interpolation env file:
