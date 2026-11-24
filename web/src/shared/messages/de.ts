@@ -388,6 +388,15 @@ export const deCommon: typeof enCommon = {
     copy: "Kopieren",
     download: "Herunterladen",
   },
+  versionBadge: {
+    current: "{version} · aktuell",
+    available: "{version} verfügbar",
+    target: "→ {version}",
+    targetLabel: "{name} auf {version} aktualisieren",
+    development: "Entwicklung",
+    unknown: "Version unbekannt",
+    reasons: { "not-checked": "Update-Status nicht geprüft", checking: "Suche nach Updates", "check-failed": "Update-Prüfung fehlgeschlagen", "not-eligible": "Kein automatisches Update möglich" },
+  },
   services: {
     buildOnly: "Lokal gebaut · nicht erstellt",
     count: "{running}/{total}",

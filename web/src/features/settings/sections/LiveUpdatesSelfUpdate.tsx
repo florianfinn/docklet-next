@@ -2,10 +2,9 @@
 // Revision: 48f47c93878ecf1c27491d0214db80d5b38b547d
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original capability-gated Compose self-update controls and confirmation; M21 R1 host-named controls and settled-state polling; recheck refreshes the release list and shows its time.
+// Deviations: Original capability-gated Compose self-update controls and confirmation; M21 R1 host-named controls and settled-state polling; recheck refreshes the release list and shows its time. M40 #615 #616: shared identity-owned check read.
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router";
 import { useFormatter, useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
@@ -16,26 +15,24 @@ import { canSelfUpdate, selfUpdateCodeKey, selfUpdateRef, selfUpdateState } from
 import { openActivity } from "@/features/activity/activity-store";
 import { useImageError } from "@/features/images/use-image-error";
 import { useUpdateAction } from "@/shared/components/updates/use-update-action";
+import { useSelfUpdateCheck } from "@/shared/components/updates/use-self-update-check";
+import type { Host } from "@/domain/model";
 import { CodeBlock } from "@/shared/components/code-block";
 import { Button } from "@/shared/ui/button";
 import { Spinner } from "@/shared/ui/spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/shared/ui/dialog";
 
-export function LiveUpdatesSelfUpdate({ hostId, name }: { hostId: string; name?: string }) {
+export function LiveUpdatesSelfUpdate({ hostId, name, host }: { hostId: string; name?: string; host?: Pick<Host, "identity" | "agentVersion"> }) {
   const adapter = useAdapter(), all = useTranslations(), t = useTranslations("settings.updates.selfUpdate"), errorText = useImageError();
   const location = useLocation(), heading = useRef<HTMLHeadingElement>(null), button = useRef<HTMLButtonElement>(null), focusedFor = useRef<string>(undefined);
   const cap = useCapability("selfUpdate", selfUpdateRef(hostId));
-  const client = useQueryClient(), format = useFormatter(), queryKey = ["settings", "self-update", hostId];
-  const query = useQuery({ queryKey, queryFn: () => adapter.getSelfUpdate(hostId), enabled: cap.available,
-    // A live check reaches the agent; repeat it only while an operation is unsettled.
-    refetchInterval: (q) => q.state.data?.operation && q.state.data.operation.phase !== "settled" ? 10_000 : false });
+  const format = useFormatter(), { query, recheck: fetchFresh } = useSelfUpdateCheck(hostId, { host, enabled: cap.available });
   const [confirm, setConfirm] = useState<string>(), [started, setStarted] = useState<string>();
   const [rechecking, setRechecking] = useState(false), [checkedAt, setCheckedAt] = useState<Date>();
-  // An explicit recheck asks the hub for a fresh release list; the query state shows a failure.
   const recheck = async () => {
     setRechecking(true);
     try {
-      await client.fetchQuery({ queryKey, queryFn: () => adapter.getSelfUpdate(hostId, { refresh: true }), staleTime: 0 });
+      await fetchFresh();
       setCheckedAt(new Date());
     } catch { setCheckedAt(undefined); } finally { setRechecking(false); }
   };

@@ -387,6 +387,15 @@ export const enCommon = {
     copy: "Copy",
     download: "Download",
   },
+  versionBadge: {
+    current: "{version} · current",
+    available: "{version} available",
+    target: "→ {version}",
+    targetLabel: "Update {name} to {version}",
+    development: "Development",
+    unknown: "Version unknown",
+    reasons: { "not-checked": "Update status not checked", checking: "Checking for updates", "check-failed": "Update check failed", "not-eligible": "No automatic update available" },
+  },
   services: {
     buildOnly: "Built locally · not created",
     count: "{running}/{total}",

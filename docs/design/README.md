@@ -27,6 +27,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Per-row inventory isolation](inventory-row-isolation.md) | M38 decision: build-only services, one unreadable row never empties a host, visible unreadable counts |
 | [Simpler everyday use](everyday-use.md) | Truthful update and run feedback, fewer confirmations, readable phone lists (M35) |
 | [In-app updates](app-updates.md) | Narrow Compose helper, correlated hub/agent operations, frozen recovery contract and manual failure recovery |
+| [Update version badges](update-version-badges.md) | M40 decision: one shared self-update check for Settings and host cards, identity-owned cache, check-version authority, compact panel |
 | [Images and updates](images-updates.md) | Host image guards, safe registry credentials, update policies, scheduled apply, restore points and lifecycle prerequisites |
 | [Image identity and initial update reads](images-updates-identity.md) | Classic/containerd identity, initial policy/schedule/baseline DTOs, producer fixtures and candidate regression proofs |
 | [Observed updates and recovery](scheduled-update-recovery.md) | Two-minute observation, opt-in manual checks, container/stack recovery, outcomes, limits and failed-candidate suppression |

@@ -72,7 +72,7 @@ function UpdateForm({ value, refresh }: { value: UpdateSettings & { timeZone: st
     <Field orientation="horizontal"><Switch id="update-notify" checked={d.notify} disabled={!cap.available} onCheckedChange={(notify) => draft.patch({ notify })} /><div><FieldLabel htmlFor="update-notify">{t("notify")}</FieldLabel><FieldDescription>{t("notifyHint")}</FieldDescription></div></Field>
     <section id={UPDATE_POLICIES_ANCHOR} tabIndex={-1} className="flex min-w-0 scroll-mt-24 flex-col gap-4"><h3 className="text-sm font-semibold">{t("table")}</h3>{hosts.isError && <QueryError error={hosts.error} onRetry={() => void hosts.refetch()} />}{hosts.data && <PoliciesTable hosts={hosts.data} timeZone={value.timeZone} />}<p className="text-xs text-muted-foreground">{t("excluded")}</p></section>
     <NotificationsPointer />
-    {hosts.data?.map((h) => <HostUpdateSettings key={h.id} hostId={h.id} name={h.name} />)}
+    {hosts.data?.map((h) => <HostUpdateSettings key={h.id} hostId={h.id} name={h.name} host={h} />)}
     </FieldGroup>
   </SettingsForm>;
 }

@@ -2,7 +2,7 @@
 // Revision: 48f47c93878ecf1c27491d0214db80d5b38b547d
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original browser self-update model and frozen DTO validation; M21 R1 version comparison.
+// Deviations: Original browser self-update model and frozen DTO validation; M21 R1 version comparison. M40 #615 #616: version badge model and host update anchors.
 
 import type { components } from "@/api/generated/schema";
 import { SELF_UPDATE_CODE_KEYS, SELF_UPDATE_STATE_KEYS, SELF_UPDATE_PHASE_KEYS, SELF_UPDATE_OUTCOME_KEYS } from "@/data/wire-catalogue-self-update";
@@ -32,4 +32,30 @@ export function validSelfUpdateCheck(value: SelfUpdateCheck): boolean {
     && (!op || typeof op.opId === "string" && !!op.opId && typeof op.targetVersion === "string"
       && typeof op.helperRunning === "boolean" && !!wireKey(SELF_UPDATE_PHASE_KEYS, op.phase)
       && (!op.outcome || !!wireKey(SELF_UPDATE_OUTCOME_KEYS, op.outcome)));
+}
+
+/** Section anchor of a host's update panel in Settings › Updates; the hub keeps its established anchor. */
+export const hostUpdateAnchor = (host: string): string => host === "0" ? "hub-update" : `agent-update-${host}`;
+export const hostUpdateHref = (host: string): string => `/settings/updates#${host === "0" ? "hub-update" : `agent-update-${encodeURIComponent(host)}`}`;
+export const isHostUpdateHash = (host: string, hash: string): boolean => {
+  try { return decodeURIComponent(hash.replace(/^#/, "")) === hostUpdateAnchor(host); } catch { return false; }
+};
+
+export type VersionTone = "current" | "outdated" | "neutral";
+export type VersionReason = "not-checked" | "checking" | "check-failed" | "not-eligible";
+export interface VersionBadgeModel { installed?: string; tone: VersionTone; target?: string; reason?: VersionReason }
+const display = (version?: string): string | undefined => version ? version.replace(/^v(?=\d)/, "") : undefined;
+/**
+ * Badge pair for one host. Only a successful check of the current registration decides tone and target, and
+ * then its own version is the installed one; otherwise the reported version stays neutral. Inputs are read only.
+ */
+export function versionBadgeModel({ reported, check, status, allowed }: { reported?: string; check?: SelfUpdateCheck; status: "off" | "pending" | "error" | "success"; allowed: boolean }): VersionBadgeModel {
+  if (!allowed || status !== "success" || !check) {
+    const reason: VersionReason | undefined = !allowed ? undefined : status === "pending" ? "checking" : status === "error" ? "check-failed" : "not-checked";
+    return { installed: display(reported), tone: "neutral", ...(reason ? { reason } : {}) };
+  }
+  const installed = display(check.version) ?? display(reported), state = check.eligibility.state;
+  if (state === "current") return { installed, tone: "current" };
+  if (state === "available" && check.eligibility.candidate?.version) return { installed, tone: "outdated", target: display(check.eligibility.candidate.version) };
+  return { installed, tone: "neutral", reason: state === "checking" ? "checking" : state === "unavailable" ? "check-failed" : "not-eligible" };
 }
