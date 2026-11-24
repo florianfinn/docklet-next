@@ -19,7 +19,7 @@ import { inventoryId, splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapVolumes } from "./resource-mapping";
 import { isMaintenanceError } from "../maintenance-retry";
-import { rowCollector, withUnreadable, type RowCollector } from "./row-isolation";
+import { representableId, rowCollector, withUnreadable, type RowCollector } from "./row-isolation";
 
 type Read = "get-volume" | "get-volume-sizes" | "list-volume-binds";
 // The host-wide size scan (Docker disk usage) can take minutes on large hosts; a volume detail waits this long
@@ -54,11 +54,15 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
     for (const leg of [containers, projects]) if (leg.status === "rejected" && isMaintenanceError(leg.reason)) throw leg.reason;
     return { containers: containers.status === "fulfilled" ? containers.value.rows : [], projects: projects.status === "fulfilled" ? projects.value.rows : [] };
   }
-  function supplement(volume: Volume, row: Schema["VolumeVolume"], hostId: string): Volume {
-    for (const raw of row.containers ?? []) {
+  /** Docker's usage list references containers: one entry that cannot be read is left out and counted once (#600). */
+  function supplement(volume: Volume, row: Schema["VolumeVolume"], hostId: string, unreadable: RowCollector = rowCollector("volumes")): Volume {
+    const users = row.containers ?? [];
+    if (!Array.isArray(users)) throw new Error("inventory.invalid-volume");
+    unreadable.each(users, (raw) => {
+      if (!representableId(raw)) throw new Error("inventory.invalid-consumer");
       const id = inventoryId(hostId, raw);
       if (!volume.consumers.some((c) => c.containerId === id)) volume.consumers.push(Object.assign({ containerId: id, containerName: raw, target: "", readOnly: false, running: false }, { runningUnavailable: true }));
-    }
+    }, (raw) => raw, (raw) => typeof raw === "string" ? `container:${raw}` : undefined);
     return volume;
   }
   function map(row: Schema["VolumeVolume"], hostId: string, ctx: Awaited<ReturnType<typeof context>>, inventory: InventoryObservation): Volume {
@@ -108,7 +112,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
             const rows = mapVolumes(volumes.rows, host.id, ctx.containers, ctx.projects, volumes.observation, volumeRows);
             const byName = new Map(volumes.rows.flatMap((row) => typeof row?.name === "string" ? [[row.name, row] as const] : []));
             // Supplementing one volume with the Docker usage list never drops another volume (#600).
-            const mapped = rows.map((v) => v.kind === "volume" ? volumeRows.one(v, (v) => supplement(v, byName.get(v.name)!, host.id), (v) => v.name) ?? v : volumeRows.one(v, (v) => withBind(v, binds), (v) => v.name) ?? v);
+            const mapped = rows.map((v) => v.kind === "volume" ? volumeRows.one(v, (v) => supplement(v, byName.get(v.name)!, host.id, volumeRows), (v) => v.name) ?? v : volumeRows.one(v, (v) => withBind(v, binds), (v) => v.name) ?? v);
             const combined = await decorate(host.id, mapped, signal);
             signal.throwIfAborted(); check();
             return { combined, observation: withUnreadable(volumes.observation, volumeRows) };

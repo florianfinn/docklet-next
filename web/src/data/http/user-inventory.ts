@@ -10,7 +10,7 @@ import { inventoryReadBudget } from "./host-read-deadline";
 import type { CurrentUser } from "../api";
 import type { DockletAdapter } from "../adapter";
 import { AdapterOutcomeError } from "../capability";
-import type { Host, InventoryObservation, Stack } from "@/domain/model";
+import type { Host, InventoryObservation } from "@/domain/model";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { createConditionReader, withConditions, type ConditionReader } from "./runtime-conditions";
 import { mapStack, splitInventoryId, type ProjectRow } from "./inventory-mapping";
@@ -56,14 +56,15 @@ export function createUserInventory(baseUrl: string, fetcher: typeof fetch, host
           full ? read("get-project-updates", host, `${path}/updates`).then((r) => r.body.data, () => undefined) : undefined,
           readConditions(host),
         ]);
-        if (runtime.body.data.id !== project) throw new Error("get-project.invalid-detail");
-        const loaded = files?.id === project && typeof files.composeContent === "string" ? files : undefined;
-        const row = { ...runtime.body.data, ...(updates?.id === project ? { updateInfo: updates.updateInfo } : {}) };
-        let mapped: Stack;
-        try { mapped = mapStack(row, host, [], runtime.observation); }
-        catch { throw new AdapterOutcomeError({ kind: "error", code: "get-project.unreadable" }); }
-        const [stack] = withConditions({ stacks: [mapped], containers: [] }, conditions).stacks;
-        return { ...stack!, compose: loaded?.composeContent ?? "", env: loaded?.envContent ?? "", ...(loaded ? {} : { filesUnavailable: true }), deployments: [], restorePoints: [] };
+        // Detail boundary (#600): after the host answered, any failure of this page is unreadable, never a crash.
+        try {
+          const data = runtime.body.data;
+          if (!data || data.id !== project) throw new Error("get-project.invalid-detail");
+          const loaded = files?.id === project && typeof files.composeContent === "string" ? files : undefined;
+          const row = { ...data, ...(updates?.id === project ? { updateInfo: updates.updateInfo } : {}) };
+          const [stack] = withConditions({ stacks: [mapStack(row, host, [], runtime.observation)], containers: [] }, conditions).stacks;
+          return { ...stack!, compose: loaded?.composeContent ?? "", env: loaded?.envContent ?? "", ...(loaded ? {} : { filesUnavailable: true }), deployments: [], restorePoints: [] };
+        } catch { throw new AdapterOutcomeError({ kind: "error", code: "get-project.unreadable" }); }
       } catch (error) {
         if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 404) throw new Error("not-found", { cause: error });
         throw error;

@@ -34,6 +34,17 @@ A broken or unusual row affects only itself.
   representable and the name it displays must be non-empty text; otherwise the
   row is unreadable. This holds for list rows and for stack details of
   administrators and assigned users alike.
+- **References are entries of their own.** Inside a row, every entry that points
+  to another object (an image's consumer containers and `usedBy` entries, a
+  volume's consumers and Docker usage names, a network's attachments) is read one
+  by one. An entry that cannot be read is left out and counted under the reader's
+  kind; the row and its other entries stay. The row's own data (ports, mounts,
+  network settings, a stack's runtime services) failing makes the row unreadable.
+- **Detail pages have one boundary.** Once the host has answered, any failure of
+  a stack detail (an empty or mismatched detail, a projection error) is
+  `get-project.unreadable` for administrators and assigned users. Only a missing
+  requested list row is `get-project.not-found`; transport and maintenance
+  failures keep their outcomes.
 - **One physical row counts once.** A reader counts a row under its kind once,
   even when several of its parts fail (for example a network's summary and its
   inspected detail). A network whose detail cannot be read still shows from its
@@ -103,7 +114,9 @@ No wire change. The web model gains `Service.buildOnly` and
 | 14 | shared context | dependency target with `~` in its id | healthy dependencies stay | same | match unvalidated targets |
 | 15 | detail | stack detail name not text (administrator, assigned user) | `get-project.unreadable` | same | truthy name check |
 | 16 | shared state | malformed network detail; summary and detail of one row both fail | counted once under networks | same | drop the detail count / the row key |
-| 17 | migration | none | — | — | — |
+| 17 | external data | `usedBy` / Docker usage entry that cannot be read | image or volume and other consumers stay; counted once | same | map entries without the collector |
+| 18 | detail | empty stack detail (administrator, assigned user) | `get-project.unreadable` | same | check outside the boundary |
+| 19 | migration | none | — | — | — |
 
 ## Acceptance cells
 

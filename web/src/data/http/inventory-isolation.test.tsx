@@ -308,6 +308,43 @@ describe("#600 own-row identity, context targets and single counting", () => {
   });
 });
 
+describe("#600 structural boundary: reference entries and detail pages", () => {
+  it("leaves out only a usedBy reference it cannot read and keeps the image and its other consumers", async () => {
+    const f = resourceFixture();
+    alter(f, "/api/environments/second/images", (rows: { id: string }[]) => rows.map((r) => r.id === "sha256:user" ? { ...r, usedBy: [{ type: "container", id: "bad~id", name: "broken" }, { type: "container", id: "hidden", name: "hidden" }, null] } : r));
+    const image = (await f.adapter.listImages()).find((i) => i.id === "second~sha256:user");
+    expect(image?.consumers.map((c) => c.containerId)).toEqual(["second~web", "second~db", "second~hidden"]);
+    expect((await unreadableOf(f))?.images?.count).toBe(2);
+  });
+
+  it("counts a container once when it fails both as a consumer row and as a usedBy reference", async () => {
+    const f = resourceFixture(); inject(f, "/api/environments/second/containers", [{ id: "broken", imageId: "sha256:user" }]);
+    alter(f, "/api/environments/second/images", (rows: { id: string }[]) => rows.map((r) => r.id === "sha256:user" ? { ...r, usedBy: [{ type: "container", id: "broken", name: 7 }] } : r));
+    await f.adapter.listImages();
+    expect((await unreadableOf(f))?.images?.count).toBe(1);
+  });
+
+  it("leaves out only a Docker usage entry it cannot read and keeps the volume", async () => {
+    const f = resourceFixture();
+    alter(f, "/api/environments/second/volumes", (rows: { name: string }[]) => rows.map((r) => r.name === "data" ? { ...r, containers: ["web", "bad~id", 5] } : r));
+    const volume = (await f.adapter.listVolumes()).find((v) => v.id === "second~data");
+    expect(volume?.consumers.map((c) => c.containerName)).toEqual(["web"]);
+    expect((await unreadableOf(f))?.volumes?.count).toBe(2);
+  });
+
+  it("answers unreadable for an empty assigned or administrator stack detail", async () => {
+    const f = resourceFixture();
+    const hosts = await f.adapter.listHosts();
+    const principal = () => ({ id: "u", username: "user", requiresPasswordChange: false, isAdmin: false, locale: null, assignments: [{ environmentId: "second", projectId: "project", level: "restricted" }] }) as never;
+    const user = createUserInventory("/api", f.fetcher as typeof fetch, async () => hosts, principal, () => undefined, async () => new Map());
+    const empty = (path: string) => { const original = f.fetcher.getMockImplementation()!; f.fetcher.mockImplementation(async (input) => new URL(String(input), "https://hub.example.com").pathname === path ? new Response(JSON.stringify({ success: true, data: null }), { headers: { "Content-Type": "application/json", "X-Docklet-Observed-At": "2026-10-17T12:00:00Z" } }) : original(input)); };
+    empty("/api/environments/second/projects/project/runtime");
+    await expect(user.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "get-project.unreadable" } });
+    empty("/api/environments/second/projects/project");
+    await expect(f.adapter.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "get-project.unreadable" } });
+  });
+});
+
 describe("#600 visible unreadable state", () => {
   afterEach(() => { setPreference("hostSelection", []); setAppLocale("de"); });
   const broken = { count: 1, codes: ["inventory.invalid-project"], names: ["proxy"] };

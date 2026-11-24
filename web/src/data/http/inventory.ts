@@ -102,15 +102,16 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
         stackInventory(host, projectId).catch((error) => { if (isMaintenanceError(error) || isUnreadable(error)) throw error; onState(host.id, inventoryFailure(host.id, error)); return { stacks: [], containers: [] }; }),
         read("get-project-compose", hostId, `projects/${encodeURIComponent(projectId)}/compose`).then((result) => result.body.data, () => undefined),
       ]);
-      if (!detail.body.data || detail.body.data.id !== projectId) return fail("get-project.invalid-detail");
+      // Detail boundary (#600): a missing requested list row is absence; any other failure after the host answered is unreadable.
       const listed = batch.stacks.find((item) => item.id === inventoryId(hostId, projectId));
       if (!listed) return fail("get-project.not-found");
-      const loaded = files?.id === projectId && typeof files.composeContent === "string" ? files : undefined;
-      // Plain detail omits stored checks; the already-read list owns service/update projections.
-      let mapped: Stack;
-      try { mapped = mapStack(detail.body.data, hostId, batch.containers, detail.observation); }
-      catch { return fail("get-project.unreadable"); }
-      return { ...mapped, services: listed.services, compose: loaded?.composeContent ?? "", env: loaded?.envContent ?? "", ...(loaded ? {} : { filesUnavailable: true }), deployments: [], restorePoints: [] };
+      try {
+        const data = detail.body.data;
+        if (!data || data.id !== projectId) throw new Error("get-project.invalid-detail");
+        const loaded = files?.id === projectId && typeof files.composeContent === "string" ? files : undefined;
+        // Plain detail omits stored checks; the already-read list owns service/update projections.
+        return { ...mapStack(data, hostId, batch.containers, detail.observation), services: listed.services, compose: loaded?.composeContent ?? "", env: loaded?.envContent ?? "", ...(loaded ? {} : { filesUnavailable: true }), deployments: [], restorePoints: [] };
+      } catch { return fail("get-project.unreadable"); }
     },
   };
 }

@@ -25,16 +25,19 @@ export function mapImage(row: Schema["ImageSummary"], hostId: string, containers
   const reference = tags[0];
   const colon = reference?.lastIndexOf(":") ?? -1;
   const repository = reference ? reference.slice(0, colon > reference.lastIndexOf("/") ? colon : undefined) : row.repo === "<none>" ? "" : row.repo;
-  // A consumer container that cannot be mapped is left out of this image's consumers only (#600).
+  // Consumers reference other containers: each one that cannot be mapped is left out and counted once (#600).
   const consumers = unreadable.each(containers.filter((c) => c?.imageId === row.id), (raw) => {
     const c = mapContainer(raw, hostId, projects, inventory);
     return { containerId: c.id, name: c.name, hostId, stackId: c.stackId, stackName: c.stackName, serviceName: c.serviceName, state: c.state, ...(systemRole(raw.labels) !== undefined ? { system: true } : {}) };
-  }, containerName);
+  }, containerName, containerKey);
   // Hidden system consumers still protect shared images from appearing unused.
-  for (const usage of row.usedBy ?? []) {
-    const id = usage.id;
-    if (usage.type === "container" && id && !consumers.some((c) => c.containerId === inventoryId(hostId, id))) consumers.push({ containerId: inventoryId(hostId, id), name: usage.name ?? id, hostId, stackId: undefined, stackName: undefined, serviceName: undefined, state: "unknown", system: true });
-  }
+  const usedBy = row.usedBy ?? [];
+  if (!Array.isArray(usedBy)) throw new Error("inventory.invalid-image");
+  unreadable.each(usedBy.filter((usage) => usage?.type === undefined || usage.type === "container"), (usage) => {
+    if (usage?.type !== "container" || !representableId(usage.id) || (usage.name != null && typeof usage.name !== "string")) throw new Error("inventory.invalid-consumer");
+    const containerId = inventoryId(hostId, usage.id);
+    if (!consumers.some((c) => c.containerId === containerId)) consumers.push({ containerId, name: usage.name || usage.id, hostId, stackId: undefined, stackName: undefined, serviceName: undefined, state: "unknown", system: true });
+  }, (usage) => usage?.name, (usage) => typeof usage?.id === "string" ? `container:${usage.id}` : undefined);
   return { ...mapImageObservation(row), id: inventoryId(hostId, row.id), hostId, repository, tag: reference ? colon > reference.lastIndexOf("/") ? reference.slice(colon + 1) : "" : null, aliases: tags.slice(1), digest: row.repoDigests?.[0]?.split("@")[1] ?? row.id,
     sizeMb: row.size / 1024 ** 2, createdAt: new Date(row.created * 1000).toISOString(), architecture: "", os: "", layers: 0, metadataUnavailable: true, consumers, inventory };
 }
@@ -42,6 +45,10 @@ export function mapImage(row: Schema["ImageSummary"], hostId: string, containers
 /** One physical network row counts once, whether its summary, detail or projection failed. */
 export function networkKey(row: { id?: unknown } | null | undefined): string | undefined {
   return typeof row?.id === "string" ? `network:${row.id}` : undefined;
+}
+
+function containerKey(row: { id?: unknown } | null | undefined): string | undefined {
+  return typeof row?.id === "string" ? `container:${row.id}` : undefined;
 }
 
 function containerName(row: ContainerRow | null | undefined): unknown {
@@ -70,7 +77,7 @@ export function mapVolumes(rows: Schema["VolumeVolume"][], hostId: string, conta
         usage.set(key, consumers);
         if (m.type === "bind") binds.set(key, { id: inventoryId(hostId, bindKey(name)), name, hostId, kind: "bind", source: name, sizeBytes: 0, sizeUnavailable: true, createdAt: "", consumers, labels: {}, inventory });
       }
-    }, containerName);
+    }, containerName, containerKey);
   }
   return [...unreadable.each(rows.filter((r) => systemRole(r?.labels) === undefined), (r): Volume => {
     if (!representableId(r?.name) || typeof r.driver !== "string" || !r.driver) throw new Error("inventory.invalid-volume");
@@ -117,6 +124,6 @@ export function mapTopology(rows: (Schema["NetworkInspect"] | Schema["NetworkSum
       const service = entry.split(":")[0];
       for (const target of users.filter((candidate) => candidate.id !== c.id && candidate.labels?.["com.docker.compose.project"] === c.labels?.["com.docker.compose.project"] && candidate.labels?.["com.docker.compose.service"] === service)) dependencies.push({ from: containerId, to: inventoryId(hostId, target.id) });
     }
-  }, containerName, (c) => typeof c?.id === "string" ? `container:${c.id}` : undefined);
+  }, containerName, containerKey);
   return { networks, attachments, dependencies };
 }
