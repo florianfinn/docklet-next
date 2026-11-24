@@ -27,14 +27,17 @@ export function createInventoryTransport(baseUrl: string, fetcher: typeof fetch,
     // A lost body stream is a transport failure; only an unparsable body is an invalid response.
     let text: string;
     try { text = await response.text(); } catch { signal?.throwIfAborted(); return fail("http.error", response.status); }
-    let body: Body<I> & { code?: string };
-    try { body = JSON.parse(text); } catch { return fail(`${operation}.invalid-response`, response.status); }
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); } catch { return fail(`${operation}.invalid-response`, response.status); }
     signal?.throwIfAborted();
+    // A body that is not an object carries no code; the HTTP status still decides the outcome.
+    const body = (parsed && typeof parsed === "object" ? parsed : {}) as Body<I> & { code?: unknown };
     if (!response.ok) {
-      if (body.code && reasons.has(body.code)) onState(hostId, { stale: true, reason: body.code as InventoryObservation["reason"] });
-      return fail(body.code ?? "http.error", response.status);
+      const code = typeof body.code === "string" && body.code ? body.code : undefined;
+      if (code && reasons.has(code)) onState(hostId, { stale: true, reason: code as InventoryObservation["reason"] });
+      return fail(code ?? "http.error", response.status);
     }
-    if (body.success !== true || !("data" in body)) return fail(`${operation}.invalid-response`, response.status);
+    if (parsed !== body || body.success !== true || !("data" in body)) return fail(`${operation}.invalid-response`, response.status);
     const observedAt = response.headers.get("X-Docklet-Observed-At") ?? undefined;
     const reason = response.headers.get("X-Docklet-Host-Reason") ?? undefined;
     if (observedAt && !Number.isFinite(Date.parse(observedAt)) || reason && !reasons.has(reason)) return fail(`${operation}.invalid-observation`);

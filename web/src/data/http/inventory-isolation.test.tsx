@@ -364,6 +364,12 @@ describe("#600 attachments as reference entries and the administrator detail bou
     const down = resourceFixture(); const original = down.fetcher.getMockImplementation()!;
     down.fetcher.mockImplementation(async (input) => new URL(String(input), "https://hub.example.com").pathname === "/api/environments/second/containers" ? new Response(JSON.stringify({ success: false, code: "docker.error" }), { status: 500, headers: { "Content-Type": "application/json" } }) : original(input));
     await expect(down.adapter.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "docker.error", status: 500 } });
+    // A host failure whose code happens to look like a page error, or whose body is not an object, keeps its status.
+    for (const [body, code] of [[{ success: false, code: "docker.invalid-page" }, "docker.invalid-page"], [null, "http.error"]] as const) {
+      const host = resourceFixture(); const healthy = host.fetcher.getMockImplementation()!;
+      host.fetcher.mockImplementation(async (input) => new URL(String(input), "https://hub.example.com").pathname === "/api/environments/second/projects" ? new Response(JSON.stringify(body), { status: 500, headers: { "Content-Type": "application/json" } }) : healthy(input));
+      await expect(host.adapter.getStack("second~project")).rejects.toMatchObject({ outcome: { code, status: 500 } });
+    }
   });
 });
 

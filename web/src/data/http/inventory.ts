@@ -25,7 +25,9 @@ function malformedSuccess(error: unknown): boolean {
   if (!(error instanceof AdapterOutcomeError)) return true;
   if (error.outcome.kind !== "error") return false;
   const { code, status } = error.outcome;
-  return /\.(invalid-page|short-page|invalid-observation)$/.test(code) || (/\.invalid-response$/.test(code) && status !== undefined && status >= 200 && status < 300);
+  // A non-2xx answer is a host or transport failure whatever its code says; it keeps its outcome.
+  if (status !== undefined && (status < 200 || status >= 300)) return false;
+  return /\.(invalid-page|short-page|invalid-observation|invalid-response)$/.test(code);
 }
 
 function isUnreadable(error: unknown): boolean {
