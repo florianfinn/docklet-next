@@ -22,7 +22,10 @@ func (m *Manager) Test(ctx context.Context) (dto.TestResult, error) {
 	}
 	defer m.testMu.Unlock()
 	m.mu.Lock()
+	// The provisioning sequence is reserved with the snapshot: a credential save after this point fences it.
 	cred, revision, gen := m.cred, m.credentialRevisionLocked(), m.gen
+	m.provSeq++
+	seq := m.provSeq
 	m.mu.Unlock()
 	out := dto.TestResult{CredentialRevision: revision, Checks: []dto.TestCheck{
 		{ID: "credential", State: "skipped"}, {ID: "agent-key", State: "skipped"}, {ID: "cleanup", State: "skipped"},
@@ -33,7 +36,6 @@ func (m *Manager) Test(ctx context.Context) (dto.TestResult, error) {
 		cancel()
 		out.Checks[0] = providerCheck("credential", err, dto.CodeProviderUnavailable)
 		if err == nil {
-			seq := m.beginProvisioning()
 			mintCtx, stop := context.WithTimeout(ctx, providerTimeout)
 			id, mintErr := m.cfg.Provisioner.MintTestKey(mintCtx, token)
 			stop()
