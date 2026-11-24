@@ -42,8 +42,9 @@ function ActionToast({ id, toastId, onClose }: { id: string; toastId: string | n
   const now = useNow(run?.status === "running");
   if (!run) return null;
   const major = isMajorAction(run);
-  const view = (observed: ActionRun) => (
+  const view = (observed: ActionRun, holdLife = false) => (
     <ActionToastView
+      holdLife={holdLife}
       run={observed}
       design={design}
       detail={toastDetail(scale)}
@@ -56,25 +57,27 @@ function ActionToast({ id, toastId, onClose }: { id: string; toastId: string | n
   );
   // Visible scan toasts own their counters even after the Security page unmounts.
   return run.kind === "scan" || run.sourceOperation === "vulnerability.candidate-scan"
-    ? <ActionDetail run={run} fallback={view(run)}>{view}</ActionDetail> : view(run);
+    ? <ActionDetail run={run} fallback={view(run)} pending={view(run, true)}>{(full) => view(full)}</ActionDetail> : view(run);
 }
 
-interface ScanGroupState { ids: readonly string[]; persistent: ReadonlySet<string> }
+interface ScanGroupState { ids: readonly string[]; persistent: ReadonlySet<string>; classified: ReadonlySet<string> }
+const EMPTY_GROUP: ScanGroupState = { ids: [], persistent: new Set(), classified: new Set() };
+/** Group toast ids never repeat in this page, also across identities and adapters: a deferred exit cannot hit a later group. */
+let groupSequence = 0;
 
 /** One sonner toast for every scan run the coordinator shows; a single member keeps the ordinary run toast. */
 function ScanGroup({ store, toastId, close }: { store: Store<ScanGroupState>; toastId: string; close: () => void }) {
   const user = useIsUser();
   const state = useStore(store, (s) => s);
-  const onPersistent = useCallback((id: string, value: boolean) => store.set((s) => {
-    if (s.persistent.has(id) === value || !s.ids.includes(id)) return s;
-    const persistent = new Set(s.persistent);
-    if (value) persistent.add(id); else persistent.delete(id);
-    return { ...s, persistent };
+  const onOutcome = useCallback((id: string, classified: boolean, persistent: boolean) => store.set((s) => {
+    if (!s.ids.includes(id) || (s.persistent.has(id) === persistent && s.classified.has(id) === classified)) return s;
+    const toggle = (set: ReadonlySet<string>, on: boolean) => { const next = new Set(set); if (on) next.add(id); else next.delete(id); return next; };
+    return { ...s, persistent: toggle(s.persistent, persistent), classified: toggle(s.classified, classified) };
   }), [store]);
   // A closed group renders nothing during its exit, so no stale countdown can close a newer group.
   if (!state.ids.length) return null;
   if (state.ids.length === 1) return <ActionToast id={state.ids[0]!} toastId={toastId} onClose={close} />;
-  return <ScanGroupToast ids={state.ids} persistent={state.persistent} onPersistent={onPersistent} onClose={close}
+  return <ScanGroupToast ids={state.ids} persistent={state.persistent} classified={state.classified} onOutcome={onOutcome} onClose={close}
     onOpen={(run) => (user ? openActionDialog(run.id) : openActivity(run.id))} />;
 }
 
@@ -112,27 +115,27 @@ export function ActionToasts() {
     const owned = new Set<string>();
     // Scan runs share one toast (#611). Each group instance has its own sonner id, so the deferred exit of a
     // closed instance can never remove the next one; a dismiss callback only clears the instance it belongs to.
-    const group = createStore<ScanGroupState>({ ids: [], persistent: new Set() });
-    let instance = 0, latest: ActionRun[] = [];
+    const group = createStore<ScanGroupState>(EMPTY_GROUP);
+    let instance = ++groupSequence, latest: ActionRun[] = [];
     const groupId = () => `scan-group:${instance}`;
-    const retire = () => { const id = groupId(); instance++; toast.dismiss(id); };
+    const retire = () => { const id = groupId(); instance = ++groupSequence; toast.dismiss(id); };
     const renderGroup = () => {
       if (!group.get().ids.length) { retire(); return; }
       const mine = instance, toastId = groupId();
-      const forget = () => { if (mine === instance) { instance++; group.set({ ids: [], persistent: new Set() }); } };
-      const close = () => { if (mine !== instance) return; group.set({ ids: [], persistent: new Set() }); retire(); };
+      const forget = () => { if (mine === instance) { instance = ++groupSequence; group.set(EMPTY_GROUP); } };
+      const close = () => { if (mine !== instance) return; group.set(EMPTY_GROUP); retire(); };
       toast.custom(() => <ScanGroup store={group} toastId={toastId} close={close} />, { id: toastId, duration: Number.POSITIVE_INFINITY, unstyled: true, onDismiss: forget });
     };
     const setMembers = (change: (ids: readonly string[]) => readonly string[]) => {
       const before = group.get().ids, ids = change(before);
       if (ids === before) return;
-      group.set((s) => ({ ids, persistent: new Set([...s.persistent].filter((id) => ids.includes(id))) }));
+      group.set((s) => ({ ids, persistent: new Set([...s.persistent].filter((id) => ids.includes(id))), classified: new Set([...s.classified].filter((id) => ids.includes(id))) }));
       renderGroup();
     };
     const isScan = (id: string) => { const run = latest.find((r) => r.id === id); return run !== undefined && isScanRun(run); };
     const clearOwned = () => {
       for (const id of owned) toast.dismiss(id); owned.clear();
-      if (group.get().ids.length) { group.set({ ids: [], persistent: new Set() }); renderGroup(); }
+      if (group.get().ids.length) { group.set(EMPTY_GROUP); renderGroup(); }
     };
     const identity = () => client.getQueryData<CurrentUser>(queryKeys.currentUser)?.id;
     let identityId = identity();

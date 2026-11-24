@@ -15,6 +15,7 @@ import type { ScanRunSummary } from "@/domain/security";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { mapActivityDetail } from "@/data/http/map-dto";
+import { registerIdentityLifetime } from "@/data/identity-lifetime";
 import type { CodedActionRun } from "@/data/message-code";
 import { queryKeys } from "@/data/query-keys";
 import { renderWithApp } from "@/test/render";
@@ -45,6 +46,11 @@ function Grab() { const current = useQueryClient(); useEffect(() => { client = c
 /** Detail owners receive `details[id]` (a durable summary or candidate counters) on top of the listed run. */
 function harness(initial: CodedActionRun[] = [], details: Record<string, Partial<CodedActionRun>> = {}) {
   const adapter = createDemoAdapter();
+  let version = 0;
+  const identityListeners = new Set<() => void>();
+  registerIdentityLifetime(adapter.subscribeChanges, { version: () => version, active: () => true, listen: (l) => { identityListeners.add(l); return () => { identityListeners.delete(l); }; } });
+  // Held runs get no terminal detail until released (a slow durable-outcome read); `failing` runs get a detail read error.
+  const held = new Set<string>(), failing = new Set<string>(), silent = new Set<string>();
   let current = initial;
   const listeners = new Set<(runs: CodedActionRun[]) => void>();
   const observers: { id: string; listener: (state: ActionDetailState) => void; active: boolean }[] = [];
@@ -53,7 +59,9 @@ function harness(initial: CodedActionRun[] = [], details: Record<string, Partial
   // Like the real observer, every observation of the run list re-delivers the run's detail while it is observed.
   const deliver = (o: (typeof observers)[number]) => {
     const run = current.find((r) => r.id === o.id);
-    if (run && o.active) o.listener({ status: "ready", run: { ...run, ...(run.status === "running" ? {} : details[o.id]) } });
+    if (!run || !o.active || silent.has(o.id) || (held.has(o.id) && run.status !== "running")) return;
+    if (failing.has(o.id) && run.status !== "running") { o.listener({ status: "error", error: new Error("detail unavailable") }); return; }
+    o.listener({ status: "ready", run: { ...run, ...(run.status === "running" ? {} : details[o.id]) } });
   };
   adapter.observeActionDetail = (_host, id, listener) => {
     const o = { id, listener, active: true };
@@ -63,7 +71,12 @@ function harness(initial: CodedActionRun[] = [], details: Record<string, Partial
   };
   const publish = (runs: CodedActionRun[]) => act(() => { current = runs; listeners.forEach((l) => l(runs)); observers.forEach(deliver); });
   renderWithApp(<><Grab /><ActionToasts /><AppToaster /></>, adapter);
-  return { publish, observers };
+  return {
+    publish, observers,
+    hold: (id: string) => { held.add(id); }, fail: (id: string) => { failing.add(id); }, silence: (id: string) => { silent.add(id); },
+    release: (id: string) => act(() => { held.delete(id); observers.filter((o) => o.id === id).forEach(deliver); }),
+    rotate: () => act(() => { version++; identityListeners.forEach((l) => l()); }),
+  };
 }
 const summary = (patch: Partial<ScanRunSummary> = {}): ScanRunSummary => ({ status: "completed", targets: 4, scanned: 4, failed: 0, skipped: 0, counts: { critical: 1, high: 2, medium: 0, low: 0, unknown: 0 }, startedAt: at, finishedAt: at, ...patch });
 const withSummary = (value: ScanRunSummary) => ({ scan: { targets: value.targets, done: value.scanned + value.failed, failed: value.failed, summary: value } });
@@ -301,4 +314,74 @@ it("reveals a dismissed running scan in the group only when it is not covered", 
   act(() => gate.listener?.({ reason: "inflight", key: "scan:second", runId: "b" }));
   await tick(500);
   expect([shown <= 1, toasts().length, rows().sort()]).toEqual([true, 1, ["a", "b"]]);
+});
+
+// CXR-01: the next identity's group survives the retiring identity's deferred exit.
+it("keeps the new identity's scan while the old identity's group is still leaving", async () => {
+  const f = harness();
+  await f.publish([]);
+  await f.publish([scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick();
+  await f.rotate();
+  await tick(16);
+  await f.publish([scan("c", "third", "running"), scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick(1_000);
+  expect(toasts().filter((t) => t.dataset.status === "running").length).toBe(1);
+});
+
+// CXR-02: a settled list row whose durable outcome is still loading is pending, not success.
+it.each(["group", "single"] as const)("holds the countdown until the %s scan's outcome is known, then keeps a partial result", async (shape) => {
+  const f = harness([], { a: withSummary(summary({ status: "partial", failed: 1, scanned: 3 })) });
+  await f.publish([]);
+  const running = shape === "group" ? [scan("b", "second", "running"), scan("a", "first", "running")] : [scan("a", "first", "running")];
+  await f.publish(running);
+  await tick();
+  f.hold("a");
+  await f.publish(running.map((r) => scan(r.id, r.hostId!, "success")));
+  await tick(50);
+  expect(lifeTrack() === null).toBe(true);
+  await f.release("a");
+  await tick(50);
+  expect([lifeTrack() === null, toasts().length]).toEqual([true, 1]);
+});
+
+it("starts the countdown once a held outcome turns out complete, and after a failed detail read", async () => {
+  const f = harness([], { a: withSummary(summary()) });
+  await f.publish([]);
+  await f.publish([scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick();
+  f.hold("a"); f.fail("b");
+  await f.publish([scan("b", "second", "success"), scan("a", "first", "success")]);
+  await tick(50);
+  expect(lifeTrack() === null).toBe(true);
+  await f.release("a");
+  await tick(50);
+  expect(lifeTrack() !== null).toBe(true);
+});
+
+it("holds the countdown for a candidate run until its counters arrive and keeps a deferred result", async () => {
+  const candidate = { type: "vulnerability.candidate-scan" };
+  const f = harness([], { a: { candidateScan: { targets: 5, scanned: 3, cached: 0, deferred: 2, failed: 0 } } });
+  await f.publish([]);
+  await f.publish([scan("a", "first", "running", candidate)]);
+  await tick();
+  f.hold("a");
+  await f.publish([scan("a", "first", "success", candidate)]);
+  await tick(50);
+  expect(lifeTrack() === null).toBe(true);
+  await f.release("a");
+  await tick(50);
+  expect([lifeTrack() === null, toasts().length]).toEqual([true, 1]);
+});
+
+// CXR-02 (first load): a single scan whose first detail has not arrived shows the listed run without a countdown.
+it.each([["host", {}], ["candidate", { type: "vulnerability.candidate-scan" }]] as const)("keeps a settled single %s scan without countdown while its first detail loads", async (_, change) => {
+  const f = harness();
+  f.silence("a");
+  await f.publish([]);
+  await f.publish([scan("a", "first", "running", change)]);
+  await tick();
+  await f.publish([scan("a", "first", "success", change)]);
+  await tick(50);
+  expect([toasts().length, toasts()[0]?.dataset.status, lifeTrack() === null]).toEqual([1, "succeeded", true]);
 });

@@ -27,6 +27,8 @@ export interface ActionToastViewProps {
   opensDialog?: boolean;
   onClose: () => void;
   onOpen: () => void;
+  /** The run's outcome is not classified yet (its detail is still loading): no countdown. */
+  holdLife?: boolean;
 }
 
 /** Controls inside the clickable toast act on their own and never open the details as well. */
@@ -197,7 +199,7 @@ function BarDesign(props: DesignProps) {
         <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} labels={detail === "full"} />
       </div>
       <DetailRow run={run} facts={facts} onClose={onClose} />
-      <LifeBar run={run} onEnd={onClose} />
+      {!props.holdLife && <LifeBar run={run} onEnd={onClose} />}
     </div>
   );
 }
@@ -226,7 +228,7 @@ function CompactDesign(props: DesignProps) {
         <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} thin />
       </div>
       {facts.progress && run.status === "failed" && <p className="px-3 pb-2 text-xs text-muted-foreground" data-slot="toast-scan-counts">{facts.progress}</p>}
-      <LifeBar run={run} onEnd={onClose} />
+      {!props.holdLife && <LifeBar run={run} onEnd={onClose} />}
     </div>
   );
 }
@@ -255,7 +257,7 @@ function EdgeDesign(props: DesignProps) {
         <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} labels={detail !== "compact"} />
       </div>
       <DetailRow run={run} facts={facts} onClose={onClose} />
-      <LifeBar run={run} onEnd={onClose} />
+      {!props.holdLife && <LifeBar run={run} onEnd={onClose} />}
     </div>
   );
 }

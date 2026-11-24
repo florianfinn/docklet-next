@@ -14,8 +14,8 @@ import { useAdapter } from "@/data/use-adapter";
 import type { ActionRun } from "@/domain/model";
 import { QueryError } from "@/shared/components/page";
 
-/** Only a mounted detail body owns history. Summary updates cannot erase it. */
-export function ActionDetail({ run, children, fallback }: { run: ActionRun; children: (run: ActionRun) => ReactNode; fallback?: ReactNode }) {
+/** Only a mounted detail body owns history. Summary updates cannot erase it. `pending` replaces `fallback` while the first detail loads. */
+export function ActionDetail({ run, children, fallback, pending }: { run: ActionRun; children: (run: ActionRun) => ReactNode; fallback?: ReactNode; pending?: ReactNode }) {
   const adapter = useAdapter();
   const lifetime = identityLifetime(adapter);
   const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
@@ -35,5 +35,5 @@ export function ActionDetail({ run, children, fallback }: { run: ActionRun; chil
   const full = state?.status === "ready" || state?.status === "error" ? state.run : undefined;
   if (full) return <>{children(renderRun(full, locale))}<RecreateResultLink run={renderRun(full, locale)} />{state?.status === "error" ? <QueryError compact error={state.error} /> : state?.status === "ready" && state.refreshing ? <p role="status" className="text-sm text-muted-foreground">{t("detailLoading")}</p> : null}</>;
   if (state?.status === "error") return fallback ?? <QueryError compact error={state.error} />;
-  return fallback ?? <p role="status" className="p-3 text-sm text-muted-foreground">{t("detailLoading")}</p>;
+  return pending ?? fallback ?? <p role="status" className="p-3 text-sm text-muted-foreground">{t("detailLoading")}</p>;
 }

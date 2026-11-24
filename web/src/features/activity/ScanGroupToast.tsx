@@ -21,18 +21,23 @@ import { useRunTarget } from "./use-run-target";
 const own = (event: MouseEvent) => event.stopPropagation();
 const live = (status: ActionStatus) => status === "running" || status === "queued";
 
-/** Aggregate of the members: running while any runs; a failure or partial result keeps the group; otherwise its outcome. */
-function groupStatus(members: readonly ActionRun[], persistent: ReadonlySet<string>): { status: ActionStatus; persistent: boolean } {
-  if (members.some((r) => live(r.status))) return { status: "running", persistent: false };
-  const kept = members.some((r) => r.status === "failed" || persistent.has(r.id));
-  if (kept) return { status: "failed", persistent: true };
-  return { status: members.length && members.every((r) => r.status === "cancelled") ? "cancelled" : "succeeded", persistent: false };
+/**
+ * Aggregate of the members: running while any runs; a failure or partial result keeps the group. A settled
+ * member whose detail has not classified its outcome yet holds the countdown: pending is not success.
+ */
+function groupStatus(members: readonly ActionRun[], persistent: ReadonlySet<string>, classified: ReadonlySet<string>): { status: ActionStatus; persistent: boolean; pending: boolean } {
+  if (members.some((r) => live(r.status))) return { status: "running", persistent: false, pending: false };
+  if (members.some((r) => r.status === "failed" || persistent.has(r.id))) return { status: "failed", persistent: true, pending: false };
+  const status = members.length && members.every((r) => r.status === "cancelled") ? "cancelled" : "succeeded";
+  return { status, persistent: false, pending: members.some((r) => !classified.has(r.id)) };
 }
 
-function Row({ run, onOpen, onPersistent }: { run: ActionRun; onOpen: (run: ActionRun) => void; onPersistent: (id: string, value: boolean) => void }) {
+type Outcome = (id: string, classified: boolean, persistent: boolean) => void;
+
+function Row({ run, classified, onOpen, onOutcome }: { run: ActionRun; classified: boolean; onOpen: (run: ActionRun) => void; onOutcome: Outcome }) {
   const t = useTranslations("activity"), target = useRunTarget(run), line = useScanCounts(run);
-  const persistent = scanPersistent(run);
-  useEffect(() => { onPersistent(run.id, persistent); }, [run.id, persistent, onPersistent]);
+  const persistent = scanPersistent(run), known = classified && !live(run.status);
+  useEffect(() => { onOutcome(run.id, known, persistent); }, [run.id, known, persistent, onOutcome]);
   const Icon = RUN_ICON[run.status];
   return (
     <li data-tone={RUN_TONE[run.status]} data-scan-member={run.id} data-status={run.status}>
@@ -53,25 +58,30 @@ function Row({ run, onOpen, onPersistent }: { run: ActionRun; onOpen: (run: Acti
   );
 }
 
-/** Every visible member keeps its own detail owner, so counts stay live after the Security page unmounts. */
-function Member({ run, onOpen, onPersistent }: { run: ActionRun; onOpen: (run: ActionRun) => void; onPersistent: (id: string, value: boolean) => void }) {
-  return <ActionDetail run={run} fallback={<Row run={run} onOpen={onOpen} onPersistent={onPersistent} />}>{(full) => <Row run={full} onOpen={onOpen} onPersistent={onPersistent} />}</ActionDetail>;
+/**
+ * Every visible member keeps its own detail owner, so counts stay live after the Security page unmounts. Its
+ * outcome is classified by the terminal detail copy; a failed detail read classifies the listed run (no result).
+ */
+function Member({ run, onOpen, onOutcome }: { run: ActionRun; onOpen: (run: ActionRun) => void; onOutcome: Outcome }) {
+  return <ActionDetail run={run} pending={<Row run={run} classified={false} onOpen={onOpen} onOutcome={onOutcome} />}
+    fallback={<Row run={run} classified onOpen={onOpen} onOutcome={onOutcome} />}>{(full) => <Row run={full} classified onOpen={onOpen} onOutcome={onOutcome} />}</ActionDetail>;
 }
 
 export interface ScanGroupToastProps {
   ids: readonly string[];
   persistent: ReadonlySet<string>;
-  onPersistent: (id: string, value: boolean) => void;
+  classified: ReadonlySet<string>;
+  onOutcome: Outcome;
   onOpen: (run: ActionRun) => void;
   onClose: () => void;
 }
 
 /** Two or more scan runs shown at once: one card, one row per run, header counting distinct hosts. */
-export function ScanGroupToast({ ids, persistent, onPersistent, onOpen, onClose }: ScanGroupToastProps) {
+export function ScanGroupToast({ ids, persistent, classified, onOutcome, onOpen, onClose }: ScanGroupToastProps) {
   const t = useTranslations("activity");
   const runs = useActionRuns();
   const members = ids.flatMap((id) => runs.find((r) => r.id === id) ?? []);
-  const { status, persistent: kept } = groupStatus(members, persistent);
+  const { status, persistent: kept, pending } = groupStatus(members, persistent, classified);
   const hosts = new Set(members.map((r) => r.hostId ?? "0")).size;
   const Icon = RUN_ICON[status];
   return (
@@ -102,9 +112,9 @@ export function ScanGroupToast({ ids, persistent, onPersistent, onOpen, onClose 
           </button>
         </div>
         <ul className="flex max-h-64 flex-col overflow-y-auto">
-          {members.map((run) => <Member key={run.id} run={run} onOpen={onOpen} onPersistent={onPersistent} />)}
+          {members.map((run) => <Member key={run.id} run={run} onOpen={onOpen} onOutcome={onOutcome} />)}
         </ul>
-        {status !== "running" && !kept && <LifeTrack status={status === "cancelled" ? "cancelled" : "succeeded"} onEnd={onClose} />}
+        {status !== "running" && !kept && !pending && <LifeTrack status={status === "cancelled" ? "cancelled" : "succeeded"} onEnd={onClose} />}
       </div>
     </div>
   );
