@@ -6,6 +6,7 @@
 
 import { act, cleanup, fireEvent } from "@testing-library/react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ActionDetailState } from "@/data/adapter";
@@ -40,7 +41,7 @@ function deploy(id: string): CodedActionRun {
 }
 
 let client!: QueryClient;
-function Grab() { client = useQueryClient(); return null; }
+function Grab() { const current = useQueryClient(); useEffect(() => { client = current; }, [current]); return null; }
 /** Detail owners receive `details[id]` (a durable summary or candidate counters) on top of the listed run. */
 function harness(initial: CodedActionRun[] = [], details: Record<string, Partial<CodedActionRun>> = {}) {
   const adapter = createDemoAdapter();

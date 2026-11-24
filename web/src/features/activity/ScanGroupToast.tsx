@@ -22,7 +22,7 @@ const own = (event: MouseEvent) => event.stopPropagation();
 const live = (status: ActionStatus) => status === "running" || status === "queued";
 
 /** Aggregate of the members: running while any runs; a failure or partial result keeps the group; otherwise its outcome. */
-export function groupStatus(members: readonly ActionRun[], persistent: ReadonlySet<string>): { status: ActionStatus; persistent: boolean } {
+function groupStatus(members: readonly ActionRun[], persistent: ReadonlySet<string>): { status: ActionStatus; persistent: boolean } {
   if (members.some((r) => live(r.status))) return { status: "running", persistent: false };
   const kept = members.some((r) => r.status === "failed" || persistent.has(r.id));
   if (kept) return { status: "failed", persistent: true };
