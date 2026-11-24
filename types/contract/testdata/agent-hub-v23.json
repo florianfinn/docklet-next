@@ -275,7 +275,7 @@
     "defaultMode": "check",
     "modes": ["check","scheduled"],
     "owner": "hub",
-    "jobs": ["update-check","update-window:<env>:<kind>:<target>"],
+    "jobs": ["update-check","update-check-host","update-window:<env>:<kind>:<target>"],
     "timeZone": "hub IANA zone",
     "routes": [
       {"method":"GET","path":"/environments/{id}/updater/policies","operationId":"list-update-policies","sha256":"7fd5cc1a1e7dffb2eaa7d8e174df99d20f3ccaac81750f38976aa6754a545319"},

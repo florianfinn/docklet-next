@@ -129,7 +129,7 @@ export function agentFixture(spec, fixture) {
     if (document.paths["/environments/{id}/updater/policies"]) {
       manifest.imagePolicies = {
         targetKinds: ["stack", "container"], defaultMode: "check", modes: ["check", "scheduled"],
-        owner: "hub", jobs: ["update-check", "update-window:<env>:<kind>:<target>"], timeZone: "hub IANA zone",
+        owner: "hub", jobs: ["update-check", "update-check-host", "update-window:<env>:<kind>:<target>"], timeZone: "hub IANA zone",
         routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
           .filter(([, op]) => ["get-auto-update-policy", "set-auto-update-policy", "list-update-policies", "check-all-updates", "get-system-image-hints"].includes(op?.operationId))
           .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
