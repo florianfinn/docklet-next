@@ -309,6 +309,23 @@ export const enProxyContract = {
     "marking": "Checking configuration load",
     "restoring": "Restoring"
   },
+  "adoption": {
+    "operation": "Followed recreated container",
+    "current": "The registration matches its container.",
+    "adopted": "The instance followed its recreated container.",
+    "refused": "The recreated container was not adopted.",
+    "reasons": {
+      "container-missing": "The container no longer exists.",
+      "name-changed": "No container with this name exists; a renamed container is not adopted.",
+      "source-changed": "The recreated container mounts a different configuration source.",
+      "mode-changed": "The recreated container mounts the configuration source with a different write mode.",
+      "kind-changed": "The configuration source kind or the proxy kind changed.",
+      "operation-open": "An operation is still open for this instance.",
+      "ambiguous": "Several containers match; none is adopted.",
+      "held-by-instance": "Another instance already uses the recreated container.",
+      "module-off": "The proxy module is turned off."
+    }
+  },
   "kinds": {
     "traefik": "Traefik",
     "caddy": "Caddy"

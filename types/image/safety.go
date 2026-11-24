@@ -25,6 +25,17 @@ type Problem struct {
 	Code    string                  `json:"code" enum:"agent.unavailable,container.origin-locked,container.recreate-ambiguous,container.recreate-recovered,deploy.point-unavailable,deploy.point-no-baseline,image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,runtime.target-unavailable,runtime.invalid-acknowledgement,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,settings.invalid-time-zone,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.service-coupled,update.snapshot-unavailable,update.system-version-unknown,update.candidate-changed,update.target-changed,update.target-not-found,update.unstable,update.auto-restored,update.auto-restore-failed,update.auto-restore-unavailable,update.interrupted,update.candidate-failed,restore.files-changed,container.auto-remove"`
 	Message string                  `json:"message"`
 	Blocker *RuntimeIdentityBlocker `json:"blocker,omitempty"`
+	// Binding explains an update.image-binding-unsupported refusal (#594); absent for every other code and from older agents.
+	Binding *Binding `json:"binding,omitempty"`
+}
+
+// Binding names why Docklet cannot rewrite an image reference safely, for the project or one service.
+type Binding struct {
+	Scope   string `json:"scope" enum:"project,service"`
+	Service string `json:"service,omitzero" maxLength:"128"`
+	Reason  string `json:"reason" enum:"variable-reference,digest-pinned,build-service,include-extends,multiple-compose-files,outside-project,shared-image-anchor,nested-compose-file,unwritable-file,unparsable,file-missing"`
+	// Variable is the name of the variable an image is set through; never its value.
+	Variable string `json:"variable,omitzero" pattern:"^[A-Za-z_][A-Za-z0-9_]{0,127}$"`
 }
 
 // ValidProblemCode uses the wire schema's narrower set, rather than run reasons.

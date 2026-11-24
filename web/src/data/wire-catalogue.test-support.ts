@@ -63,6 +63,7 @@ export const GUARDED_WIRE_ENUMS = [
 ] as const;
 
 export const EXEMPT_WIRE_ENUMS = [
+ ...["ImageBinding.reason", "ProxyAdoption.reason", "ProxyAdoption.outcome"].map((property) => ({ property, reason: "M38 contract foundation: typed total maps IMAGE_BINDING_KEYS and PROXY_ADOPTION_*_KEYS exist; the update-action and proxy-adoption steps add the rendering consumers and move these into GUARDED_WIRE_ENUMS with render proofs." })),
  { property: "ImageRuntimeIdentityPeer.reason", reason: "Validated by runtime-blocker.ts and rendered through common.runtimePeers reason texts by the confirmation dialog and audit mapper; runtime-peer-confirmation.test.tsx exercises both locales." },
  { property: "ProjectDetails.definitionReason", reason: "Rendered by use-stack-definition-hint.ts through common.runtimePeers reason texts; runtime identity marker and repair proofs retain the existing coverage limit." },
  ...["ProxyOperation.phase", "ProxyInstance.kind", "ProxyDiscovery.kind", "ProxyCreateInstanceRequest.kind", "ProxySource.kind", "ProxyReference.kind"].map((property) => ({ property, reason: "S2 contract foundation has no production proxy page; S5 owns these rendered consumers and their render proofs. Total typed bilingual maps are frozen in wire-catalogue-proxy.ts. Outcome state/reason consumers already have guarded render proofs." })),

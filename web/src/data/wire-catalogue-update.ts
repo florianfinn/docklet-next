@@ -151,6 +151,21 @@ export const UPDATE_REASON_KEYS = {
   | Schema["UpdaterSystemImageHint"]["code"]
 >, CatalogueKey>;
 
+// Why an image reference cannot be rewritten safely (#594); rendered with the service and the variable name.
+export const IMAGE_BINDING_KEYS = {
+  "variable-reference": "images.errors.binding_variable-reference",
+  "digest-pinned": "images.errors.binding_digest-pinned",
+  "build-service": "images.errors.binding_build-service",
+  "include-extends": "images.errors.binding_include-extends",
+  "multiple-compose-files": "images.errors.binding_multiple-compose-files",
+  "outside-project": "images.errors.binding_outside-project",
+  "shared-image-anchor": "images.errors.binding_shared-image-anchor",
+  "nested-compose-file": "images.errors.binding_nested-compose-file",
+  "unwritable-file": "images.errors.binding_unwritable-file",
+  "unparsable": "images.errors.binding_unparsable",
+  "file-missing": "images.errors.binding_file-missing",
+} satisfies Record<Schema["ImageBinding"]["reason"], CatalogueKey>;
+
 // The dependent detail renderer uses this frozen recovery vocabulary.
 export const RECOVERY_OUTCOME_KEYS = {
   "restored": "images.errors.recovery_restored",

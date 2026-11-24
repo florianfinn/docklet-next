@@ -117,4 +117,8 @@ func registerRestorePointRoutes(api huma.API, s *UpdaterService) {
 		result, err := s.deps.Projects.ImageBaselineStatus(ctx, in.ProjectID, s.deps.Projects.LifecycleRegistration(ctx))
 		return &handlerutil.Out[dto.BaselineStatus]{Body: base.ApiResponse[dto.BaselineStatus]{Success: err == nil, Data: result}}, err
 	})
+	// Read-only binding eligibility per service (#594); filled by the update-action step of M38.
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "get-update-eligibility", Method: http.MethodGet, Path: "/environments/{id}/updater/projects/{projectId}/update-eligibility", Tags: []string{"Updater"}, Summary: "Read which services Docklet can update safely"}, authz.PermProjectsRead, func(ctx context.Context, in *baselineInput) (*handlerutil.Out[dto.UpdateEligibility], error) {
+		return nil, huma.Error501NotImplemented("Update eligibility unavailable")
+	})
 }

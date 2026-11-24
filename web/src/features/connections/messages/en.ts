@@ -40,6 +40,7 @@ export const enConnections = {
     "testStates": { "pass": "Passed", "fail": "Failed", "skipped": "Skipped", "unknown": "Unknown" },
     "testChecks": { "credential": "Credential accepted", "agent-key": "Tagged agent key created", "cleanup": "Test key deleted", "hub-joined": "Hub joined the tailnet", "hub-tag": "Hub carries its tag", "hub-address": "Hub has a tailnet address" }
   },
+  "tags-not-permitted": "Tailscale refused the requested tags for this credential. Create a trust credential with only tag:docklet-hub, and let tag:docklet-hub own tag:docklet-agent in the policy (step 1).",
   "mint-refused": "The credential may not create agent keys. Check the scope Auth keys: write and the tag tag:docklet-agent.",
   "test-cleanup-failed": "The test key could not be deleted. It expires after five minutes.",
   "test-running": "A setup test is already running. Wait for it to finish.",

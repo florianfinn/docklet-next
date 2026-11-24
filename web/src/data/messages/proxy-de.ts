@@ -309,6 +309,23 @@ export const deProxyContract = {
     "marking": "Laden der Konfiguration prüfen",
     "restoring": "Wiederherstellen"
   },
+  "adoption": {
+    "operation": "Neu erstelltem Container gefolgt",
+    "current": "Die Registrierung passt zu ihrem Container.",
+    "adopted": "Die Instanz ist ihrem neu erstellten Container gefolgt.",
+    "refused": "Der neu erstellte Container wurde nicht übernommen.",
+    "reasons": {
+      "container-missing": "Der Container existiert nicht mehr.",
+      "name-changed": "Es gibt keinen Container mit diesem Namen; ein umbenannter Container wird nicht übernommen.",
+      "source-changed": "Der neu erstellte Container bindet eine andere Konfigurationsquelle ein.",
+      "mode-changed": "Der neu erstellte Container bindet die Konfigurationsquelle mit einem anderen Schreibmodus ein.",
+      "kind-changed": "Die Art der Konfigurationsquelle oder des Proxys hat sich geändert.",
+      "operation-open": "Für diese Instanz ist noch ein Vorgang offen.",
+      "ambiguous": "Mehrere Container passen; keiner wird übernommen.",
+      "held-by-instance": "Eine andere Instanz nutzt den neu erstellten Container bereits.",
+      "module-off": "Das Proxy-Modul ist ausgeschaltet."
+    }
+  },
   "kinds": {
     "traefik": "Traefik",
     "caddy": "Caddy"

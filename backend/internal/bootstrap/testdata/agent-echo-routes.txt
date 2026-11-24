@@ -78,6 +78,7 @@ GET /api/environments/:id/updater/history
 GET /api/environments/:id/updater/policies
 GET /api/environments/:id/updater/policies/:kind/:targetId
 GET /api/environments/:id/updater/projects/:projectId/baseline
+GET /api/environments/:id/updater/projects/:projectId/update-eligibility
 GET /api/environments/:id/updater/restore-points
 GET /api/environments/:id/updater/status
 GET /api/environments/:id/updater/system-image-hints

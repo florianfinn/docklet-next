@@ -40,6 +40,7 @@ export const deConnections = {
     "testStates": { "pass": "Bestanden", "fail": "Fehlgeschlagen", "skipped": "Übersprungen", "unknown": "Unbekannt" },
     "testChecks": { "credential": "Zugangsdaten akzeptiert", "agent-key": "Getaggter Agent-Schlüssel erstellt", "cleanup": "Testschlüssel gelöscht", "hub-joined": "Hub ist im Tailnet", "hub-tag": "Hub trägt sein Tag", "hub-address": "Hub hat eine Tailnet-Adresse" }
   },
+  "tags-not-permitted": "Tailscale hat die angeforderten Tags für diese Zugangsdaten abgelehnt. Lege Zugangsdaten mit nur tag:docklet-hub an und lass in der Richtlinie tag:docklet-hub das Tag tag:docklet-agent besitzen (Schritt 1).",
   "mint-refused": "Die Zugangsdaten dürfen möglicherweise keine Agent-Schlüssel erstellen. Prüfe den Bereich Auth keys: write und das Tag tag:docklet-agent.",
   "test-cleanup-failed": "Der Testschlüssel konnte nicht gelöscht werden. Er läuft nach fünf Minuten ab.",
   "test-running": "Ein Einrichtungstest läuft bereits. Warte, bis er abgeschlossen ist.",

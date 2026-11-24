@@ -66,7 +66,7 @@ export const enStacks = {
     back: "Stacks",
     notFound: "Stack not found",
     unreadable: "Stack could not be read",
-    unreadableBody: "Docklet could not read this stack's data from the host. The other stacks are not affected. Check the Compose file of this project on the host.",
+    unreadableBody: "Docklet could not read the data of this stack from the host. The other stacks are not affected. Check the Compose file of this project on the host.",
     notFoundBody: (import.meta.env.DEV ? "The stack does not exist (anymore) in the demo data." : "The stack was not found."),
     draft: "Draft",
     draftMeta: "Not deployed yet · Target: {host} · Easy and Advanced edit the same draft.",

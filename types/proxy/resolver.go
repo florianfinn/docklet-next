@@ -18,6 +18,9 @@ type OperationKind string
 const (
 	RouteOperation    OperationKind = "route"
 	ResolverOperation OperationKind = "resolver"
+	// AdoptionOperation records that an instance followed its recreated container (#592). It is written finished on the hub
+	// and never dispatched to an agent.
+	AdoptionOperation OperationKind = "adoption"
 )
 
 // An absent discriminator is the v19 route envelope.

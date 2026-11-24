@@ -179,6 +179,9 @@ func (m *Module) RegisterRoutes(api huma.API, agent bool) {
 		register(api, m, false, "create-proxy-operation", "POST", hub+"/instances/{instanceId}/operations", func(ctx context.Context, i *CreateOperationInput) (*handlerutil.Out[dto.Operation], error) {
 			return out(m.CreateOperation(ctx, i.InstanceID, i.Body))
 		})
+		register(api, m, false, "adopt-proxy-instance", "POST", hub+"/instances/{instanceId}/adopt", func(ctx context.Context, i *InstanceInput) (*handlerutil.Out[dto.Adoption], error) {
+			return out(m.Adopt(ctx, i.InstanceID))
+		})
 		register(api, m, false, "list-proxy-operations", "GET", hub+"/instances/{instanceId}/operations", func(ctx context.Context, i *InstanceInput) (*handlerutil.Out[[]dto.Operation], error) {
 			return out(m.Operations(ctx, i.InstanceID))
 		})

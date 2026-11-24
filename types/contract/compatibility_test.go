@@ -16,6 +16,11 @@ func TestAgentCompatibilityAndRecoveryRoutes(t *testing.T) {
 	require.True(t, AgentCompatible(20, AgentHubV20Fingerprint), "1.3.0 agents stay supported")
 	require.True(t, AgentCompatible(21, AgentHubV21Fingerprint), "1.4.0 agents stay supported")
 	require.True(t, ModuleCompatible(21, AgentHubV21Fingerprint), "the module surface is unchanged since v21")
+	// F3 (#592): adoption is hub-only, so v22 (1.5.0) agents keep baseline and module requests.
+	require.True(t, AgentCompatible(22, AgentHubV22Fingerprint), "1.5.0 agents stay supported")
+	require.True(t, ModuleCompatible(22, AgentHubV22Fingerprint), "v23 changes no agent module request")
+	require.False(t, AgentCompatible(22, AgentHubFingerprint), "a changed v22 schema is refused")
+	require.False(t, ModuleCompatible(23, AgentHubV22Fingerprint), "a changed v23 schema is refused")
 	require.False(t, AgentCompatible(21, AgentHubFingerprint))
 	require.False(t, AgentCompatible(20, AgentHubFingerprint))
 	require.True(t, AgentCompatible(19, AgentHubV19Fingerprint))

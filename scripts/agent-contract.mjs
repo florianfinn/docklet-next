@@ -77,6 +77,8 @@ export function agentFixture(spec, fixture) {
     schemas: Object.fromEntries(["ImageRuntimeIdentityBlocker", "ImageRuntimeUncertainty", "ImageRuntimeIdentityPeer", "ActivityRuntimePeerAdmissionRequest", "ActivityRuntimeDeployAdmissionRequest", "ActivityRuntimeLifecycleAdmissionRequest"].map((name) => [name, { sha256: createHash("sha256").update(JSON.stringify(schemas[name])).digest("hex") }])),
   };
   manifest.imageSafety.errorCodes = schemas.ImageProblem.properties.code.enum;
+  // Referenced schemas are not hashed recursively: the binding detail an agent sends is hashed by name (#594).
+  manifest.imageSafety.binding = { sha256: createHash("sha256").update(JSON.stringify(schemas.ImageBinding)).digest("hex") };
   const update = document.paths["/environments/{id}/updater/projects/{projectId}/update"]?.post;
   if (update) {
     const schema = (suffix) => {
@@ -89,7 +91,7 @@ export function agentFixture(spec, fixture) {
     if (!operations?.includes("update-project") || !operations.includes("restore-project") || !operations.includes("update-container") || !operations.includes("restore-container-image"))
       throw new Error("missing lifecycle execution producer");
     manifest.lifecycleOperations = operations;
-    const schemaNames = ["ContainerImageRequest", "LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RecoveryResult", "AppliedCandidate", "VerifiedImageRequest", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
+    const schemaNames = ["ContainerImageRequest", "LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RecoveryResult", "AppliedCandidate", "VerifiedImageRequest", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata", "UpdateEligibility", "ServiceEligibility"];
     const source = readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8");
     const edgeRoutes = [...source.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)]
       .filter((match) => /^(updater\.restore\.|updater\.project\.)/.test(match[3]))
@@ -97,7 +99,7 @@ export function agentFixture(spec, fixture) {
     manifest.imageLifecycle = {
       targetKinds: ["project"],
       routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
-        .filter(([, op]) => ["update-project-images", "restore-update", "get-update-baseline", "list-restore-points", "delete-restore-point", "list-host-restore-points", "delete-host-restore-point", "update-container", "restore-container-image"].includes(op?.operationId))
+        .filter(([, op]) => ["update-project-images", "restore-update", "get-update-baseline", "get-update-eligibility", "list-restore-points", "delete-restore-point", "list-host-restore-points", "delete-host-restore-point", "update-container", "restore-container-image"].includes(op?.operationId))
         .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
       schemas: Object.fromEntries(schemaNames.map((name) => {
         const [key, value] = schema(name);
@@ -131,7 +133,7 @@ export function agentFixture(spec, fixture) {
         routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
           .filter(([, op]) => ["get-auto-update-policy", "set-auto-update-policy", "list-update-policies", "check-all-updates", "get-system-image-hints"].includes(op?.operationId))
           .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
-        schemas: Object.fromEntries(["ProjectUpdateInfo", "AutoUpdatePolicy", "UpdatePolicyInput", "UpdateCandidate", "UpdateWindow", "JobscheduleConfig", "JobscheduleUpdate", "JobStatus", "Outcome", "TargetOutcome", "SystemImageHint", "SystemImageHints", "VersionInfo"].map((name) => {
+        schemas: Object.fromEntries(["ProjectUpdateInfo", "AutoUpdatePolicy", "UpdatePolicyInput", "UpdateCandidate", "UpdateWindow", "JobscheduleConfig", "JobscheduleUpdate", "JobStatus", "Outcome", "TargetOutcome", "SystemImageHint", "SystemImageHints", "VersionInfo", "OnboardingChecks"].map((name) => {
           const [key, value] = schema(name);
           return [key, { sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex") }];
         })),

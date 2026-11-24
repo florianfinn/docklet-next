@@ -39,6 +39,22 @@ export const PROXY_PHASE_KEYS = {
   "marking": "proxyContract.phases.marking",
   "restoring": "proxyContract.phases.restoring",
 } satisfies Record<Schema["ProxyOperation"]["phase"], CatalogueKey>;
+export const PROXY_ADOPTION_REASON_KEYS = {
+  "container-missing": "proxyContract.adoption.reasons.container-missing",
+  "name-changed": "proxyContract.adoption.reasons.name-changed",
+  "source-changed": "proxyContract.adoption.reasons.source-changed",
+  "mode-changed": "proxyContract.adoption.reasons.mode-changed",
+  "kind-changed": "proxyContract.adoption.reasons.kind-changed",
+  "operation-open": "proxyContract.adoption.reasons.operation-open",
+  "ambiguous": "proxyContract.adoption.reasons.ambiguous",
+  "held-by-instance": "proxyContract.adoption.reasons.held-by-instance",
+  "module-off": "proxyContract.adoption.reasons.module-off",
+} satisfies Record<NonNullable<Schema["ProxyAdoption"]["reason"]>, CatalogueKey>;
+export const PROXY_ADOPTION_OUTCOME_KEYS = {
+  "current": "proxyContract.adoption.current",
+  "adopted": "proxyContract.adoption.adopted",
+  "refused": "proxyContract.adoption.refused",
+} satisfies Record<Schema["ProxyAdoption"]["outcome"], CatalogueKey>;
 export const PROXY_KIND_KEYS = {
   "traefik": "proxyContract.kinds.traefik",
   "caddy": "proxyContract.kinds.caddy",

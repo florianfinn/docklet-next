@@ -9,6 +9,8 @@ package updater
 import (
 	"context"
 	"time"
+
+	"github.com/florianfinn/docklet-next/types/image"
 )
 
 // Complete restore evidence must fit the same frozen intent limits as admission.
@@ -72,6 +74,18 @@ type RestorePoint struct {
 	Available          bool                          `json:"available"`
 	Orphaned           bool                          `json:"orphaned"`
 	Code               string                        `json:"code,omitempty" enum:"agent.unavailable,container.origin-locked,container.recreate-ambiguous,container.recreate-recovered,autoheal.interrupted,autoheal.limit-reached,autoheal.restart-failed,autoheal.restarted,backup.copy.insufficient-space,backup.copy.mount-failed,backup.copy.write-failed,deploy.point-unavailable,deploy.point-no-baseline,feature-disabled,history.invalid-range,history.sample-invalid,history.sample-too-large,history.unavailable,host.restarting,image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,preferences.invalid,preferences.no-user,preferences.too-large,preferences.unknown-section,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,settings.invalid-time-zone,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,runtime.invalid-acknowledgement,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.service-coupled,update.snapshot-unavailable,update.system-version-unknown,update.candidate-changed,update.target-changed,update.target-not-found,volume.workspace-busy,vulnerability.agent-job-retired,vulnerability.busy,vulnerability.database-unavailable,vulnerability.dispatch-interrupted,vulnerability.dispatch-unknown,vulnerability.host-incompatible,vulnerability.host-offline,vulnerability.host-pending,vulnerability.image-not-found,vulnerability.image-removed,vulnerability.no-eligible-hosts,vulnerability.platform-unavailable,vulnerability.report-invalid,vulnerability.request-too-large,vulnerability.response-too-large,vulnerability.run-not-found,vulnerability.scan-cancelled,vulnerability.scan-failed,vulnerability.scan-interrupted,vulnerability.scan-timeout,vulnerability.scanner-unavailable,vulnerability.storage-full,candidate.deferred,candidate.unavailable,vulnerability.storage-unavailable,update.unstable,update.auto-restored,update.auto-restore-failed,update.auto-restore-unavailable,update.interrupted,update.candidate-failed,restore.files-changed,container.auto-remove"`
+}
+
+// UpdateEligibility says, before an update is offered, which services Docklet can update safely (#594). It reads the
+// Compose model and files only; registry and Docker checks stay in the update preflight.
+type UpdateEligibility struct {
+	Project  *image.Binding       `json:"project,omitempty"`
+	Services []ServiceEligibility `json:"services" maxItems:"256"`
+}
+type ServiceEligibility struct {
+	Service  string         `json:"service" maxLength:"128"`
+	Eligible bool           `json:"eligible"`
+	Binding  *image.Binding `json:"binding,omitempty"`
 }
 
 type BaselineStatus struct {

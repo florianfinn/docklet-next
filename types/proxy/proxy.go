@@ -205,8 +205,51 @@ type ApplyRequest struct {
 	Change           Change            `json:"change"`
 	Acknowledgements Acknowledgements  `json:"acknowledgements"`
 }
+
+// AdoptionReceipt is the payload of an adoption record: the container the instance followed.
+type AdoptionReceipt struct {
+	PreviousContainerID string `json:"previousContainerId" minLength:"1" maxLength:"128"`
+	ContainerID         string `json:"containerId" minLength:"1" maxLength:"128"`
+	StartedAt           string `json:"startedAt" maxLength:"64"`
+}
+
+// AdoptionOutcome answers an adoption request: the registration is current, followed its recreated container, or stays
+// refused with a reason.
+type AdoptionOutcome string
+
+const (
+	AdoptionCurrent AdoptionOutcome = "current"
+	AdoptionAdopted AdoptionOutcome = "adopted"
+	AdoptionRefused AdoptionOutcome = "refused"
+)
+
+// AdoptionReason names why a recreated container was not adopted.
+type AdoptionReason string
+
+const (
+	AdoptionContainerMissing AdoptionReason = "container-missing"
+	AdoptionNameChanged      AdoptionReason = "name-changed"
+	AdoptionSourceChanged    AdoptionReason = "source-changed"
+	AdoptionModeChanged      AdoptionReason = "mode-changed"
+	AdoptionKindChanged      AdoptionReason = "kind-changed"
+	AdoptionOperationOpen    AdoptionReason = "operation-open"
+	AdoptionAmbiguous        AdoptionReason = "ambiguous"
+	AdoptionHeldByInstance   AdoptionReason = "held-by-instance"
+	AdoptionModuleOff        AdoptionReason = "module-off"
+)
+
+// Adoption is the result of POST …/instances/{instanceId}/adopt.
+type Adoption struct {
+	Outcome      AdoptionOutcome `json:"outcome" enum:"current,adopted,refused"`
+	Reason       AdoptionReason  `json:"reason,omitzero" enum:"container-missing,name-changed,source-changed,mode-changed,kind-changed,operation-open,ambiguous,held-by-instance,module-off"`
+	Instance     Instance        `json:"instance"`
+	SupersededBy string          `json:"supersededBy,omitzero" maxLength:"128"`
+	OperationID  string          `json:"operationId,omitzero" maxLength:"128"`
+}
+
 type Operation struct {
 	Kind         OperationKind           `json:"kind,omitempty"`
+	Adoption     *AdoptionReceipt        `json:"adoption,omitempty"`
 	Resolver     *ResolverReceipt        `json:"resolver,omitempty"`
 	Certificate  *CertificateObservation `json:"certificate,omitempty"`
 	Probe        *ProbeEvidence          `json:"probe,omitempty"`

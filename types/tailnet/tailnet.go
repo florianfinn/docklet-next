@@ -19,6 +19,8 @@ const (
 	CodeKeyMintFailed           = "tailnet.key-mint-failed"
 	CodeProviderUnavailable     = "tailnet.provider-unavailable"
 	CodeMTLSUnsupported         = "tailnet.mtls-unsupported"
+	// CodeTagsNotPermitted: the provider refused the requested tags for this credential (#599); RefusedTags names them.
+	CodeTagsNotPermitted = "tailnet.tags-not-permitted"
 )
 
 const (
@@ -34,10 +36,12 @@ const (
 
 // Problem is a typed refusal of a tailnet operation.
 type Problem struct {
-	Code   string `json:"code" enum:"tailnet.credential-rejected,tailnet.coordination-unreachable,tailnet.not-connected,tailnet.key-mint-failed,tailnet.provider-unavailable,tailnet.mtls-unsupported,tailnet.mint-refused,tailnet.test-cleanup-failed,tailnet.test-running"`
+	Code   string `json:"code" enum:"tailnet.credential-rejected,tailnet.coordination-unreachable,tailnet.not-connected,tailnet.key-mint-failed,tailnet.provider-unavailable,tailnet.mtls-unsupported,tailnet.mint-refused,tailnet.test-cleanup-failed,tailnet.test-running,tailnet.tags-not-permitted"`
 	Status int    `json:"status"`
 	// ProviderStatus is the HTTP status the Tailscale API answered with, when one was received.
 	ProviderStatus int `json:"providerStatus,omitzero"`
+	// RefusedTags are the tags the provider refused (tailnet.tags-not-permitted); tag names only.
+	RefusedTags []string `json:"refusedTags,omitzero" maxItems:"8"`
 }
 
 func (p *Problem) Error() string             { return p.Code }
@@ -47,15 +51,18 @@ func (p *Problem) ContentType(string) string { return "application/problem+json"
 // Connection is the hub node's observed tailnet membership; link 1 of the host chain uses only this.
 type Connection struct {
 	State string `json:"state" enum:"off,joining,connected,control-unreachable,error"`
-	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.coordination-unreachable,tailnet.not-connected,tailnet.mtls-unsupported"`
+	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.coordination-unreachable,tailnet.not-connected,tailnet.mtls-unsupported,tailnet.tags-not-permitted"`
+	// RefusedTags are the tags the control server refused for the hub join (tailnet.tags-not-permitted).
+	RefusedTags []string `json:"refusedTags,omitzero" maxItems:"8"`
 }
 
 // Provisioning is the credential's ability to admit new hosts, independent of the connection.
 type Provisioning struct {
 	State string `json:"state" enum:"not-configured,not-applicable,checking,ok,rejected,unavailable"`
-	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.provider-unavailable"`
+	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.provider-unavailable,tailnet.tags-not-permitted"`
 	// ProviderStatus is the last rejecting HTTP status from the Tailscale API.
-	ProviderStatus int `json:"providerStatus,omitzero"`
+	ProviderStatus int      `json:"providerStatus,omitzero"`
+	RefusedTags    []string `json:"refusedTags,omitzero" maxItems:"8"`
 }
 
 // Status is the redacted hub tailnet status; it never carries keys or peer endpoints.
@@ -85,6 +92,9 @@ type HostPeer struct {
 	ObservedAt *time.Time `json:"observedAt,omitempty"`
 	// FailingLink is the first failing link of the hub → peer → tunnel chain, or none.
 	FailingLink string `json:"failingLink" doc:"hub, peer, tunnel or none"`
+	// DNSName is the node's MagicDNS name without the trailing dot; Addresses are its tailnet IPs, IPv4 first (#601).
+	DNSName   string   `json:"dnsName,omitzero" maxLength:"253"`
+	Addresses []string `json:"addresses,omitzero" maxItems:"4"`
 }
 
 // Settings is the write-only credential read model of Settings → Connections.
@@ -117,8 +127,9 @@ type TestResult struct {
 
 // TestCheck separates provider admission from hub membership and cleanup certainty.
 type TestCheck struct {
-	ID             string `json:"id" enum:"credential,agent-key,cleanup,hub-joined,hub-tag,hub-address"`
-	State          string `json:"state" enum:"pass,fail,skipped,unknown"`
-	Code           string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.provider-unavailable,tailnet.not-connected,tailnet.mint-refused,tailnet.test-cleanup-failed,tailnet.test-running"`
-	ProviderStatus int    `json:"providerStatus,omitzero"`
+	ID             string   `json:"id" enum:"credential,agent-key,cleanup,hub-joined,hub-tag,hub-address"`
+	State          string   `json:"state" enum:"pass,fail,skipped,unknown"`
+	Code           string   `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.provider-unavailable,tailnet.not-connected,tailnet.mint-refused,tailnet.test-cleanup-failed,tailnet.test-running,tailnet.tags-not-permitted"`
+	ProviderStatus int      `json:"providerStatus,omitzero"`
+	RefusedTags    []string `json:"refusedTags,omitzero" maxItems:"8"`
 }

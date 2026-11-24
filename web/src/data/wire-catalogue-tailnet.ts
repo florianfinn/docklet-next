@@ -11,6 +11,7 @@ type Schema = components["schemas"];
 
 export const TAILNET_CODE_KEYS = {
   "tailnet.mint-refused": "connections.mint-refused",
+  "tailnet.tags-not-permitted": "connections.tags-not-permitted",
   "tailnet.test-cleanup-failed": "connections.test-cleanup-failed",
   "tailnet.test-running": "connections.test-running",
   "tailnet.credential-rejected": "tailnetContract.codes.credential-rejected",

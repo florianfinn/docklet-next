@@ -19,8 +19,15 @@ const AgentHubV20Fingerprint = "51489456b62b53b9128a6c61a7d5285c341631dcc5fbedb4
 // answers an uncoded 404 and Edge refuses the command (the hub reports a tunnel failure); the web shows the run without counts.
 const AgentHubV21Fingerprint = "081a36566f1e1c401e071059756a35b8843e74d52c980a5172e455405f3f793d"
 
+// AgentHubV22Fingerprint is the 1.5.0 surface. v23 adds hub-only proxy adoption, the binding detail and the eligibility read:
+// a v22 agent sends no binding detail and has no eligibility read, so the web shows today's generic refusal text.
+const AgentHubV22Fingerprint = "c2b15889bef9d47a22c686d268c49119e581536584c9fd0b20bff61d304e1ee4"
+
 // AgentCompatible rejects older contracts and a changed schema at the same version.
 func AgentCompatible(version int, fingerprint string) bool {
+	if version == 22 {
+		return fingerprint == AgentHubV22Fingerprint
+	}
 	if version == 21 {
 		return fingerprint == AgentHubV21Fingerprint
 	}
@@ -54,5 +61,5 @@ func AgentRecoveryRoute(method, path string) bool {
 func ModuleCompatible(version int, fingerprint string) bool {
 	// Proxy module requests changed in contract 20 (M28: resolvers, certificate check,
 	// operation kind), so v19 agents get update-required for every module request.
-	return (version == 20 && fingerprint == AgentHubV20Fingerprint) || (version == 21 && fingerprint == AgentHubV21Fingerprint) || (version >= 22 && fingerprint == AgentHubFingerprint)
+	return (version == 20 && fingerprint == AgentHubV20Fingerprint) || (version == 21 && fingerprint == AgentHubV21Fingerprint) || (version == 22 && fingerprint == AgentHubV22Fingerprint) || (version >= 23 && fingerprint == AgentHubFingerprint)
 }

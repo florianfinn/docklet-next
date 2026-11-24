@@ -5,6 +5,9 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  // M38 contract foundation: proxy adoption (#592) and update eligibility (#594).
+  ["POST /modules/proxy/instances/{instanceId}/adopt", "adopt-proxy-instance"],
+  ["GET /environments/{id}/updater/projects/{projectId}/update-eligibility", "get-update-eligibility"],
   ["POST /tailnet/test", "test-tailnet"],
   ["GET /environments/{id}/vulnerabilities/candidates/runs/{activityId}", "get-vulnerability-candidate-run"],
   // Hub-only release list refresh for the explicit update recheck.

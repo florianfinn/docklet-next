@@ -14,7 +14,7 @@ import (
 )
 
 func TestRecoveryV18NestedSchemas(t *testing.T) {
-	body, err := os.ReadFile("testdata/agent-hub-v22.json")
+	body, err := os.ReadFile("testdata/agent-hub-v23.json")
 	require.NoError(t, err)
 	var fixture struct {
 		ImageLifecycle struct {
@@ -27,6 +27,6 @@ func TestRecoveryV18NestedSchemas(t *testing.T) {
 	for _, name := range []string{"UpdaterRecoveryResult", "UpdaterAppliedCandidate", "UpdaterVerifiedImageRequest"} {
 		require.Len(t, fixture.ImageLifecycle.Schemas[name].SHA256, 64, name)
 	}
-	require.Equal(t, 22, AgentHubVersion)
+	require.Equal(t, 23, AgentHubVersion)
 	require.Equal(t, 18, MinimumAgentVersion)
 }

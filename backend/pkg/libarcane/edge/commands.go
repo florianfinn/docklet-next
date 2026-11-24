@@ -31,6 +31,7 @@ var commandRoutes = withVulnerabilityRoutes([]commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/0/history/sample", CommandName: "history.sample"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/check", CommandName: "updater.project.check"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/baseline", CommandName: "updater.project.baseline"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/update-eligibility", CommandName: "updater.project.eligibility"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/{kind}/{targetId}/restore-points", CommandName: "updater.restore.list"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}", CommandName: "updater.restore.delete"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/restore-points", CommandName: "updater.restore.host-list"},
