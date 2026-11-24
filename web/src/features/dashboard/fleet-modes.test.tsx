@@ -103,7 +103,7 @@ describe("fleet modes", () => {
   });
 
   it("sanitises stored fleet settings", () => {
-    expect(mergeFleetView({ mode: "spiral", ringSize: 999, placement: "left", fan: "yes", hostOrder: ["b", 3, "b", "a"] }, DEFAULT_FLEET_VIEW)).toEqual({ mode: "joint", ringSize: 320, placement: DEFAULT_FLEET_VIEW.placement, fan: true, hostOrder: ["b", "a"], hostArea: DEFAULT_FLEET_VIEW.hostArea });
+    expect(mergeFleetView({ mode: "spiral", ringSize: 999, placement: "left", fan: "yes", hostOrder: ["b", 3, "b", "a"] }, DEFAULT_FLEET_VIEW)).toEqual({ mode: "joint", ringSize: 320, placement: DEFAULT_FLEET_VIEW.placement, fan: true, hostOrder: ["b", "a"], hostArea: DEFAULT_FLEET_VIEW.hostArea, hideStopped: false });
     // Host area size: whole cells within its limits; missing or broken values keep the default.
     expect([mergeFleetView({ hostArea: { w: 30, h: 1.6 } }, DEFAULT_FLEET_VIEW).hostArea, mergeFleetView({ hostArea: { w: "x" } }, DEFAULT_FLEET_VIEW).hostArea, mergeFleetView({ hostArea: 5 }, DEFAULT_FLEET_VIEW).hostArea]).toEqual([
       { w: 9, h: 2 },
@@ -112,5 +112,49 @@ describe("fleet modes", () => {
     ]);
     const hosts = HOSTS.filter((h) => ["atlas", "boreal", "cedar", "delta"].includes(h.id));
     expect(orderHosts(hosts, ["cedar", "gone"]).map((h) => h.id)).toEqual(["cedar", "atlas", "boreal", "delta"]);
+  });
+});
+
+describe("#596 hide stopped", () => {
+  it("leaves only units stopped on purpose out of the ring and its figure, names the count, keeps failed units and survives a reload", async () => {
+    // One running container exits with an error: its unit is failed (down), not stopped on purpose.
+    const adapter = createDemoAdapter();
+    const listContainers = adapter.listContainers.bind(adapter);
+    let failed = "";
+    adapter.listContainers = async (...args) => (await listContainers(...args)).map((c) => {
+      if (failed && c.id !== failed || c.state !== "running" || !c.stackId) return c;
+      failed = c.id;
+      return { ...c, state: "stopped", condition: { containerId: c.id, condition: "down", reason: "exit", exitCode: 1, sampledAt: "2026-11-24T00:00:00Z" } };
+    });
+    const hosts = HOSTS.filter((h) => h.status !== "pending");
+    const units = fleetUnits(hosts, await adapter.listStacks(), await adapter.listContainers());
+    const stopped = units.filter((u) => u.state === "stopped").length;
+    expect(stopped > 0 && units.some((u) => u.state === "down")).toBe(true);
+    fleetViewStore.set({ ...DEFAULT_FLEET_VIEW, mode: "joint" });
+    const first = renderWithApp(<DashboardPage />, adapter);
+    const ring = await screen.findByRole("group", { name: /^Stackring:/ });
+    const before = within(ring).getAllByRole("button").length;
+    fireEvent.click(screen.getByRole("switch", { name: "Gestoppte ausblenden" }));
+    const after = within(await screen.findByRole("group", { name: /^Stackring:/ })).getAllByRole("button").length;
+    expect(before - after).toBe(stopped);
+    expect(screen.getByText(`${stopped} gestoppte ausgeblendet`) !== null).toBe(true);
+    expect(fleetViewStore.get().hideStopped).toBe(true);
+    first.unmount();
+    renderWithApp(<DashboardPage />, adapter);
+    expect((await screen.findByRole("switch", { name: "Gestoppte ausblenden" })).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("is a personal choice: design codes neither carry nor replace it", async () => {
+    const { captureSnapshot, applySnapshot } = await import("@/shared/preferences/favorite-code");
+    fleetViewStore.set({ ...DEFAULT_FLEET_VIEW, hideStopped: true });
+    const snapshot = captureSnapshot();
+    expect("hideStopped" in (snapshot.fleet ?? {})).toBe(false);
+    // Applying a design code keeps the person's own choice, whatever the code contains.
+    applySnapshot({ ...snapshot, fleet: { ...snapshot.fleet!, hideStopped: false } as never });
+    expect(fleetViewStore.get().hideStopped).toBe(true);
+  });
+
+  it("reads a missing or garbled stored value as showing every unit", () => {
+    expect([undefined, "true", 1, null, true].map((hideStopped) => mergeFleetView({ hideStopped }, DEFAULT_FLEET_VIEW).hideStopped)).toEqual([false, false, false, false, true]);
   });
 });

@@ -36,7 +36,7 @@ function PolicyHelp({ label, text }: { label: string; text: string }) {
   return <span className="inline-flex items-center gap-1">{label}<Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon-sm" aria-label={label}><Info aria-hidden className="size-3" /></Button></TooltipTrigger><TooltipContent className="max-w-80">{text}</TooltipContent></Tooltip></span>;
 }
 function PoliciesTable({ hosts, timeZone }: { hosts: Host[]; timeZone: string }) {
-  const adapter = useAdapter(), t = useTranslations("settings.updates"), common = useTranslations("common.stackUpdates");
+  const adapter = useAdapter(), t = useTranslations("settings.updates");
   const queries = useQueries({ queries: hosts.map((host) => ({ queryKey: ["stack", "update-policies", host.id], queryFn: async () => {
     const cap = await adapter.getCapability("listUpdatePolicies", { kind: "host", id: host.id });
     if (!cap.available) throw unavailable("listUpdatePolicies", { kind: "host", id: host.id }, cap.disabledReasonCode);
@@ -47,7 +47,7 @@ function PoliciesTable({ hosts, timeZone }: { hosts: Host[]; timeZone: string })
     <OverviewTable fitKey="update-policies" columns={() => [
       { id: "name", label: t("target"), className: "min-w-40" },
       { id: "host", label: t("host") },
-      { id: "mode", label: t("mode"), wide: true, head: <PolicyHelp label={t("mode")} text={common("updateWithCheckHelp")} /> },
+      { id: "mode", label: t("mode"), wide: true, head: <PolicyHelp label={t("mode")} text={t("modeHelp")} /> },
       { id: "window", label: t("window"), head: <PolicyHelp label={t("window")} text={t("windowHelp")} /> },
     ]} selecting={false} actionsLabel="" listLabel={t("table")} dense>
       {(view, columns) => queries.flatMap((q, i) => (q.data ?? []).map((p) => <PolicyControl key={`${hosts[i]!.id}:${p.targetKind}:${p.targetId}`} policy={p} timeZone={timeZone} saved={() => { void q.refetch(); }} render={(mode, window) => <OverviewRowView view={view} columns={columns} pad="py-3" hostColor={hosts[i]!.color} actions={null} cells={{

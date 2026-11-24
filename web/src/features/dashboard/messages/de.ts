@@ -101,6 +101,8 @@ export const deDashboard: typeof enDashboard = {
     openGroup: "In Container anzeigen",
     lineRoleDescription: "Statuslinien je Host",
     lineCount: "{running}/{total} laufen",
+    hideStopped: "Gestoppte ausblenden",
+    stoppedHidden: "{count} gestoppte ausgeblendet",
     hostRingLabel: "Stackring {host}: {running} von {total} laufen. Pfeiltasten wechseln den Stack, Eingabe öffnet ihn.",
     lineLabel: "Statuslinien aller Hosts: {running} laufen, {unhealthy} ungesund, {down} ausgefallen, {unreachable} auf getrennten Hosts, {stopped} gestoppt. Pfeiltasten wechseln den Stack, Eingabe öffnet ihn.",
   },

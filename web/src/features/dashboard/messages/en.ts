@@ -100,6 +100,8 @@ export const enDashboard = {
     openGroup: "Show in containers",
     lineRoleDescription: "Status lines per host",
     lineCount: "{running}/{total} running",
+    hideStopped: "Hide stopped",
+    stoppedHidden: "{count} stopped hidden",
     hostRingLabel: "Stack ring {host}: {running} of {total} running. Arrow keys switch the stack, Enter opens it.",
     lineLabel: "Status lines of all hosts: {running} running, {unhealthy} unhealthy, {down} failed, {unreachable} on disconnected hosts, {stopped} stopped. Arrow keys switch the stack, Enter opens it.",
   },

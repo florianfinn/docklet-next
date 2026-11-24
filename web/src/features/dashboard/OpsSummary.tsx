@@ -16,7 +16,8 @@ import { DotField } from "@/shared/visual/DotField";
 import type { AttentionItem } from "./attention";
 import { fleetBreakdown, fleetUnits, problemCounts, problemItems, type FleetBreakdown, type FleetFilter, type FleetUnit } from "./fleet-status";
 import { FleetChips } from "./FleetChips";
-import { orderHosts, useFleetView, type HostAreaSize } from "./fleet-view-store";
+import { orderHosts, setFleetView, useFleetView, type HostAreaSize } from "./fleet-view-store";
+import { Switch } from "@/shared/ui/switch";
 import { FleetLine } from "./FleetLine";
 import { ConditionFeed } from "./ConditionFeed";
 import { FleetRing } from "./FleetRing";
@@ -152,15 +153,31 @@ interface OpsSummaryProps {
   duration: number;
 }
 
+/** Per-user choice to leave stacks stopped on purpose out of the rings (#596), with the count it hides. */
+function StoppedToggle({ hidden }: { hidden: number }) {
+  const t = useTranslations("dashboard.ring");
+  const view = useFleetView();
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-slot="stopped-toggle">
+      <label className="inline-flex min-h-8 cursor-pointer items-center gap-2">
+        <Switch checked={view.hideStopped} onCheckedChange={(checked) => setFleetView({ hideStopped: checked })} aria-label={t("hideStopped")} />
+        {t("hideStopped")}
+      </label>
+      {view.hideStopped && hidden > 0 && <span data-slot="stopped-hidden-hint">{t("stoppedHidden", { count: hidden })}</span>}
+    </div>
+  );
+}
+
 /** Joint ring, one ring per host or status lines; all read the same stack units. */
-function FleetVisual({ hosts, units, label, center }: { hosts: Host[]; units: FleetUnit[]; label: string; center: { value: string; caption: string } }) {
+function FleetVisual({ hosts, units, label, center, hiddenStopped }: { hosts: Host[]; units: FleetUnit[]; label: string; center: { value: string; caption: string }; hiddenStopped: number }) {
   const t = useTranslations("dashboard.ring");
   const view = useFleetView();
   const [pinned, setPinned] = useState<FleetFilter | null>(null);
   const [hovered, setHovered] = useState<FleetFilter | null>(null);
   const highlight = hovered ?? pinned;
-  const hint = <UnraidHiddenHint count={useVisibleContainers().hiddenUnraid} />;
-  if (view.mode === "line") return <div className="flex flex-col items-center gap-3"><FleetLine hosts={hosts} units={units} label={label} />{hint}</div>;
+  const hiddenUnraid = useVisibleContainers().hiddenUnraid;
+  const hint = <><UnraidHiddenHint count={hiddenUnraid} /><StoppedToggle hidden={hiddenStopped} /></>;
+  if (view.mode === "line") return <div className="flex flex-col items-center gap-3"><FleetLine hosts={hosts} units={units} label={label} /><UnraidHiddenHint count={hiddenUnraid} /></div>;
   const chips = <FleetChips units={units} pinned={pinned} onPin={setPinned} onHover={setHovered} />;
   if (view.mode === "perHost") {
     const size = Math.round(Math.max(130, view.ringSize * 0.66));
@@ -201,7 +218,8 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
   const units = fleetUnits(hosts, stacks, containers);
   const breakdown = fleetBreakdown(hosts, units);
   // Unraid containers of hosts the user excluded are already left out of `containers` (useVisibleContainers).
-  const ringUnits = units;
+  // "Hide stopped" leaves out only units stopped on purpose; failed, unhealthy and unknown units stay (AUTO-3).
+  const ringUnits = view.hideStopped && view.mode !== "line" ? units.filter((u) => u.state !== "stopped") : units;
   const ringBreakdown = fleetBreakdown(hosts, ringUnits);
   const ringRunning = ringBreakdown.running;
   const running = breakdown.running;
@@ -260,7 +278,7 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
     </div>
   );
   const visual = (
-    <FleetVisual hosts={hosts} units={view.mode === "line" ? units : ringUnits} label={view.mode === "line" ? tr("lineLabel", counts) : t("ringLabel", { running: ringRunning, unhealthy: ringBreakdown.unhealthy, down: ringBreakdown.down, unreachable: ringBreakdown.unreachable, stopped: ringBreakdown.stopped + ringBreakdown.unknown })} center={{ value: `${ringRunning}/${ringUnits.length}`, caption: t("ringCaption") }} />
+    <FleetVisual hosts={hosts} units={view.mode === "line" ? units : ringUnits} label={view.mode === "line" ? tr("lineLabel", counts) : t("ringLabel", { running: ringRunning, unhealthy: ringBreakdown.unhealthy, down: ringBreakdown.down, unreachable: ringBreakdown.unreachable, stopped: ringBreakdown.stopped + ringBreakdown.unknown })} center={{ value: `${ringRunning}/${ringUnits.length}`, caption: t("ringCaption") }} hiddenStopped={units.length - ringUnits.length} />
   );
   const right = view.placement === "right";
 

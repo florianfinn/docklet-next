@@ -36,12 +36,14 @@ export interface FleetView {
   /** Dashboard-only host order for cards, per-host rings and lines; empty = by name. */
   hostOrder: string[];
   hostArea: HostAreaSize;
+  /** Leaves units stopped on purpose out of the rings and their figure (#596); failed units stay. Per user, not part of design codes. */
+  hideStopped: boolean;
 }
 
 export const RING_SIZE = { min: 160, max: 320, default: 220 } as const;
 const MODES: readonly FleetMode[] = ["joint", "perHost", "line"];
 
-const FACTORY_FLEET_VIEW: FleetView = { mode: "joint", ringSize: RING_SIZE.default, placement: "below", fan: true, hostOrder: [], hostArea: DEFAULT_HOST_AREA };
+const FACTORY_FLEET_VIEW: FleetView = { mode: "joint", ringSize: RING_SIZE.default, placement: "below", fan: true, hostOrder: [], hostArea: DEFAULT_HOST_AREA, hideStopped: false };
 
 export function mergeFleetView(stored: unknown, defaults: FleetView): FleetView {
   const s = (stored && typeof stored === "object" ? stored : {}) as Partial<Record<keyof FleetView, unknown>>;
@@ -53,11 +55,13 @@ export function mergeFleetView(stored: unknown, defaults: FleetView): FleetView 
     fan: typeof s.fan === "boolean" ? s.fan : defaults.fan,
     hostOrder: Array.isArray(s.hostOrder) ? [...new Set(s.hostOrder.filter((x): x is string => typeof x === "string"))] : [],
     hostArea: s.hostArea && typeof s.hostArea === "object" ? clampHostArea(s.hostArea as Partial<Record<keyof HostAreaSize, unknown>>) : defaults.hostArea,
+    // Only an explicit true hides; a missing or garbled value shows every unit.
+    hideStopped: s.hideStopped === true,
   };
 }
 
 /** Shipped default: the favourite design's fleet section; never a host order. */
-export const DEFAULT_FLEET_VIEW: FleetView = mergeFleetView({ ...SHIPPED_DESIGN.fleet, hostOrder: [] }, FACTORY_FLEET_VIEW);
+export const DEFAULT_FLEET_VIEW: FleetView = mergeFleetView({ ...SHIPPED_DESIGN.fleet, hostOrder: [], hideStopped: false }, FACTORY_FLEET_VIEW);
 
 export const fleetViewStore = createStore<FleetView>(DEFAULT_FLEET_VIEW, { key: "docklet-react-opus.fleet-view", version: 1, merge: mergeFleetView });
 

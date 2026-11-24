@@ -285,6 +285,7 @@ export const enSettings = {
     defaultMode: "The default is “Check only”. Automatic installation is turned on per stack or container.",
     noRollback: "Scheduled updates and “Update with check” watch the new version for 2 minutes and try to restore the previous version on failure. Plain manual updates require manual recovery. Volume data is never restored.",
     host: "Host",
+    modeHelp: "Check only looks for new versions and shows them; nothing is installed. Update with check installs a new version in the window, watches it for 2 minutes and restores the previous version if it fails. Volume data is not restored.",
     windowHelp: "Scheduled updates run in this window in the hub time zone. Check-only targets have no install window. Each change saves this row.",
     table: "Automatic installation",
     target: "Stack / Container",

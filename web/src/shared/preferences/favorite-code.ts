@@ -37,7 +37,7 @@ export interface DesignSnapshot {
   uiStyle?: UiStyle;
   visual?: VisualStyle;
   dashboard?: Pick<DashboardLayout, "order" | "hidden" | "sizes">;
-  fleet?: Omit<FleetView, "hostOrder">;
+  fleet?: Omit<FleetView, "hostOrder" | "hideStopped">;
   overview?: OverviewPrefs;
   help?: HelpPrefs;
 }
@@ -81,7 +81,7 @@ function cleanDashboard(raw: unknown): DesignSnapshot["dashboard"] {
 }
 
 function cleanFleet(raw: unknown): DesignSnapshot["fleet"] {
-  const { hostOrder: _hosts, ...fleet } = mergeFleetView({ ...sameShape(raw, DEFAULT_FLEET_VIEW), hostOrder: [] }, DEFAULT_FLEET_VIEW);
+  const { hostOrder: _hosts, hideStopped: _hidden, ...fleet } = mergeFleetView({ ...sameShape(raw, DEFAULT_FLEET_VIEW), hostOrder: [] }, DEFAULT_FLEET_VIEW);
   return fleet;
 }
 
@@ -191,7 +191,7 @@ export function applySnapshot(raw: DesignSnapshot): SectionId[] {
   }
   if (s.fleet) {
     const fleet = s.fleet;
-    fleetViewStore.set((f) => mergeFleetView({ ...fleet, hostOrder: f.hostOrder }, DEFAULT_FLEET_VIEW));
+    fleetViewStore.set((f) => mergeFleetView({ ...fleet, hostOrder: f.hostOrder, hideStopped: f.hideStopped }, DEFAULT_FLEET_VIEW));
   }
   if (s.overview) {
     const overview = s.overview;

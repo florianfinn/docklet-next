@@ -286,6 +286,7 @@ export const deSettings: typeof enSettings = {
     defaultMode: "Standard ist „Nur prüfen“. Automatische Installation wird je Stack oder Container eingeschaltet.",
     noRollback: "Geplante Updates und „Update mit Prüfung“ beobachten die neue Version 2 Minuten lang und versuchen bei Fehlern, die vorherige Version wiederherzustellen. Einfache manuelle Updates erfordern eine manuelle Wiederherstellung. Volume-Daten werden nie wiederhergestellt.",
     host: "Host",
+    modeHelp: "Nur prüfen sucht nach neuen Versionen und zeigt sie an; installiert wird nichts. Update mit Prüfung installiert eine neue Version im Zeitfenster, beobachtet sie 2 Minuten und stellt bei einem Fehler die vorherige Version wieder her. Volume-Daten werden nicht wiederhergestellt.",
     windowHelp: "Geplante Updates laufen in diesem Zeitfenster in der Hub-Zeitzone. Reine Prüfungen haben kein Installationsfenster. Jede Änderung speichert diese Zeile.",
     table: "Automatische Installation",
     target: "Stack / Container",
