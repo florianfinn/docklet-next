@@ -236,7 +236,7 @@ func TestLifecyclePostPullImageIDMismatchHasNoBindingOrFileEffects(t *testing.T)
 func TestLifecycleVersionReferencePreservesLiteralRepository(t *testing.T) {
 	for _, source := range []string{"nginx:1.27", "library/nginx:1.27", "docker.io/library/nginx:1.27", "registry.example.com:5443/team/nginx:1.27"} {
 		t.Run(source, func(t *testing.T) {
-			selected, err := lifecycleVersionReference(source, "1.28")
+			selected, err := lifecycleVersionReference("app", source, "1.28")
 			require.NoError(t, err)
 			require.Equal(t, strings.TrimSuffix(source, "1.27")+"1.28", selected)
 		})
@@ -255,7 +255,7 @@ func TestLifecycleVersionUpdateWritesTheUsersLiteralReference(t *testing.T) {
 	f.mu.Unlock()
 	f.establishBaseline()
 	intent := f.intent("version")
-	selected, err := lifecycleVersionReference("nginx:1.27", "1.28")
+	selected, err := lifecycleVersionReference("app", "nginx:1.27", "1.28")
 	require.NoError(t, err)
 	intent.Selections[0].SourceReference = "nginx:1.27"
 	intent.Selections[0].Reference = selected

@@ -196,11 +196,11 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 		selected := img.Reference
 		kind := "rebuild"
 		if lifecycleTagPolicyVersion(info, img.Reference, current.Model.Services[key].Labels) {
-			tag, err := s.lifecycleSelectedTag(ctx, img.Reference, current.Model.Services[key].Labels, info.LatestVersion)
+			tag, err := s.lifecycleSelectedTag(ctx, key, img.Reference, current.Model.Services[key].Labels, info.LatestVersion)
 			if err != nil {
 				return nil, err
 			}
-			selected, err = lifecycleVersionReference(img.Reference, tag)
+			selected, err = lifecycleVersionReference(key, img.Reference, tag)
 			if err != nil {
 				return nil, err
 			}
@@ -273,8 +273,8 @@ func immutableLifecycleReference(sel dto.ImageSelection) (string, error) {
 	return reference.TrimNamed(named).String() + "@" + sel.Digest, nil
 }
 
-func lifecycleVersionReference(source, version string) (string, error) {
-	if refusal := referenceBindingFailure("", source); refusal != nil {
+func lifecycleVersionReference(service, source, version string) (string, error) {
+	if refusal := referenceBindingFailure(service, source); refusal != nil {
 		return "", refusal
 	}
 	base := source
@@ -283,7 +283,7 @@ func lifecycleVersionReference(source, version string) (string, error) {
 	}
 	selected := base + ":" + version
 	if guard.ValidateReference(selected) != nil {
-		return "", bindingFailure("", "unparsable")
+		return "", bindingFailure(service, "unparsable")
 	}
 	return selected, nil
 }
@@ -292,18 +292,18 @@ func lifecycleVersionReference(source, version string) (string, error) {
 // version: observations carry the selected version, execution needs the tag,
 // including a pattern's surrounding text or a "v". A different selection than
 // the checked version is refused rather than installed.
-func (s *ProjectService) lifecycleSelectedTag(ctx context.Context, ref string, labels map[string]string, version string) (string, error) {
+func (s *ProjectService) lifecycleSelectedTag(ctx context.Context, service, ref string, labels map[string]string, version string) (string, error) {
 	policy, err := tagpolicy.Resolve(ref, updater.DefaultLabelPolicy().TagPolicy(labels))
 	if err != nil {
 		return "", lifecycleFailure("update.check-unavailable")
 	}
 	named, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
-		return "", bindingFailure("", "unparsable")
+		return "", bindingFailure(service, "unparsable")
 	}
 	tagged, ok := named.(reference.Tagged)
 	if !ok {
-		return "", bindingFailure("", "unparsable")
+		return "", bindingFailure(service, "unparsable")
 	}
 	tags, err := s.containerRegistryService.ListImageTags(ctx, ref, nil)
 	if err != nil {

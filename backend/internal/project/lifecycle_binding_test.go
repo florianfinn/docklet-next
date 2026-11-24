@@ -11,8 +11,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -115,44 +117,64 @@ func TestBindingInputAndWriterReasons(t *testing.T) {
 	}
 }
 
-// Every generic construction is forbidden outside the binding constructor;
-// literal reason arguments also prevent a new refusal branch losing its reason.
+// The refusal code appears only at reviewed sites: the two constructors that
+// attach a binding, the relay and sender comparisons, and the AUTO-8 deploy
+// point codes. Every bindingFailure call passes a declared literal reason.
 func TestBindingRefusalConstructionGuard(t *testing.T) {
-	paths, err := filepath.Glob("lifecycle_*.go")
-	require.NoError(t, err)
-	for _, path := range paths {
-		if strings.HasSuffix(path, "_test.go") {
-			continue
+	const code = "update.image-binding-unsupported"
+	allowed := map[string]int{
+		"project/lifecycle_binding.go:bindingFailure":             1,
+		"project/lifecycle_deploy.go:PrepareDeployPoint":          3,
+		"updater/check_relay.go:relayedCheckRefusal":              1,
+		"activity/runtime_layout_refusal.go:const":                1,
+		"activity/runtime_layout_refusal.go:runtimeTargetFailure": 1,
+		"activity/runtime_layout_refusal.go:runtimeLayoutBinding": 1,
+		"activity/runtime_sender.go:metadata":                     1,
+	}
+	field, ok := reflect.TypeFor[imageDTO.Binding]().FieldByName("Reason")
+	require.True(t, ok)
+	reasons := strings.Split(field.Tag.Get("enum"), ",")
+	found := map[string]int{}
+	err := filepath.WalkDir("..", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
 		}
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		require.NoError(t, err)
-		ast.Inspect(file, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok {
-				return true
+		if err != nil {
+			return err
+		}
+		rel := filepath.ToSlash(strings.TrimPrefix(path, ".."+string(filepath.Separator)))
+		for _, decl := range file.Decls {
+			site := rel + ":const"
+			if fn, ok := decl.(*ast.FuncDecl); ok {
+				site = rel + ":" + fn.Name.Name
 			}
-			name, ok := call.Fun.(*ast.Ident)
-			if !ok {
-				return true
-			}
-			if name.Name == "lifecycleFailure" && len(call.Args) > 0 {
-				if lit, ok := call.Args[0].(*ast.BasicLit); ok {
-					value, _ := strconv.Unquote(lit.Value)
-					require.NotEqual(t, "update.image-binding-unsupported", value, path)
+			ast.Inspect(decl, func(node ast.Node) bool {
+				switch n := node.(type) {
+				case *ast.BasicLit:
+					if value, _ := strconv.Unquote(n.Value); n.Kind == token.STRING && value == code {
+						found[site]++
+					}
+				case *ast.Ident:
+					if n.Name == "runtimeLayoutUnsupported" && n.Obj != nil && n.Obj.Kind == ast.Con && site != rel+":const" {
+						found[site]++
+					}
+				case *ast.CallExpr:
+					if name, ok := n.Fun.(*ast.Ident); ok && name.Name == "bindingFailure" && strings.HasPrefix(rel, "project/") {
+						require.Len(t, n.Args, 2, site)
+						lit, ok := n.Args[1].(*ast.BasicLit)
+						require.True(t, ok, site)
+						value, _ := strconv.Unquote(lit.Value)
+						require.Contains(t, reasons, value, site)
+					}
 				}
-			}
-			if name.Name == "bindingFailure" {
-				require.Len(t, call.Args, 2, path)
-				lit, ok := call.Args[1].(*ast.BasicLit)
-				require.True(t, ok, path)
-				if ok {
-					value, _ := strconv.Unquote(lit.Value)
-					require.NotEmpty(t, value, path)
-				}
-			}
-			return true
-		})
-	}
+				return true
+			})
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, allowed, found)
 }
 
 func TestBindingCaptureMultipleAndOutsideFiles(t *testing.T) {
@@ -172,5 +194,19 @@ func TestBindingCaptureMultipleAndOutsideFiles(t *testing.T) {
 			require.NotNil(t, problem.Problem.Binding)
 			require.Equal(t, reason, problem.Problem.Binding.Reason)
 		})
+	}
+}
+
+// A per-service version reference refusal keeps its service (AUTO-2), so the
+// refusal text can name it.
+func TestVersionReferenceRefusalNamesService(t *testing.T) {
+	for source, want := range map[string]imageDTO.Binding{
+		"registry.example.com/app:1.0.0@sha256:" + strings.Repeat("a", 64): {Scope: "service", Service: "app", Reason: "digest-pinned"},
+		"registry.example.com/app:${APP_TAG}":                              {Scope: "service", Service: "app", Reason: "variable-reference", Variable: "APP_TAG"},
+	} {
+		_, err := lifecycleVersionReference("app", source, "2.0.0")
+		var problem *imageDTO.OperationError
+		require.ErrorAs(t, err, &problem)
+		require.Equal(t, want, *problem.Problem.Binding)
 	}
 }
