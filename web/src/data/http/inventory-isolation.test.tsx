@@ -9,7 +9,7 @@
 // backend/internal/project/build_only_web_fixture_test.go).
 
 import { screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { HostPulse } from "@/features/dashboard/HostPulse";
@@ -123,7 +123,8 @@ describe("#600 per-row inventory isolation", () => {
     const second = volumes.filter((v) => v.hostId === "second");
     expect(second.map((v) => v.name)).toEqual(["data"]);
     expect(second[0]?.consumers.map((c) => c.containerName)).toEqual(["web"]);
-    expect((await f.adapter.listHosts()).find((h) => h.id === "second")?.inventory?.unreadable?.volumes?.count).toBe(1);
+    // The malformed volume and the consumer container the volume reader could not map.
+    expect((await f.adapter.listHosts()).find((h) => h.id === "second")?.inventory?.unreadable?.volumes?.count).toBe(2);
   });
 
   it("leaves out only a malformed network and keeps the attachments of the others", async () => {
@@ -131,6 +132,7 @@ describe("#600 per-row inventory isolation", () => {
     const graph = await f.adapter.getTopology();
     expect(graph.networks.filter((n) => n.hostId === "second").map((n) => n.name)).toEqual(["front"]);
     expect(graph.attachments.filter((a) => a.networkId === "second~net").map((a) => a.containerId)).toEqual(["second~web", "second~db"]);
+    // Placement needs only the container id, so the nameless container is not unreadable here.
     expect((await f.adapter.listHosts()).find((h) => h.id === "second")?.inventory?.unreadable?.networks?.count).toBe(1);
   });
 
@@ -145,6 +147,116 @@ describe("#600 per-row inventory isolation", () => {
     await f.adapter.listStacks();
     await f.adapter.listImages();
     expect((await f.adapter.listHosts()).find((h) => h.id === "second")?.inventory?.unreadable).toEqual({ stacks: { count: 1, codes: ["inventory.invalid-project"], names: [] } });
+  });
+});
+
+/** Appends (or replaces) rows of one list response; `first` puts the injected rows before the producer's. */
+function inject(f: ReturnType<typeof resourceFixture>, path: string, rows: unknown[], mode: "append" | "first" | "replace" = "append") {
+  const original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (input) => {
+    const response = await original(input);
+    if (new URL(String(input), "https://hub.example.com").pathname !== path || response.status !== 200) return response;
+    const body = await response.json();
+    const data = mode === "replace" ? rows : mode === "first" ? [...rows, ...body.data] : [...body.data, ...rows];
+    return new Response(JSON.stringify({ ...body, data, pagination: { totalItems: data.length } }), { status: 200, headers: response.headers });
+  });
+  return original;
+}
+const unreadableOf = async (f: ReturnType<typeof resourceFixture>) => (await f.adapter.listHosts()).find((h) => h.id === "second")?.inventory?.unreadable;
+
+describe("#600 context rows and reader ownership", () => {
+  it("keeps every network and attachment when one network summary is null, and counts it", async () => {
+    const f = resourceFixture(); inject(f, "/api/environments/second/networks", [null]);
+    const graph = await f.adapter.getTopology();
+    expect(graph.networks.filter((n) => n.hostId === "second").map((n) => n.name)).toEqual(["front"]);
+    expect(graph.attachments.filter((a) => a.networkId === "second~net").map((a) => a.containerId)).toEqual(["second~web", "second~db"]);
+    expect((await unreadableOf(f))?.networks?.count).toBe(1);
+  });
+
+  it("the network summary list leaves out only a malformed summary and never clears the topology's count", async () => {
+    const f = resourceFixture(); inject(f, "/api/environments/second/networks", [null, { id: "a~b", name: "tilde" }]);
+    await f.adapter.getTopology();
+    expect((await f.adapter.listNetworkSummaries()).filter((n) => n.hostId === "second").map((n) => n.id)).toEqual(["net"]);
+    expect((await unreadableOf(f))?.networks?.count).toBe(2);
+  });
+
+  it("a project whose id cannot be represented never owns the host's Compose containers", async () => {
+    const f = resourceFixture(); inject(f, "/api/environments/second/projects", [{ id: "a~broken", name: "app", status: "running" }]);
+    const containers = (await f.adapter.listContainers()).filter((c) => c.hostId === "second");
+    expect(containers.map((c) => [c.name, c.stackId])).toEqual([["web", "second~project"], ["db", "second~project"]]);
+    expect((await f.adapter.listVolumes()).find((v) => v.id === "second~data")?.consumers.map((c) => c.containerName)).toEqual(["web"]);
+    expect((await unreadableOf(f))?.stacks?.count).toBe(1);
+  });
+
+  it("an unrelated null project before the requested one leaves the stack detail readable", async () => {
+    const f = resourceFixture(); inject(f, "/api/environments/second/projects", [null], "first");
+    await expect(f.adapter.getStack("second~project")).resolves.toMatchObject({ name: "app" });
+  });
+
+  it("reports the requested stack as unreadable when its row has no name or malformed runtime entries", async () => {
+    const nameless = resourceFixture(); inject(nameless, "/api/environments/second/projects", [{ id: "project", status: "running" }], "replace");
+    await expect(nameless.adapter.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "get-project.unreadable" } });
+    const runtime = resourceFixture(); inject(runtime, "/api/environments/second/projects", [{ id: "project", name: "app", status: "running", runtimeServices: [null] }], "replace");
+    await expect(runtime.adapter.getStack("second~project")).rejects.toMatchObject({ outcome: { code: "get-project.unreadable" } });
+  });
+
+  it("keeps every volume when one bind metadata row is null, and counts the row", async () => {
+    const f = resourceFixture(); f.state.binds = [null] as never;
+    expect((await f.adapter.listVolumes()).filter((v) => v.hostId === "second").map((v) => v.name)).toEqual(["data"]);
+    expect((await unreadableOf(f))?.volumes).toMatchObject({ count: 1, codes: ["inventory.invalid-bind"] });
+  });
+
+  it("counts an image consumer it cannot map under images and leaves the containers count to the container readers", async () => {
+    const f = resourceFixture(); inject(f, "/api/environments/second/containers", [{ id: "broken", imageId: "sha256:user" }]);
+    await f.adapter.listContainers();
+    const images = await f.adapter.listImages();
+    expect(images.find((i) => i.id === "second~sha256:user")?.consumers.map((c) => c.name)).toEqual(["web", "db"]);
+    expect(await unreadableOf(f)).toMatchObject({ containers: { count: 1 }, images: { count: 1 } });
+  });
+
+  it("navigation never changes the host's counts", async () => {
+    const f = resourceFixture(); const healthy = inject(f, "/api/environments/second/containers", [{ id: "broken" }]);
+    await f.adapter.listContainers();
+    f.fetcher.mockImplementation(healthy);
+    await f.adapter.listNavInventory();
+    expect((await unreadableOf(f))?.containers?.count).toBe(1);
+  });
+
+  it("metrics keep valid samples, count an unreadable container and clear the count after recovery", async () => {
+    vi.useFakeTimers();
+    const f = resourceFixture();
+    const healthy = inject(f, "/api/environments/second/containers", [
+      { id: "bad-sample", names: ["/bad-sample"], image: "example:1", state: "running", status: "Up", resourceSample: { cpuPercent: -1, memoryUsageBytes: 100 } },
+      { id: "broken" },
+    ]);
+    let snapshot: { containers: Record<string, unknown> } | undefined;
+    const stop = f.adapter.subscribeMetrics((value) => { snapshot = value; });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(snapshot?.containers["second~web"]).toEqual({ cpu: 2.5, memMb: 100 });
+      // A readable container with an invalid sample has no sample; only the unreadable row is counted.
+      expect(snapshot?.containers["second~bad-sample"]).toBeUndefined();
+      expect((await unreadableOf(f))?.containers?.count).toBe(1);
+      f.fetcher.mockImplementation(healthy);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await unreadableOf(f)).toBeUndefined();
+    } finally { stop(); vi.useRealTimers(); }
+  });
+
+  it("counts a container the topology cannot place under networks and keeps the other attachments", async () => {
+    const f = resourceFixture(); inject(f, "/api/environments/second/containers", [null]);
+    const graph = await f.adapter.getTopology();
+    expect(graph.attachments.filter((a) => a.networkId === "second~net").map((a) => a.containerId)).toEqual(["second~web", "second~db"]);
+    expect((await unreadableOf(f))?.networks?.count).toBe(1);
+  });
+
+  it("a healthy topology read clears its own count", async () => {
+    const f = resourceFixture(); const healthy = inject(f, "/api/environments/second/networks", [null]);
+    await f.adapter.getTopology();
+    expect((await unreadableOf(f))?.networks?.count).toBe(1);
+    f.fetcher.mockImplementation(healthy);
+    await f.adapter.getTopology();
+    expect(await unreadableOf(f)).toBeUndefined();
   });
 });
 

@@ -24,12 +24,14 @@ it.each(operations.flatMap((operation) => ["http", "mapping"].map((failure) => (
   const hosts = await f.adapter.listHosts();
   const kind = KINDS[operation];
   // #600: a row that cannot be mapped is left out and counted; only a failed read marks the whole host.
+  // The volume reader also counts the consumer container and the bind metadata row it could not read.
+  const count = operation === "listVolumes" ? 3 : 1;
   if (failure === "http") expect(hosts.find((h) => h.id === "second")?.inventory).toEqual({ stale: true, reason: "inventory.read-error" });
   // The topology also reads each listed network; that inspect of the malformed row fails and keeps its own stale mark.
-  else expect(hosts.find((h) => h.id === "second")?.inventory).toMatchObject({ ...(operation === "getTopology" ? {} : { stale: false }), unreadable: { [kind]: { count: 1 } } });
+  else expect(hosts.find((h) => h.id === "second")?.inventory).toMatchObject({ ...(operation === "getTopology" ? {} : { stale: false }), unreadable: { [kind]: { count } } });
   renderWithApp(<InventoryNotice hosts={hosts} items={rows} kinds={[kind]} />, f.adapter);
   expect(screen.getByRole("status").textContent).toContain("second");
-  expect(screen.getByRole("status").textContent).toContain(failure === "http" ? "Inventar konnte nicht gelesen werden" : "second: 1 Eintrag konnte nicht gelesen werden");
+  expect(screen.getByRole("status").textContent).toContain(failure === "http" ? "Inventar konnte nicht gelesen werden" : count === 1 ? "second: 1 Eintrag konnte nicht gelesen werden" : `second: ${count} Einträge konnten nicht gelesen werden`);
   expect(screen.getByRole("status").textContent).not.toContain("first:");
 });
 

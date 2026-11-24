@@ -8,7 +8,7 @@ import { systemRole } from "@/domain/system";
 import { METRICS_HISTORY_SAMPLES, type Host, type HostMetrics, type InventoryObservation, type MetricsSnapshot } from "@/domain/model";
 import { inventoryId, mapContainer } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
-import { rowCollector } from "./row-isolation";
+import { rowCollector, withUnreadable } from "./row-isolation";
 
 export interface MetricsSocket {
   onmessage: ((event: MessageEvent) => void) | null;
@@ -125,18 +125,20 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
           const result = await list("list-containers", h.id, "containers", { sort: "cpuUsage" }, signal);
           if (current !== generation) return;
           const samples: MetricsSnapshot["containers"] = {};
-          // A container row or sample that cannot be read drops only its own sample (#600).
-          rowCollector("containers").each(result.rows, (row) => {
+          // The host's complete container list: a row that cannot be read is counted; a readable container
+          // whose sample is invalid has no sample, like a container without one (#600).
+          const containerRows = rowCollector("containers");
+          containerRows.each(result.rows, (row) => {
             mapContainer(row, h.id, [], result.observation);
             const sample = row.resourceSample;
             if (!sample || systemRole(row.labels) !== undefined) return true;
-            if (![sample.cpuPercent, sample.memoryUsageBytes].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) throw new Error("metrics.invalid-sample");
+            if (![sample.cpuPercent, sample.memoryUsageBytes].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) return true;
             samples[inventoryId(h.id, row.id)] = { cpu: sample.cpuPercent, memMb: sample.memoryUsageBytes / 1024 ** 2 };
             return true;
           });
           for (const id of Object.keys(containers)) if (id.startsWith(`${h.id}~`)) delete containers[id];
           Object.assign(containers, samples);
-          onState(h.id, result.observation);
+          onState(h.id, withUnreadable(result.observation, containerRows));
         } catch (error) {
           if (current !== generation) return;
           const state = inventoryFailure(h.id, error);

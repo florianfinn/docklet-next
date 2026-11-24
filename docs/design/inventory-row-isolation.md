@@ -21,20 +21,41 @@ A broken or unusual row affects only itself.
   left out and counted with its code and, when readable, its name. Every other
   row of the host stays. This covers the stack and container lists, the
   assigned-user stack list, images and their consumers, volumes and their
-  consumers, the Docker volume supplement, networks and their attachments,
-  metrics samples and navigation counts.
-- **Shared context is validated first.** A project row without a string ID and
-  name is never used for Compose ownership (`readableProject`). Otherwise one
-  nameless project would fail the ownership lookup of every Compose container on
-  the host.
+  consumers, the Docker volume supplement and bind metadata, network summaries,
+  networks and their attachments, metrics and navigation counts.
+- **Shared context is validated first.** A context row is used only when its
+  identity can be represented: a non-empty string ID without `~`
+  (`representableId`, the same rule as `inventoryId`). A project row also needs a
+  string name (`readableProject`). An unreadable project never wins Compose
+  ownership, so it cannot fail every Compose container on the host. A network
+  summary without such an ID is left out and counted before any detail read.
 - **Counts are visible.** The host observation carries
-  `unreadable[kind] = {count, codes, names}`. Each reader owns the kinds it maps;
-  a count of 0 clears its kind, and other kinds keep their counts. The inventory
+  `unreadable[kind] = {count, codes, names}`. A count of 0 clears its kind, and
+  other kinds keep their counts.
+- **Each kind has owning readers.** Only a reader that reads the kind's complete
+  host list publishes that kind, and its count covers every row it left out:
+  - `stacks`: the stack/container list and the assigned-user stack list;
+  - `containers`: the stack/container list and the metrics container list;
+  - `images`: the image reader, including a consumer container it tried to map
+    and could not;
+  - `volumes`: the volume readers, including consumer containers, the Docker
+    volume supplement and bind metadata rows;
+  - `networks`: the topology, including summaries, details and containers it
+    could not place.
+
+  A consumer container counts under the reader's own kind, never under
+  `containers`. Partial reads isolate rows but publish no count, so they cannot
+  clear an owner's count: the label-filtered container list of a stack detail,
+  the network summary list, single volume and network details and navigation
+  (which publishes no host observation). A readable container whose metrics
+  sample is invalid has no sample, like a container without one; it is not an
+  unreadable row. The inventory
   notice of a page names the host, the number of unreadable entries and up to
   eight names. The Hosts card and the dashboard host card append
   "N entries not readable". If no stack of the visible hosts could be read, the
   Stacks page shows "Stacks could not be read", never "No stacks yet".
-- **A detail page names its own failure.** If a stack's own row cannot be mapped,
+- **A detail page names its own failure.** If a stack's own list row has no
+  readable identity, or it or its runtime entries cannot be mapped,
   `getStack` answers `get-project.unreadable` for administrators and assigned
   users. The page says that this stack could not be read, and nothing on it can
   act on the stack.
@@ -65,7 +86,12 @@ No wire change. The web model gains `Service.buildOnly` and
 | 6 | detail | the stack's own row is unreadable (administrator and assigned user) | `get-project.unreadable` | same | rethrow the mapping error |
 | 7 | shared state | a reader of another kind observes the host | the other kinds keep their counts | same | replace instead of merge |
 | 8 | shared context | project row without a name | other projects keep container ownership | same | use unfiltered rows for ownership |
-| 9 | migration | none | — | — | — |
+| 9 | shared context | project ID with `~` competing for ownership | valid owner keeps its containers and volumes | same | accept any non-empty ID |
+| 10 | external data | null network summary (topology, summary list) | other networks and attachments stay; counted by the topology only | same | read details of unvalidated summaries |
+| 11 | detail | unrelated null project; requested row without name or with malformed runtime entries | detail readable / `get-project.unreadable` | same | unguarded find, no readable check, unguarded runtime scan |
+| 12 | external data | null bind metadata row | every volume stays; counted under volumes | same | map bind rows without the collector |
+| 13 | shared state | consumer, placement and metrics failures | counted under the owning kind; recovery clears | same | discard the collector / invalid sample counted |
+| 14 | migration | none | — | — | — |
 
 ## Acceptance cells
 

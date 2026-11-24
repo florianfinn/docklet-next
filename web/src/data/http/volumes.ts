@@ -19,7 +19,7 @@ import { inventoryId, splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapVolumes } from "./resource-mapping";
 import { isMaintenanceError } from "../maintenance-retry";
-import { rowCollector, withUnreadable } from "./row-isolation";
+import { rowCollector, withUnreadable, type RowCollector } from "./row-isolation";
 
 type Read = "get-volume" | "get-volume-sizes" | "list-volume-binds";
 // The host-wide size scan (Docker disk usage) can take minutes on large hosts; a volume detail waits this long
@@ -67,16 +67,22 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
     return supplement(volume, row, hostId);
   }
   /** Bind rows come from container mounts; the agent's bind list adds kind, path-rule verdict and sizes. */
-  async function bindList(hostId: string, signal?: AbortSignal): Promise<Map<string, BindInfo> | undefined> {
-    const rows = await read("list-volume-binds", hostId, "_collection/binds", undefined, signal).catch((error) => {
+  async function bindList(hostId: string, signal?: AbortSignal) {
+    return read("list-volume-binds", hostId, "_collection/binds", undefined, signal).catch((error) => {
       if (error instanceof CancelledError) throw error;
       return undefined;
     });
-    return rows ? new Map(rows.map((b) => [b.source, {
+  }
+  /** One bind metadata row that cannot be read is left out and counted; the other rows still decorate their binds (#600). */
+  function bindInfo(rows: Awaited<ReturnType<typeof bindList>>, unreadable: RowCollector): Map<string, BindInfo> | undefined {
+    return rows ? new Map(unreadable.each(rows, (b) => {
+      if (typeof b?.source !== "string" || !b.source) throw new Error("inventory.invalid-bind");
+      return [b.source, {
       kind: b.kind, eligible: b.eligible, reason: b.reason || undefined,
       measuredSize: b.measuredSize, measuredAt: b.measuredAt, measuredPartial: b.measuredPartial,
       lastSnapshotSize: b.lastSnapshotSize, lastSnapshotAt: b.lastSnapshotAt,
-    }])) : undefined;
+    }] as const;
+    }, (b) => b?.source)) : undefined;
   }
   function withBind(volume: Volume, binds: Map<string, BindInfo> | undefined): Volume {
     const bind = volume.kind === "bind" ? binds?.get(volume.source) : undefined;
@@ -95,13 +101,14 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
       await Promise.all(scope.map(async (host) => {
         try {
           const { combined, observation } = await budget(async (signal) => {
-            const [volumes, ctx, binds] = await Promise.all([transport.list("list-volumes", host.id, "volumes", undefined, signal), context(host.id, signal), bindList(host.id, signal)]);
+            const [volumes, ctx, bindRows] = await Promise.all([transport.list("list-volumes", host.id, "volumes", undefined, signal), context(host.id, signal), bindList(host.id, signal)]);
             signal.throwIfAborted(); check();
             const volumeRows = rowCollector("volumes");
+            const binds = bindInfo(bindRows, volumeRows);
             const rows = mapVolumes(volumes.rows, host.id, ctx.containers, ctx.projects, volumes.observation, volumeRows);
             const byName = new Map(volumes.rows.flatMap((row) => typeof row?.name === "string" ? [[row.name, row] as const] : []));
             // Supplementing one volume with the Docker usage list never drops another volume (#600).
-            const mapped = rows.map((v) => v.kind === "volume" ? volumeRows.one(v, (v) => supplement(v, byName.get(v.name)!, host.id), (v) => v.name) ?? v : withBind(v, binds));
+            const mapped = rows.map((v) => v.kind === "volume" ? volumeRows.one(v, (v) => supplement(v, byName.get(v.name)!, host.id), (v) => v.name) ?? v : volumeRows.one(v, (v) => withBind(v, binds), (v) => v.name) ?? v);
             const combined = await decorate(host.id, mapped, signal);
             signal.throwIfAborted(); check();
             return { combined, observation: withUnreadable(volumes.observation, volumeRows) };

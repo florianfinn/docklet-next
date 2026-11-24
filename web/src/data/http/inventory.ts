@@ -14,7 +14,7 @@ import type { Host, InventoryObservation, Stack } from "@/domain/model";
 import { withoutSystem } from "@/domain/system";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { createConditionReader, withConditions, type ConditionReader } from "./runtime-conditions";
-import { normalizeProjectName } from "./project-ownership";
+import { normalizeProjectName, readableProject } from "./project-ownership";
 import { inventoryId, mapContainer, mapStack, splitInventoryId, type ContainerRow, type ProjectRow } from "./inventory-mapping";
 import { isMaintenanceError } from "../maintenance-retry";
 import { rowCollector, withUnreadable } from "./row-isolation";
@@ -45,22 +45,26 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
     // The project list owns stored updates and the visible label-owner tie rules.
     const [projects, conditions] = await Promise.all([list("list-projects", host.id, "projects"), readConditions(host.id)]);
     const projectRows = projects.rows as ProjectRow[];
-    const project = projectRows.find((row) => row.id === projectId);
+    // Unrelated rows never affect the requested one; the requested row that cannot be read is unreadable, not missing (#600).
+    const project = projectRows.find((row) => row?.id === projectId);
     if (!project) return { stacks: [], containers: [] };
+    if (!readableProject(project)) return fail("get-project.unreadable");
     const label = normalizeProjectName(project.composeProjectName || project.name);
+    const runtimeIds = Array.isArray(project.runtimeServices) ? project.runtimeServices.flatMap((service) => typeof service?.containerId === "string" && service.containerId ? [service.containerId] : []) : [];
     let containers = await list("list-containers", host.id, "containers", { label: `com.docker.compose.project=${label}` });
     // Directory fallback and stale runtime IDs can point outside this label. Only
     // that ambiguous case needs all containers to preserve concrete conflicting owners.
-    if (project.runtimeServices?.some((service) => service.containerId && !containers.rows.some((row) => row.id === service.containerId))) {
+    if (runtimeIds.some((id) => !containers.rows.some((row) => row?.id === id))) {
       containers = await list("list-containers", host.id, "containers");
     }
     const observation: InventoryObservation = mergeInventoryObservations([projects.observation, containers.observation]);
     onState(host.id, observation);
+    // A label-filtered container list is partial: it isolates rows but never publishes the host's containers count.
     const allContainers = rowCollector("containers").each(containers.rows as ContainerRow[], (row) => mapContainer(row, host.id, projectRows, observation));
     // The requested project itself is the page: a row that cannot be mapped is reported as unreadable, not as missing.
     let stack: Stack;
     try { stack = mapStack(project, host.id, allContainers, observation); }
-    catch (error) { return fail(error instanceof Error && error.message.startsWith("inventory.") ? "get-project.unreadable" : "get-project.invalid-detail"); }
+    catch { return fail("get-project.unreadable"); }
     return withConditions({ stacks: withoutSystem([stack]), containers: withoutSystem(allContainers) }, conditions);
   }
 

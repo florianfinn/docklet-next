@@ -9,6 +9,11 @@
 
 import type { UnreadableKind, UnreadableRows } from "@/domain/model";
 
+/** A context row identity that a host-scoped inventory id can carry (see inventoryId). */
+export function representableId(id: unknown): id is string {
+  return typeof id === "string" && id.length > 0 && !id.includes("~");
+}
+
 const CODE = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$/;
 const MAX_NAMES = 8;
 

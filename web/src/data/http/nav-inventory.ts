@@ -49,7 +49,8 @@ export function createNavInventory(baseUrl: string, fetcher: typeof fetch, hosts
         // Reuse the container read already in flight before admitting another host request.
         const inventoryRead = budget(async (signal) => {
           const result = await transport.list("list-containers", host.id, "containers", undefined, signal);
-          // Counts leave out only a row that cannot be mapped (#600).
+          // Counts leave out only a row that cannot be mapped (#600). Navigation publishes no host observation,
+          // so the containers, dashboard and host readers own the visible count of such rows.
           return { containers: rowCollector("containers").each(result.rows, (row) => mapContainer(row, host.id, [], result.observation)), observation: result.observation };
         });
         const [inventory, count] = await Promise.allSettled([

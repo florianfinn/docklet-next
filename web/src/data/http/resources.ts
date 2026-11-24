@@ -17,7 +17,7 @@ import { splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapImage, mapTopology, mapVolumes } from "./resource-mapping";
 import { isMaintenanceError } from "../maintenance-retry";
-import { rowCollector, withUnreadable, type RowCollector } from "./row-isolation";
+import { representableId, rowCollector, withUnreadable, type RowCollector } from "./row-isolation";
 
 function combine(observations: InventoryObservation[]): InventoryObservation {
   return mergeInventoryObservations(observations);
@@ -54,7 +54,7 @@ export function createObservedHostImageReader(baseUrl: string, fetcher: typeof f
     signal?.throwIfAborted();
     const combined = combine([projects.observation, containers.observation, images.observation]);
     const imageRows = rowCollector("images");
-    const mapped = imageRows.each(images.rows.filter((i) => systemRole(i?.labels) === undefined), (i) => mapImage(i, hostId, containers.rows, projects.rows, combined), (i) => i?.repoTags?.[0]);
+    const mapped = imageRows.each(images.rows.filter((i) => systemRole(i?.labels) === undefined), (i) => mapImage(i, hostId, containers.rows, projects.rows, combined, imageRows), (i) => i?.repoTags?.[0]);
     const inventory = withUnreadable(combined, imageRows);
     onState(hostId, inventory);
     if (version === generation()) loaded.add(hostId);
@@ -110,7 +110,9 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     listImages: (onPartial, signal) => aggregate("listImages", async (h, owned) => { const { images, inventory } = await hostImages(h.id, owned); return { rows: images, inventory }; }, onPartial, signal),
     listNetworkSummaries: (signal) => aggregate("getTopology", async (h, owned) => {
       const networks = await list("list-networks", h.id, "networks", undefined, owned);
-      return { rows: networks.rows.filter((n) => systemRole(n.labels) === undefined).map((n) => ({ id: n.id, hostId: h.id })), inventory: networks.observation };
+      // A summary list is not the networks page: it isolates rows but never publishes the host's networks count.
+      const rows = rowCollector("networks").each(networks.rows, (n) => { if (!representableId(n?.id)) throw new Error("inventory.invalid-network"); return systemRole(n.labels) === undefined ? [{ id: n.id, hostId: h.id }] : []; }).flat();
+      return { rows, inventory: networks.observation };
     }, undefined, signal),
     async getTopology(onPartial, retained) {
       await requireCapability("getTopology");
@@ -136,7 +138,10 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
           // Hub maintenance on the context fails the whole read, so the query keeps its graph while it retries.
           if (contextual.status === "rejected" && isMaintenanceError(contextual.reason)) throw contextual.reason;
           const ctx = contextual.status === "fulfilled" ? contextual.value : { containers: [], projects: [], observations: [inventoryFailure(h.id, contextual.reason)] };
-          const details = await Promise.all(networks.rows.map(async (summary) => {
+          // A summary without a representable identity is left out and counted before any detail read (#600).
+          const networkRows = rowCollector("networks");
+          const summaries = networkRows.each(networks.rows, (summary) => { if (!representableId(summary?.id)) throw new Error("inventory.invalid-network"); return summary; }, (summary) => summary?.name);
+          const details = await Promise.all(summaries.map(async (summary) => {
             try {
               const detail = await read("get-network", h.id, `networks/${encodeURIComponent(summary.id)}`);
               if (detail.body.data.id !== summary.id) throw new Error("inventory.invalid-network");
@@ -151,8 +156,7 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
           }));
           const base = combine([...ctx.observations, networks.observation, ...details.filter((d) => !d.unavailable).map((d) => d.observation)]);
           const unavailable = new Map(details.filter((d) => d.unavailable || contextual.status === "rejected").map((d) => [d.row.id, { ...base, ...d.observation, stale: true, reason: d.observation.reason ?? base.reason ?? "inventory.read-error" as const }]));
-          const networkRows = rowCollector("networks");
-          const graph = mapTopology(details.map((d) => d.row), h.id, ctx.containers, ctx.projects, base, networks.rows, unavailable, networkRows);
+          const graph = mapTopology(details.map((d) => d.row), h.id, ctx.containers, ctx.projects, base, summaries, unavailable, networkRows);
           const inventory = observe(h.id, [...ctx.observations, networks.observation, ...details.map((d) => d.observation)], networkRows);
           // Failed details retain their summaries without polling; successful stale reads still own recovery.
           recovery.observed(h, combine([...(contextual.status === "fulfilled" ? ctx.observations : []), networks.observation, ...details.filter((d) => !d.unavailable).map((d) => d.observation)]));

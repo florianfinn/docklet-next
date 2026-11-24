@@ -5,6 +5,7 @@
 // Deviations: Original effective Compose-label and explicit runtime membership projection.
 
 import type { ProjectRow } from "./inventory-mapping";
+import { representableId } from "./row-isolation";
 
 // Match backend/pkg/projects.NormalizeProjectName and compose-go v2.16.1:
 // strip non-ASCII label characters and leading separators, preserving an input
@@ -17,9 +18,9 @@ function effectiveName(project: ProjectRow): string {
   return normalizeProjectName(project.composeProjectName || project.name);
 }
 
-/** A project row without a string id and name cannot own anything; it never affects other rows' ownership (#600). */
+/** A project row without a representable id and a string name cannot own anything; it never affects other rows' ownership (#600). */
 export function readableProject(project: ProjectRow | null | undefined): project is ProjectRow {
-  return !!project && typeof project.id === "string" && project.id.length > 0 && typeof project.name === "string" && project.name.length > 0
+  return !!project && representableId(project.id) && typeof project.name === "string" && project.name.length > 0
     && (project.composeProjectName === undefined || project.composeProjectName === null || typeof project.composeProjectName === "string");
 }
 
