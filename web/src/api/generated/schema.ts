@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 552bbaee59b664b069e004d0231e10b5d0d338c75f97e5580967805646c7c615
+// Revision: 1b67bb9f18be8c4d529f3f616096aa71485e1d89b05cbf1580721c1fd911ce7e
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -3619,6 +3619,23 @@ export interface paths {
          * @description Test connectivity to a Arcane environment
          */
         post: operations["testConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/updater/containers/{containerId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check one container for an image update */
+        post: operations["check-container-update"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7331,6 +7348,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["ImagePruneReport"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseImageUpdateInfo: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseImageUpdateInfo.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["ImageUpdateInfo"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -30283,6 +30312,103 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ErrorModel"] | components["schemas"]["EnvironmentHostProblem"] | components["schemas"]["AgentAccessError"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-container-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+                /** @description Container ID */
+                containerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseImageUpdateInfo"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": (components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"]) | components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */

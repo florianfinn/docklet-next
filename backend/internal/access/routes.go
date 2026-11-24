@@ -308,6 +308,7 @@ var Routes = []Route{
 	{"POST", "/environments/{id}/system/upgrade", "trigger-upgrade"},
 	{"POST", "/environments/{id}/test", "testConnection"},
 	{"POST", "/environments/{id}/updater/projects/{projectId}/check", "check-project-updates"},
+	{"POST", "/environments/{id}/updater/containers/{containerId}/check", "check-container-update"},
 	{"POST", "/environments/{id}/updater/projects/{projectId}/update", "update-project-images"},
 	{"POST", "/environments/{id}/updater/run", "run-updater"},
 	{"POST", "/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore", "restore-update"},

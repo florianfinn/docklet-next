@@ -30,7 +30,7 @@ func isManagementPathInternal(method, suffix string) bool {
 	if suffix == "/updater/system-image-hints" || suffix == "/updater/policies" || strings.HasPrefix(suffix, "/updater/policies/") {
 		return true
 	}
-	if method == http.MethodPost && strings.HasPrefix(suffix, "/updater/projects/") && strings.HasSuffix(suffix, "/check") {
+	if method == http.MethodPost && (strings.HasPrefix(suffix, "/updater/projects/") || strings.HasPrefix(suffix, "/updater/containers/")) && strings.HasSuffix(suffix, "/check") {
 		return true
 	}
 	if method == http.MethodPost && strings.HasPrefix(suffix, "/updater/") && (strings.HasSuffix(suffix, "/update") || strings.HasSuffix(suffix, "/restore")) {

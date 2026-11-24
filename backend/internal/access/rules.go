@@ -377,6 +377,7 @@ var Rules = map[string]Rule{
 	"update-auto-heal-settings":                    Rule{Kind: Admin},
 	"update-backup-target":                         Rule{Kind: Admin},
 	"update-container":                             Rule{Kind: Admin},
+	"check-container-update":                       Rule{Kind: Admin},
 	"update-job-schedules":                         Rule{Kind: Admin},
 	"update-my-profile":                            Rule{Kind: Self},
 	"update-project":                               Rule{Kind: App, Ref: ProjectPath, Level: Full},

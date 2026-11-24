@@ -8,6 +8,8 @@ const laterOperations = new Map([
   // M38 contract foundation: proxy adoption (#592) and update eligibility (#594).
   ["POST /modules/proxy/instances/{instanceId}/adopt", "adopt-proxy-instance"],
   ["GET /environments/{id}/updater/projects/{projectId}/update-eligibility", "get-update-eligibility"],
+  // M38: fresh manual check of one container (#595).
+  ["POST /environments/{id}/updater/containers/{containerId}/check", "check-container-update"],
   ["POST /tailnet/test", "test-tailnet"],
   ["GET /environments/{id}/vulnerabilities/candidates/runs/{activityId}", "get-vulnerability-candidate-run"],
   // Hub-only release list refresh for the explicit update recheck.

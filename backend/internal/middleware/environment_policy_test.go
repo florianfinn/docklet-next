@@ -16,7 +16,7 @@ import (
 )
 
 func TestImagePolicyRoutesBypassGenericAgentForwarding(t *testing.T) {
-	for _, path := range []string{"/updater/policies", "/updater/policies/stack/example-stack", "/updater/system-image-hints", "/updater/projects/example-stack/check"} {
+	for _, path := range []string{"/updater/policies", "/updater/policies/stack/example-stack", "/updater/system-image-hints", "/updater/projects/example-stack/check", "/updater/containers/example-container/check"} {
 		mw := newTestEnvironmentMiddleware()
 		calls := 0
 		mw.resolver = func(context.Context, string) (string, *string, bool, error) {
@@ -26,7 +26,7 @@ func TestImagePolicyRoutesBypassGenericAgentForwarding(t *testing.T) {
 		router := echo.New()
 		group := attachMiddleware(router, mw)
 		method := http.MethodGet
-		if path == "/updater/projects/example-stack/check" {
+		if path == "/updater/projects/example-stack/check" || path == "/updater/containers/example-container/check" {
 			method = http.MethodPost
 		}
 		group.Add(method, "/environments/:id"+path, func(c *echo.Context) error { return c.NoContent(204) })

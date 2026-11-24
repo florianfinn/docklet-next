@@ -41,7 +41,7 @@ type Problem struct {
 	// ProviderStatus is the HTTP status the Tailscale API answered with, when one was received.
 	ProviderStatus int `json:"providerStatus,omitzero"`
 	// RefusedTags are the tags the provider refused (tailnet.tags-not-permitted); tag names only.
-	RefusedTags []string `json:"refusedTags,omitzero" maxItems:"8"`
+	RefusedTags []string `json:"refusedTags,omitzero" maxItems:"8" pattern:"^tag:[a-z0-9-]+$"`
 }
 
 func (p *Problem) Error() string             { return p.Code }
@@ -53,7 +53,7 @@ type Connection struct {
 	State string `json:"state" enum:"off,joining,connected,control-unreachable,error"`
 	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.coordination-unreachable,tailnet.not-connected,tailnet.mtls-unsupported,tailnet.tags-not-permitted"`
 	// RefusedTags are the tags the control server refused for the hub join (tailnet.tags-not-permitted).
-	RefusedTags []string `json:"refusedTags,omitzero" maxItems:"8"`
+	RefusedTags []string `json:"refusedTags,omitzero" maxItems:"8" pattern:"^tag:[a-z0-9-]+$"`
 }
 
 // Provisioning is the credential's ability to admit new hosts, independent of the connection.
@@ -62,7 +62,7 @@ type Provisioning struct {
 	Code  string `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.provider-unavailable,tailnet.tags-not-permitted"`
 	// ProviderStatus is the last rejecting HTTP status from the Tailscale API.
 	ProviderStatus int      `json:"providerStatus,omitzero"`
-	RefusedTags    []string `json:"refusedTags,omitzero" maxItems:"8"`
+	RefusedTags    []string `json:"refusedTags,omitzero" maxItems:"8" pattern:"^tag:[a-z0-9-]+$"`
 }
 
 // Status is the redacted hub tailnet status; it never carries keys or peer endpoints.
@@ -131,5 +131,5 @@ type TestCheck struct {
 	State          string   `json:"state" enum:"pass,fail,skipped,unknown"`
 	Code           string   `json:"code,omitempty" enum:"tailnet.credential-rejected,tailnet.provider-unavailable,tailnet.not-connected,tailnet.mint-refused,tailnet.test-cleanup-failed,tailnet.test-running,tailnet.tags-not-permitted"`
 	ProviderStatus int      `json:"providerStatus,omitzero"`
-	RefusedTags    []string `json:"refusedTags,omitzero" maxItems:"8"`
+	RefusedTags    []string `json:"refusedTags,omitzero" maxItems:"8" pattern:"^tag:[a-z0-9-]+$"`
 }

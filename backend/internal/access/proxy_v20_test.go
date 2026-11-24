@@ -39,3 +39,11 @@ func TestM28ProxyAdminGates(t *testing.T) {
 		require.Equal(t, AdminRequired, Decide(t.Context(), Principal{ID: "example-user"}, operation, env, params))
 	})
 }
+
+// M38 #595: the fresh container check is administrator-only like the container update.
+func TestM38ContainerCheckAdminGate(t *testing.T) {
+	actual, env, params := Match("POST", "/api/environments/example/updater/containers/example-container/check")
+	require.Equal(t, "check-container-update", actual)
+	require.Equal(t, Admin, Rules[actual].Kind)
+	require.Equal(t, AdminRequired, Decide(t.Context(), Principal{ID: "example-user"}, actual, env, params))
+}

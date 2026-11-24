@@ -9,6 +9,7 @@
 package updater
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -17,6 +18,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	imagetypes "github.com/florianfinn/docklet-next/types/image"
+	"github.com/florianfinn/docklet-next/types/updater"
 )
 
 // Module wires the updater domain and mounts its routes.
@@ -68,6 +71,14 @@ func RegisterUpdater(api huma.API, updaterService *UpdaterService, appCtx handle
 		Path:    "/environments/{id}/updater/projects/{projectId}/check",
 		Summary: "Check project service updates", Tags: []string{"Updater"}, Security: handlerutil.DefaultOperationSecurity(),
 	}, authz.PermImageUpdatesCheck, h.CheckProjectUpdates)
+	// A fresh manual check of one container on its host (#595); filled by the update-action step of M38.
+	middleware.RegisterWithPermission(api, huma.Operation{
+		OperationID: "check-container-update", Method: http.MethodPost,
+		Path:    "/environments/{id}/updater/containers/{containerId}/check",
+		Summary: "Check one container for an image update", Tags: []string{"Updater"}, Security: handlerutil.DefaultOperationSecurity(),
+	}, authz.PermImageUpdatesCheck, func(context.Context, *updater.CheckContainerInput) (*handlerutil.Out[*imagetypes.UpdateInfo], error) {
+		return nil, huma.Error501NotImplemented("Container update check unavailable")
+	})
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "run-updater",
 		Method:      http.MethodPost,

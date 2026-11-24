@@ -151,6 +151,10 @@ func TestM28StateKindsStayDisjoint(t *testing.T) {
 		require.False(t, state.ValidFor(ResolverOperation))
 	}
 	require.False(t, Pending.ValidFor("future"))
+	for _, state := range []State{Pending, Verified, AppliedUnverified, Rejected, Restored, RolledBack, Refused, RecoveryRequired, Released, NotApplied} {
+		require.False(t, state.ValidFor(AdoptionOperation), state)
+	}
+	require.True(t, Applied.ValidFor(AdoptionOperation))
 }
 
 func TestM28ResolverDigestBindsOperation(t *testing.T) {

@@ -182,6 +182,7 @@ POST /environments/{id}/system/containers/stop-all
 POST /environments/{id}/system/convert
 POST /environments/{id}/system/prune
 POST /environments/{id}/system/upgrade
+POST /environments/{id}/updater/containers/{containerId}/check
 POST /environments/{id}/updater/projects/{projectId}/check
 POST /environments/{id}/updater/projects/{projectId}/update
 POST /environments/{id}/updater/run

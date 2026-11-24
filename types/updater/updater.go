@@ -171,6 +171,12 @@ type Status struct {
 	ProjectIds []string `json:"projectIds"`
 }
 
+// CheckContainerInput identifies one container for a fresh manual update check (#595).
+type CheckContainerInput struct {
+	EnvironmentID string `path:"id" doc:"Environment ID"`
+	ContainerID   string `path:"containerId" doc:"Container ID"`
+}
+
 // CheckProjectInput identifies the project whose service policies should be checked.
 type CheckProjectInput struct {
 	EnvironmentID string `path:"id" doc:"Environment ID"`

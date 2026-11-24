@@ -57,6 +57,9 @@ func (s State) ValidFor(kind OperationKind) bool {
 		case Pending, Applied, RolledBack, Refused, RecoveryRequired, Released, NotApplied:
 			return true
 		}
+	case AdoptionOperation:
+		// An adoption is recorded finished in the transaction that adopts (#592).
+		return s == Applied
 	}
 	return false
 }
