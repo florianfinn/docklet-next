@@ -2,7 +2,7 @@
 // Revision: 37ee7825503944c425b0597baaa8cd690a699acb460f1883e7e3cbc7b06d9c8b
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected first-run identity flow. Review #95: preserve cached rows during refetches and fall back to stack IDs when names are absent. Issue #77: session-bound closure and identity generation cleanup. M9 #204: preserve partial topology observations. M10 #231: production stack updates and lifecycle UI. Held-host security recovery for #263. Simple-user management, assigned-stack access and mode-aware self-service. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. M23 #425: shared start-up auth reads. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M39 #612: host scan run summaries query.
+// Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. #69 connected first-run identity flow. Review #95: preserve cached rows during refetches and fall back to stack IDs when names are absent. Issue #77: session-bound closure and identity generation cleanup. M9 #204: preserve partial topology observations. M10 #231: production stack updates and lifecycle UI. Held-host security recovery for #263. Simple-user management, assigned-stack access and mode-aware self-service. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). D4 #271: fair physical host reads and result-local recovery. M23 #425: shared start-up auth reads. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags.
 
 import { keepPreviousData, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
@@ -83,12 +83,6 @@ export function useTopology() {
   const recovery = useInventoryRecovery();
   const client = useQueryClient();
   return useQuery({ ...recovery, queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal), client.getQueryData(queryKeys.topology), INVENTORY_READ_TAG, signal) });
-}
-
-/** Newest terminal host scan runs of one host for Action Centre result lines; idle when disabled or unsupported. */
-export function useScanRunSummaries(hostId: string, enabled: boolean) {
-  const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.scanRuns(hostId), enabled: enabled && !!adapter.getScanRunSummaries, queryFn: ({ signal }) => adapter.getScanRunSummaries!(hostId, signal), staleTime: 30_000 });
 }
 
 /** The Dashboard's security source: active counts per scanned image, without catalogue or findings reads. */

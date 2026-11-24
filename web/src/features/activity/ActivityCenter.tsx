@@ -35,19 +35,31 @@ import { keepOpenForCoordinatedLayers } from "./layer-coordination";
 import { RuntimeControls } from "./RuntimeControls";
 import { runtimeState } from "./runtime-presentation";
 import { ActionDetail } from "./ActionDetail";
+import { useScanCounts, useScanResultLine } from "./scan-counts";
+import { useScanRunLookup } from "./scan-run-lookup";
+import type { ScanRunSummary } from "@/domain/security";
 import { RunOutput } from "./RunOutput";
 
 /** Shared list tones; notifications.css turns the running "accent" into the brand run tone inside the action centre. */
 const TONE = { queued: "gray", running: "accent", succeeded: "ok", failed: "err", cancelled: "gray" } as const;
 const LEVEL_TONE: Record<EventLevel, "err" | "warn" | "ok" | "info"> = { error: "err", warn: "warn", ok: "ok", info: "info" };
 
-function RunDescription({ run }: { run: ActionRun }) {
+function RunDescription({ run, summary }: { run: ActionRun; summary?: ScanRunSummary }) {
   const t = useTranslations("activity"), target = useRunTarget(run);
+  const listed = useScanResultLine(summary), observed = useScanCounts(run);
+  const result = listed ?? (run.status === "running" || run.status === "queued" ? undefined : observed);
   return <span className={cn(run.status === "failed" && "text-destructive")}>
     {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)}{target ? ` · ${target}` : ""}
     {run.error ? ` · ${run.error}` : ""}
+    {result && <span className="block text-muted-foreground" data-slot="scan-result">{result}</span>}
     <DeployProgressLine run={run} />
   </span>;
+}
+
+/** The detail-owned result line leads the expanded body, before steps and the run window. */
+function ScanResult({ run }: { run: ActionRun }) {
+  const line = useScanCounts(run);
+  return line && run.status !== "running" && run.status !== "queued" ? <p className="text-sm font-medium" data-slot="scan-detail-result">{line}</p> : null;
 }
 
 function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean }) {
@@ -63,6 +75,7 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
       </CollapsibleTrigger>
       <CollapsibleContent className="min-w-0 data-[state=open]:animate-in data-[state=open]:fade-in-0">
         <ActionDetail run={run}>{(run) => <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-xl border bg-background/50 p-3">
+          <ScanResult run={run} />
           <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
             <div className="min-w-0 flex-1 max-sm:w-full">
               <StepList run={run.outcomeState === "unknown" ? { ...run, steps: [] } : run} />
@@ -107,6 +120,7 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
   const query = useActionsQuery();
   const [hideFinished, setHideFinished] = useState(false);
   const shown = hideFinished ? runs.filter((r) => r.status === "running" || r.status === "queued") : runs;
+  const scanSummary = useScanRunLookup(shown);
 
   useEffect(() => {
     if (focusRunId) requestAnimationFrame(() => document.getElementById(`run-${focusRunId}`)?.scrollIntoView({ block: "nearest" }));
@@ -166,7 +180,7 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
                 <span className="shrink-0 text-[11px] font-normal text-muted-foreground">{formatTime(run.startedAt)}</span>
               </span>
             ),
-            description: <RunDescription run={run} />,
+            description: <RunDescription run={run} summary={scanSummary(run)} />,
             body: <RunBody run={run} defaultOpen={run.id === focusRunId} />,
           };
         })}
