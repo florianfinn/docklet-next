@@ -59,7 +59,7 @@ it.each(["en-US", "de"] as const)("keeps two advancing manual count polls, inclu
 });
 it("preserves scan counts from the durable read including zero targets and rejects missing counts", async () => {
   const request = async () => ({ data: { ...terminalRun, activityId: "example", targets: 0, scanned: 0, skipped: 0, failed: 0 } });
-  expect(await readScanProgress(request, "first", "example")).toEqual({ targets: 0, done: 0, failed: 0 });
+  expect(await readScanProgress(request, "first", "example")).toEqual({ targets: 0, done: 0, failed: 0, summary: expect.objectContaining({ status: "completed", targets: 0, scanned: 0 }) });
   for (const field of ["targets", "scanned", "skipped", "failed"]) {
     await expect(readScanProgress(async () => ({ data: { ...terminalRun, activityId: "example", [field]: undefined } }), "first", "example")).rejects.toThrow();
   }

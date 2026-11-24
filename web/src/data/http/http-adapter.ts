@@ -858,7 +858,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...resourceReads,
     ...createVulnerabilityCandidates({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, writeSignal: () => ownedWrites.signal, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...createVulnerabilityAdvisories({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, hosts: listHosts, changed: securityChanged }),
-    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}, "background", () => identityGeneration), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
+    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}, "background", () => identityGeneration), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...inventoryOwner.wrap((observe, fetch, hosts, require) => createNavInventory(baseUrl, fetch, hosts, require, observe, () => identityGeneration, navState.totals, navState.registration)),
     ...volumeReads,
     ...backups.api,

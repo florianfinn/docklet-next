@@ -19,5 +19,6 @@ export function useScanCounts(run: ActionRun): string | undefined {
   const counts = run.scan;
   if (!counts || counts.targets === 0) return undefined;
   const pct = Math.min(100, Math.round(100 * counts.done / counts.targets));
-  return [t("manual", { ...counts, pct }), counts.failed > 0 ? t("failed", counts) : ""].filter(Boolean).join(" · ");
+  const { targets, done, failed } = counts;
+  return [t("manual", { targets, done, pct }), failed > 0 ? t("failed", { failed }) : ""].filter(Boolean).join(" · ");
 }
