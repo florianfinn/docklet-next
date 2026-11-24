@@ -15,6 +15,7 @@ import { formatDateTime } from "@/domain/format";
 import { containerUpdatesManaged, hasUpdate } from "@/domain/updates";
 import { inventoryId } from "@/data/http/inventory-mapping";
 import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
+import { CheckUpdatesButton } from "@/shared/components/updates/check-updates-button";
 import { PolicyControl } from "@/shared/components/updates/policy-control";
 import { useUpdateAction } from "@/shared/components/updates/use-update-action";
 import { UpdateSplitButton } from "@/shared/components/updates/update-split-button";
@@ -46,9 +47,11 @@ function StandaloneUpdates({ c, select }: { c: ContainerInfo; select: (restore: 
   const read = useCapability("getAutoUpdatePolicy", { kind: "container", id: policyId });
   const policy = useQuery({ queryKey: ["container", policyId, "update-policy"], queryFn: () => adapter.getContainerUpdatePolicy!(policyId), enabled: read.available && !!adapter.getContainerUpdatePolicy });
   const previous = useQuery({ queryKey: ["container", c.id, "previous-image"], queryFn: async () => (await adapter.getContainerPreviousImage!(c.id)) ?? null, enabled: cap.available && !!adapter.getContainerPreviousImage });
-  if (!hasUpdate(c.update) && !previous.data && !previous.isError && !policy.data && !policy.isError) return null;
   return <section className="flex flex-col gap-3 rounded-xl border p-4">
+    <div className="flex flex-wrap items-start gap-2">
+    <CheckUpdatesButton owner={c.id} disabled={!cap.available || !!c.inventory?.stale || !adapter.checkContainerUpdate} title={cap.reason} check={() => adapter.checkContainerUpdate!(c.id)} />
     {hasUpdate(c.update) && <UpdateSplitButton disabled={!cap.available || !!c.inventory?.stale} title={cap.reason} label={update("actionUpdateContainer")} onUpdate={() => select(false)} onChecked={() => select(false, true)} />}
+    </div>
     {previous.data && <div><p className="break-all text-xs">{previous.data.reference} · {formatDateTime(previous.data.createdAt)}</p><Button variant="outline" disabled={!!c.inventory?.stale || !restore.available} title={restoreReason} onClick={() => select(true)}>{t("previousImage")}</Button>{restoreReason && <p role="status" className="text-xs">{restoreReason}</p>}</div>}
     {previous.isError && <p role="alert">{errors(previous.error)}</p>}
     {policy.data && <PolicyControl policy={policy.data} timeZone={timeZone} saved={() => { void policy.refetch(); }} />}

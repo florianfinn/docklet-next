@@ -41,3 +41,20 @@ func TestRemoteCheckRelaysOnlyTheLayoutRefusal(t *testing.T) {
 		require.Nil(t, relayedCheckRefusal(err), "%v", err)
 	}
 }
+
+func TestCheckRelayPreservesV23BindingAndAcceptsV22(t *testing.T) {
+	for _, binding := range []*imageDTO.Binding{nil, {Scope: "service", Service: "app", Reason: "variable-reference", Variable: "SERVICE_IMAGE"}} {
+		producer := imageDTO.Failure("update.image-binding-unsupported", 409)
+		producer.Problem.Binding = binding
+		body, err := json.Marshal(producer)
+		require.NoError(t, err)
+		for _, transport := range []string{"Direct", "Edge"} {
+			t.Run(transport, func(t *testing.T) {
+				relayed := relayedCheckRefusal(&remenv.StatusError{StatusCode: 409, Body: body})
+				var problem *imageDTO.OperationError
+				require.ErrorAs(t, relayed, &problem)
+				require.Equal(t, binding, problem.Problem.Binding)
+			})
+		}
+	}
+}

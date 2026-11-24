@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472). M27 proxy outcome render proofs (#473/#474).
 
+import { BindingRefusal } from "@/shared/components/updates/binding-refusal";
 import {AdoptionStatus} from "@/features/proxy/AdoptionStatus";
 import {instance as proxyInstance, Providers as ProxyProviders} from "@/features/proxy/proxy.test-support";
 import {render} from "@testing-library/react";
@@ -52,6 +53,7 @@ function proxyMessage(reason: boolean) {
   return renderMessage({ code: reason ? view.reasonKey! : view.labelKey, params: {} }, "de");
 }
 const proofs = [
+ {property:"ImageBinding.reason",member:"include-extends",key:"images.errors.binding_include-extends",render:()=>render(<IntlProvider locale="de" messages={catalogs.de}><BindingRefusal binding={{scope:"project",reason:"include-extends"}} /></IntlProvider>).container.textContent ?? ""},
  {property:"ProxyAdoption.reason",member:"source-changed",key:"proxyContract.adoption.reasons.source-changed",render:()=>render(<ProxyProviders locale="de"><AdoptionStatus value={{outcome:"refused",reason:"source-changed",instance:proxyInstance}} /></ProxyProviders>).container.textContent ?? ""},
  {property:"ProxyAdoption.outcome",member:"adopted",key:"proxyContract.adoption.adopted",render:()=>render(<ProxyProviders locale="de"><AdoptionStatus value={{outcome:"adopted",instance:proxyInstance,operationId:"example"}} /></ProxyProviders>).container.textContent ?? ""},
   { property: "TailnetProblem.code", member: "tailnet.key-mint-failed", key: "tailnetContract.codes.key-mint-failed", render: () => tailnetError("tailnet.key-mint-failed") },

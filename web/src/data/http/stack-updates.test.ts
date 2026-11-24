@@ -108,7 +108,7 @@ it.each(["malformed", "lost", "proxy"])("uncertain %s admission holds intent wit
   expect(JSON.parse(String(f.writes()[0]!.init.body))).toEqual({ expectedRevision: revision });
 });
 it("checks whole-stack observations without creating a fabricated run", async () => {
-  const f = updateFixture(); await expect(f.adapter.checkStackUpdates!("direct~project")).resolves.toBeUndefined();
+  const f = updateFixture(); await expect(f.adapter.checkStackUpdates!("direct~project")).resolves.toMatchObject({ hasUpdate: true });
   expect(f.writes()[0]!.path).toBe("/api/environments/direct/updater/projects/project/check");
 });
 

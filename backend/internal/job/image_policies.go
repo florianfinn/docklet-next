@@ -19,12 +19,18 @@ func (s *JobService) Submit(ctx context.Context, r st.Request) (st.Run, error) {
 	if err := retiredUpdateControl(r.JobID); err != nil {
 		return st.Run{}, err
 	}
+	if r.JobID == hostUpdateCheckJob {
+		return s.submitHostUpdateCheck(ctx, r)
+	}
 	return s.legacySubmit(ctx, r)
 }
 func (s *JobService) GetRun(ctx context.Context, env, job, run string) (st.Run, error) {
 	return s.legacyGetRun(ctx, env, job, run)
 }
 func (s *JobService) ListRuns(ctx context.Context, env, job string, page, limit int) (st.RunList, error) {
+	if job == hostUpdateCheckJob {
+		return s.runs.List(ctx, env, job, page, limit)
+	}
 	return s.legacyListRuns(ctx, env, job, page, limit)
 }
 func (s *JobService) CancelRun(ctx context.Context, env, job, run string) (st.Run, error) {
@@ -33,6 +39,16 @@ func (s *JobService) CancelRun(ctx context.Context, env, job, run string) (st.Ru
 func (s *JobService) RetryRun(ctx context.Context, env, job, run string) (st.Run, error) {
 	if err := retiredUpdateControl(job); err != nil {
 		return st.Run{}, err
+	}
+	if job == hostUpdateCheckJob {
+		current, err := s.runs.Get(ctx, env, job, run)
+		if err != nil {
+			return current, err
+		}
+		if err := s.hostUpdateCheckAccess(ctx, current); err != nil {
+			return current, err
+		}
+		return s.runs.Retry(ctx, env, job, run)
 	}
 	return s.legacyRetryRun(ctx, env, job, run)
 }

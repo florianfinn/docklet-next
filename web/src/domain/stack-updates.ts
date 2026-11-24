@@ -39,7 +39,12 @@ export interface SystemHints {
     requiresHubUpdate: boolean; manualOnly: true; code?: string }[];
 }
 export interface UpdateJobTarget { id: string; status: UpdateRunStatus; code?: string; activityId?: string; environmentId?: string; targetId?: string }
+type WireEligibility = import("@/api/generated/schema").components["schemas"]["UpdaterUpdateEligibility"];
+export type UpdateEligibility = Omit<WireEligibility, "services"> & { services: NonNullable<WireEligibility["services"]> };
+export interface UpdateCheckResult { hasUpdate: boolean; version?: string }
 export interface UpdatesApi {
+  getUpdateEligibility?(stackId: string): Promise<UpdateEligibility>;
+  checkContainerUpdate?(id: string): Promise<UpdateCheckResult>;
   getUpdateCheckJob?(hostId: string): Promise<{ enabled: boolean; schedule: string; nextRun?: string }>;
   getUpdateJobTargets?(hostId: string, jobId: string, runId: string): Promise<UpdateJobTarget[]>;
   getUpdateBaseline?(stackId: string): Promise<UpdateBaseline>;
@@ -57,5 +62,5 @@ export interface UpdatesApi {
   restoreContainerImage?(id: string): Promise<string>;
   getContainerPreviousImage?(id: string): Promise<{ imageId: string; reference: string; createdAt: string } | undefined>;
   getSystemImageHints?(hostId: string): Promise<SystemHints>;
-  checkStackUpdates?(stackId: string): Promise<void>;
+  checkStackUpdates?(stackId: string): Promise<UpdateCheckResult | void>;
 }

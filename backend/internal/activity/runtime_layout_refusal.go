@@ -19,7 +19,7 @@ const runtimeLayoutUnsupported = "update.image-binding-unsupported"
 // nested COMPOSE_FILE base; the hub decides per operation whether it applies.
 func runtimeLayoutProblem(kind string, err error) error {
 	if kind == "stack" && errors.Is(err, projects.ErrComposeFileNestedBase) {
-		return imageDTO.Failure(runtimeLayoutUnsupported, 409)
+		return runtimeLayoutBinding()
 	}
 	return nil
 }
@@ -30,10 +30,19 @@ func runtimeTargetFailure(op RuntimeOperation, err error) error {
 	var problem *imageDTO.OperationError
 	relayed := errors.As(err, &problem) && problem.Problem.Code == runtimeLayoutUnsupported
 	if runtimeImageOperation(op) && (relayed || errors.Is(err, projects.ErrComposeFileNestedBase)) {
-		return imageDTO.Failure(runtimeLayoutUnsupported, 409)
+		if relayed {
+			return problem
+		}
+		return runtimeLayoutBinding()
 	}
 	if relayed {
 		err = errors.New(err.Error())
 	}
 	return &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
+}
+
+func runtimeLayoutBinding() *imageDTO.OperationError {
+	problem := imageDTO.Failure(runtimeLayoutUnsupported, 409)
+	problem.Problem.Binding = &imageDTO.Binding{Scope: "project", Reason: "nested-compose-file"}
+	return problem
 }

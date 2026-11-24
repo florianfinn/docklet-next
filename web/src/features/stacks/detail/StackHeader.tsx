@@ -5,10 +5,14 @@
 // Deviations: M2 production shell: disconnected error handling, development-only demo boundary, neutral product text or responsive layout. Historical import recorded in web/PROVENANCE.md. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #27 production text, source errors and capability boundaries. M10 #231: preserve progress text, scoped controls and localized timestamps. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M24 S6: observed recovery and update UI follow-ups.; M36 #568: record baseline without pulling images.
 
 import { useStackDefinitionHint, useStackNamePeers } from "@/shared/hooks/use-stack-definition-hint";
+import { useAdapter } from "@/data/use-adapter";
+import { StackBindingNotice, useStackEligibility } from "@/shared/components/updates/stack-binding-notice";
+import { hasUpdate } from "@/domain/updates";
+import { CheckUpdatesButton } from "@/shared/components/updates/check-updates-button";
 import { useIsUser } from "@/data/use-principal";
 import { useStackCapability } from "@/shared/hooks/use-stack-capability";
 import { useCapability } from "@/data/use-capability";
-import { ChevronDown, Copy, FlaskConical, Globe, Layers, Play, RefreshCw, RotateCw, ScanSearch, Square, TriangleAlert } from "lucide-react";
+import { ChevronDown, Copy, FlaskConical, Globe, Layers, Play, RefreshCw, RotateCw, Square, TriangleAlert } from "lucide-react";
 import { useTranslations } from "use-intl";
 import { useStackStopMode } from "../stop-mode";
 
@@ -38,7 +42,7 @@ import { useStackCommands } from "@/shared/hooks/use-stack-commands";
  */
 export function StackHeader({ stack, host, inline = false }: { stack: StackDetail; host: Host | undefined; inline?: boolean }) {
   const t = useTranslations("stacks.detail");
-  const dt = useAdapterText();
+  const dt = useAdapterText(), adapter = useAdapter();
   const cmd = useStackCommands();
  const definitionHint = useStackDefinitionHint(stack);
  const namePeers = useStackNamePeers(stack);
@@ -51,6 +55,8 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const stopText = useTranslations("stacks.stopMode");
   const busy = !!stack.busyActionId;
   const updateTimes = useStackUpdateTimes(stack);
+  const eligibility = useStackEligibility(stack.id, adapter.kind === "http" && stack.services.some((service) => hasUpdate(service.update)));
+  const blockedReason = eligibility.bindings.length ? t("actions.updateUnsupported") : eligibility.checking ? t("actions.checkingSupport") : undefined;
   const allStopped = stack.services.every((s) => s.state === "stopped");
   return (
     <header className="mb-5 flex flex-col gap-3">
@@ -63,7 +69,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
             <h1 className="text-2xl font-semibold tracking-tight">{stack.name}</h1>
             <StackStatusBadge stack={stack} host={host} />
             <LabelChips labels={stack.labels} />
-            <StackUpdateIndicator name={stack.name} services={stack.services} times={updateTimes} actions={{ resourceRef: user ? { kind: "stack", id: stack.id } : undefined, onUpdate: () => present(() => cmd.installUpdates(stack.id)), onUpdateChecked: () => present(() => cmd.installUpdates(stack.id, undefined, true)), onRecheck: () => void cmd.checkUpdates(stack.id), busy }} />
+            <StackUpdateIndicator name={stack.name} services={stack.services} times={updateTimes} actions={{ resourceRef: { kind: "stack", id: stack.id }, blockedReason, onUpdate: () => present(() => cmd.installUpdates(stack.id)), onUpdateChecked: () => present(() => cmd.installUpdates(stack.id, undefined, true)), onRecheck: () => void cmd.checkUpdates(stack.id), busy }} />
             <HiddenBadge kind="stacks" id={stack.id} name={stack.name} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -79,6 +85,10 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
           </div>
         </div>
         <div data-page-actions className="flex flex-wrap items-center gap-2 self-center">
+          <CheckUpdatesButton owner={stack.id} disabled={busy || !check.available || !!stack.inventory?.stale} title={check.reason} check={async () => {
+            if (adapter.checkStackUpdates) return (await adapter.checkStackUpdates(stack.id)) ?? { hasUpdate: false };
+            await cmd.checkUpdates(stack.id); return { hasUpdate: false };
+          }} />
           {allStopped ? (
             <Button size="sm" variant="outline" disabled={busy || !command.available || !!stack.inventory?.stale} title={command.reason} onClick={() => void cmd.run(stack.id, "start")}>
               <Play data-icon="inline-start" /> {t("actions.start")}
@@ -112,9 +122,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
                   {stopMode.alternates.map((alternate) => <DropdownMenuItem key={alternate} disabled={!command.available || !!stack.inventory?.stale} title={command.reason} onSelect={() => void cmd.run(stack.id, alternate)}><Square /> {stopText(alternate)}</DropdownMenuItem>)}
-                  <DropdownMenuItem disabled={!check.available} title={check.reason} onSelect={() => void cmd.checkUpdates(stack.id)}>
-                    <ScanSearch /> {t("actions.check")}
-                  </DropdownMenuItem>
+
                 </DropdownMenuGroup>
                 {import.meta.env.DEV && <DropdownMenuSeparator />}
                 {import.meta.env.DEV && <DropdownMenuGroup>
@@ -127,6 +135,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
           </div>
         </div>
       </div>
+      {adapter.kind === "http" && <StackBindingNotice key={stack.id} stackId={stack.id} enabled={stack.services.some((service) => hasUpdate(service.update))} />}
       {!user && <RecordBaseline key={stack.id} stack={stack} host={host} inline={inline} disabled={busy || !command.available || !!stack.inventory?.stale} />}
       {stack.definitionHint === "definition-invalid" && <Alert><TriangleAlert /><AlertDescription>{definitionHint}</AlertDescription></Alert>}
       {namePeers && <Alert><Copy /><AlertDescription>{namePeers}</AlertDescription></Alert>}

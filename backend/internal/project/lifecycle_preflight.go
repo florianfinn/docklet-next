@@ -191,7 +191,7 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 			}
 		}
 		if current.Model.Services[key].Build != nil {
-			return nil, lifecycleFailure("update.image-binding-unsupported")
+			return nil, bindingFailure(key, "build-service")
 		}
 		selected := img.Reference
 		kind := "rebuild"
@@ -274,8 +274,8 @@ func immutableLifecycleReference(sel dto.ImageSelection) (string, error) {
 }
 
 func lifecycleVersionReference(source, version string) (string, error) {
-	if strings.ContainsAny(source, "$@") {
-		return "", lifecycleFailure("update.image-binding-unsupported")
+	if refusal := referenceBindingFailure("", source); refusal != nil {
+		return "", refusal
 	}
 	base := source
 	if colon := strings.LastIndex(source, ":"); colon > strings.LastIndex(source, "/") {
@@ -283,7 +283,7 @@ func lifecycleVersionReference(source, version string) (string, error) {
 	}
 	selected := base + ":" + version
 	if guard.ValidateReference(selected) != nil {
-		return "", lifecycleFailure("update.image-binding-unsupported")
+		return "", bindingFailure("", "unparsable")
 	}
 	return selected, nil
 }
@@ -299,11 +299,11 @@ func (s *ProjectService) lifecycleSelectedTag(ctx context.Context, ref string, l
 	}
 	named, err := reference.ParseNormalizedNamed(ref)
 	if err != nil {
-		return "", lifecycleFailure("update.image-binding-unsupported")
+		return "", bindingFailure("", "unparsable")
 	}
 	tagged, ok := named.(reference.Tagged)
 	if !ok {
-		return "", lifecycleFailure("update.image-binding-unsupported")
+		return "", bindingFailure("", "unparsable")
 	}
 	tags, err := s.containerRegistryService.ListImageTags(ctx, ref, nil)
 	if err != nil {

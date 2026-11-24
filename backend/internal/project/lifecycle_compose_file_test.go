@@ -15,6 +15,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -43,6 +44,11 @@ func TestLifecycleRefusesNestedComposeFileBaseAsUnsupported(t *testing.T) {
 
 			_, _, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
 			lifecycleCode(t, err, tc.code)
+			if tc.code == "update.image-binding-unsupported" {
+				var problem *imageDTO.OperationError
+				require.ErrorAs(t, err, &problem)
+				require.Equal(t, &imageDTO.Binding{Scope: "project", Reason: "nested-compose-file"}, problem.Problem.Binding)
+			}
 			intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{ExpectedRevision: strings.Repeat("0", 64)})
 			require.Nil(t, intent)
 			lifecycleCode(t, err, tc.code)

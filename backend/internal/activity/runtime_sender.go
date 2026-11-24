@@ -266,6 +266,9 @@ func (s *RuntimeSender) metadata(ctx context.Context, path string, value, result
 			if imageDTO.ValidProblemCode(problem.Problem.Code) {
 				refusal := imageDTO.Failure(problem.Problem.Code, status)
 				refusal.Problem.Blocker = imageDTO.SafeRuntimeIdentityBlocker(problem.Problem.Code, problem.Problem.Blocker)
+				if problem.Problem.Code == "update.image-binding-unsupported" {
+					refusal.Problem.Binding = problem.Problem.Binding
+				}
 				if s.target.AgentContractVersion < activitytypes.RuntimePeerContractVersion {
 					refusal = runtimePeerLegacyProblem(refusal)
 				}

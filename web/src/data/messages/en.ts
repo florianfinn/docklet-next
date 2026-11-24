@@ -110,7 +110,7 @@ export const enBackend = {
       "baseline-unavailable": "Deploy the stack once to record a verified configuration baseline.",
       "snapshot-unavailable": "A complete restore point could not be captured. Check the stack inputs and image availability.",
       "target-changed": "The admitted stack or image binding changed. Refresh before retrying.",
-      "image-binding-unsupported": "This image binding or daemon image store cannot support the selected update safely.",
+      "image-binding-unsupported": "This image binding cannot support the selected update safely.",
       "path-retired": "Use the stack image update action instead of this retired update entry point.",
       "target-not-found": "The stack update target no longer exists. Refresh the stack list.",
 

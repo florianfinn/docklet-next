@@ -342,7 +342,7 @@ func (s *ProjectService) preflightLifecycleWrites(ctx context.Context, p *Projec
 			}
 		}
 		if err != nil || entry.IsSymlink || entry.IsDirectory || os.FileMode(entry.UnixMode).Perm()&0222 == 0 {
-			return lifecycleFailure("update.image-binding-unsupported")
+			return bindingFailure("", "unwritable-file")
 		}
 	}
 	return nil

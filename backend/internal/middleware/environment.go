@@ -284,7 +284,7 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 			return err
 		}
 	}
-	if strings.HasPrefix(suffix, "/updater/") && (strings.Contains(suffix, "/restore-points") || strings.HasSuffix(suffix, "/baseline")) {
+	if strings.HasPrefix(suffix, "/updater/") && (strings.Contains(suffix, "/restore-points") || strings.HasSuffix(suffix, "/baseline") || strings.HasSuffix(suffix, "/update-eligibility")) {
 		host := strings.HasPrefix(suffix, "/updater/restore-points")
 		grants := []string{authz.PermProjectsRead, authz.PermImageUpdatesRead}
 		if c.Request().Method == http.MethodDelete {

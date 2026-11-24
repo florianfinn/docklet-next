@@ -10,6 +10,8 @@ import { formatDateTime } from "@/domain/format";
 import { useStack } from "@/data/queries";
 import { AdapterOutcomeError } from "@/data/capability";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { BindingRefusal } from "./binding-refusal";
+import { StackBindingNotice, useStackEligibility } from "./stack-binding-notice";
 import { useUpdateAction } from "./use-update-action";
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 
@@ -38,6 +40,8 @@ export function StackUpdateDialog({ stackId, point, services: initialServices, a
   const baseline = useQuery({ queryKey: ["stack", stackId, "update-baseline"], queryFn: () => adapter.getUpdateBaseline!(stackId), enabled: read.available && !!adapter.getUpdateBaseline, staleTime: 0 });
   const action = useUpdateAction(`${stackId}:${baseline.data?.targetIdentity}:${baseline.data?.savedRevision}:${service}`);
   const data = baseline.data;
+  const eligibility = useStackEligibility(stackId, !point);
+  const bindingBlocked = !point && eligibility.bindings.some((binding) => binding.scope === "project" || service === "*" || binding.service === service);
   // Mutations bind the current, successfully read revision; a status without one is shown only.
   const revisionReady = !baseline.isError && /^[a-f0-9]{64}$/.test(data?.savedRevision ?? "");
   // Consent belongs to one target revision and is dropped whenever that changes or becomes unusable.
@@ -47,7 +51,7 @@ export function StackUpdateDialog({ stackId, point, services: initialServices, a
   const validPoint = !point || (point.available && !point.orphaned && point.holdState === "none" && point.targetIdentity === data?.targetIdentity);
   // An update needs a verified baseline; a restore point carries its own configuration.
   const blocked = !point && !!data && !data.available;
-  const canSend = read.available && write.available && (!point || points.available) && !!data && !blocked && revisionReady && validPoint && (!point || ack) && !action.busy;
+  const canSend = !bindingBlocked && !eligibility.checking && read.available && write.available && (!point || points.available) && !!data && !blocked && revisionReady && validPoint && (!point || ack) && !action.busy;
   const close = () => { action.reset(); onClose(); };
   useEffect(() => identityLifetime(adapter).listen(onClose), [adapter, onClose]);
   return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{t(point ? "restore" : "update")}</DialogTitle><DialogDescription>{t(autoRestore ? "updateWithCheckHelp" : "noData")}</DialogDescription></DialogHeader>
@@ -57,6 +61,8 @@ export function StackUpdateDialog({ stackId, point, services: initialServices, a
     </>}
     {!point && !blocked && <Select value={service} onValueChange={(v) => { setService(v); setWholeStackHint(false); action.reset(); }}><SelectTrigger aria-label={t("update")}><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="*">{t("update")}</SelectItem>{(stack.data?.services ?? []).map((s) => <SelectItem key={s.name} value={s.name}>{t("service", { name: s.name })}</SelectItem>)}</SelectGroup></SelectContent></Select>}
     {wholeStackHint && <p role="status">{t("wholeStack")}</p>}
+    {!point && <StackBindingNotice stackId={stackId} />}
+    {action.binding && <BindingRefusal binding={action.binding} />}
     {action.error && <p role="alert">{action.error}</p>}
     <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button>{blocked ? redeploy.available && <Button onClick={() => { void commands.run(stackId, "redeploy"); close(); }}>{t("deployNow")}</Button> : <Button disabled={!canSend} onClick={() => canSend && void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision, ...(autoRestore ? { autoRestore: true } : {}), ...(service === "*" ? {} : { services: [service] }) }), () => close(), (error) => setWholeStackHint(error instanceof AdapterOutcomeError && error.outcome.kind === "error" && ["update.service-coupled", "update.image-binding-unsupported"].includes(error.outcome.code)))}>{t(point ? "restore" : "update")}</Button>}</div>
   </DialogContent></Dialog>;

@@ -1,0 +1,23 @@
+{
+  "id": "example-update-check",
+  "environmentId": "example-host",
+  "sourceEnvironmentId": "example-host",
+  "type": "image_update_check",
+  "status": "success",
+  "resourceType": "container",
+  "resourceName": "app",
+  "progress": 100,
+  "step": "Update check complete",
+  "latestMessage": "Update check complete",
+  "messageCode": "activity.success",
+  "startedBy": {
+    "username": "System"
+  },
+  "startedAt": "2026-11-24T00:00:00Z",
+  "endedAt": "2026-11-24T00:00:00Z",
+  "metadata": {
+    "action": "check_container_update"
+  },
+  "createdAt": "2026-11-24T00:00:00Z",
+  "updatedAt": "2026-11-24T00:00:00Z"
+}

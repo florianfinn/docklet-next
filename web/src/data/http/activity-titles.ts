@@ -61,6 +61,7 @@ export const JOB_TITLES: Readonly<Record<string, string>> = {
   "docker-client-refresh": "dockerRefresh",
   "pruning-volume-helper": "volumeHelper",
   "update-check": "activity.runKind.check-updates",
+  "update-check-host": "activity.runKind.check-updates",
   "notification-deliver": "notificationDeliver",
   "notification-delivery-wake": "notificationWake",
   "image-polling": "imagePolling",

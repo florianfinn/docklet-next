@@ -112,7 +112,7 @@ export const deBackend: typeof enBackend = {
       "baseline-unavailable": "Den Stack einmal bereitstellen, um eine geprüfte Konfigurationsbasis zu erfassen.",
       "snapshot-unavailable": "Ein vollständiger Wiederherstellungspunkt konnte nicht erfasst werden. Stack-Eingaben und verfügbare Images prüfen.",
       "target-changed": "Der zugelassene Stack oder seine Image-Zuordnung hat sich geändert. Vor einem erneuten Versuch aktualisieren.",
-      "image-binding-unsupported": "Diese Image-Zuordnung oder der Image-Speicher des Daemons unterstützt das gewählte Update nicht sicher.",
+      "image-binding-unsupported": "Diese Image-Zuordnung unterstützt das gewählte Update nicht sicher.",
       "path-retired": "Die Stack-Image-Update-Aktion statt dieses stillgelegten Update-Einstiegs verwenden.",
       "target-not-found": "Das Stack-Update-Ziel ist nicht mehr vorhanden. Die Stack-Liste aktualisieren.",
 

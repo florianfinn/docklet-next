@@ -117,8 +117,15 @@ func registerRestorePointRoutes(api huma.API, s *UpdaterService) {
 		result, err := s.deps.Projects.ImageBaselineStatus(ctx, in.ProjectID, s.deps.Projects.LifecycleRegistration(ctx))
 		return &handlerutil.Out[dto.BaselineStatus]{Body: base.ApiResponse[dto.BaselineStatus]{Success: err == nil, Data: result}}, err
 	})
-	// Read-only binding eligibility per service (#594); filled by the update-action step of M38.
+	// Binding eligibility uses the same read permission conjunction as baseline metadata.
 	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "get-update-eligibility", Method: http.MethodGet, Path: "/environments/{id}/updater/projects/{projectId}/update-eligibility", Tags: []string{"Updater"}, Summary: "Read which services Docklet can update safely"}, authz.PermProjectsRead, func(ctx context.Context, in *baselineInput) (*handlerutil.Out[dto.UpdateEligibility], error) {
-		return nil, huma.Error501NotImplemented("Update eligibility unavailable")
+		if _, err := pointAccess(ctx, in.EnvironmentID, false, false); err != nil {
+			return nil, err
+		}
+		if s == nil || s.deps.Projects == nil {
+			return nil, imageDTO.Failure("update.check-unavailable", 503)
+		}
+		result, err := s.deps.Projects.ImageUpdateEligibility(ctx, in.ProjectID)
+		return &handlerutil.Out[dto.UpdateEligibility]{Body: base.ApiResponse[dto.UpdateEligibility]{Success: err == nil, Data: result}}, err
 	})
 }

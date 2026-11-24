@@ -43,6 +43,33 @@ func (s *UpdaterService) RunUpdateCheck(ctx context.Context) (st.Outcome, error)
 	return policyResult(out), nil
 }
 
+type hostCheckFence struct{}
+
+// RunUpdateCheckHost is the hub-owned static job's single-host entry point.
+func (s *UpdaterService) RunUpdateCheckHost(ctx context.Context, env string) (st.Outcome, error) {
+	p, err := s.hubPolicies()
+	if err != nil {
+		return st.Outcome{Status: st.Failed, Code: "update.schedule-hub-owned"}, err
+	}
+	var initial struct {
+		Enabled            bool
+		CreatedAt          time.Time
+		CredentialRevision int64
+	}
+	read := func(row any) error {
+		return s.deps.DB.WithContext(ctx).Table("environments").Select("enabled,created_at,credential_revision").Where("id = ?", env).Take(row).Error
+	}
+	if read(&initial) != nil || !initial.Enabled {
+		return s.recordHostCheckFailure(ctx, p, env)
+	}
+	valid := func() bool {
+		current := initial
+		return read(&current) == nil && current.Enabled && current.CreatedAt.Equal(initial.CreatedAt) && current.CredentialRevision == initial.CredentialRevision
+	}
+	ctx = context.WithValue(ctx, hostCheckFence{}, valid)
+	return s.runUpdateCheckHost(ctx, p, env)
+}
+
 func (s *UpdaterService) runUpdateCheckHost(ctx context.Context, p *imagePolicyService, env string) (st.Outcome, error) {
 	reg, err := p.ports.host(ctx, env)
 	if err != nil {
@@ -54,7 +81,11 @@ func (s *UpdaterService) runUpdateCheckHost(ctx context.Context, p *imagePolicyS
 	}
 	out := st.Outcome{Status: st.Succeeded}
 	present := map[string]bool{}
+	valid, _ := ctx.Value(hostCheckFence{}).(func() bool)
 	for _, target := range targets {
+		if valid != nil && !valid() {
+			return s.recordHostCheckFailure(ctx, p, env)
+		}
 		if !target.Eligible {
 			continue
 		}
@@ -98,6 +129,9 @@ func (s *UpdaterService) runUpdateCheckHost(ctx context.Context, p *imagePolicyS
 		if err := jobcontext.Progress(ctx, result); err != nil {
 			return out, err
 		}
+	}
+	if valid != nil && !valid() {
+		return s.recordHostCheckFailure(ctx, p, env)
 	}
 	if err := p.store.PruneAbsent(ctx, env, reg, present, time.Now().UTC()); err != nil {
 		return out, err

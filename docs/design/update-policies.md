@@ -9,6 +9,22 @@ The [update policy model](update-policy-model.md) (M18) replaces the stack-only 
 master gates and the per-host schedules below; the admission, revalidation and notification
 invariants of this note stay binding.
 
+## Manual checks and binding eligibility
+
+A manual container check resolves the current managed instance on its requested
+host, runs a fresh updater observation and performs the same candidate bookkeeping
+as a project check. The hub records `image_update_check` with that host as its
+environment, the project or container name as its resource and an explicit
+`check_project_update` or `check_container_update` action. Reading existing
+observations does not create a manual-check activity.
+
+Binding eligibility reads the saved Compose model and filesystem inputs on the
+target executor. It shares the literal image, build, layout, anchor and writable
+file predicates with update admission, without Docker observation, registry access
+or writes. A refusal identifies its project or service scope and a declared reason;
+a variable reference includes only the variable name. Eligibility explains the
+current safety boundary and does not edit interpolation, defaults or `.env` files.
+
 ## Policy trigger state table
 
 | State / event | Admission and durable result |

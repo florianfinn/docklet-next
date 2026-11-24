@@ -11,10 +11,12 @@ import { useAdapter } from "@/data/use-adapter";
 import { isRunBusy } from "@/data/run-gate";
 import { identityLifetime } from "@/data/identity-lifetime";
 import { useImageError } from "@/features/images/use-image-error";
+import type { ImageBinding } from "@/data/http/update-binding";
 import { AdapterOutcomeError } from "@/data/capability";
 
 export function useUpdateAction(ownerKey = "") {
   const adapter = useAdapter(), errorText = useImageError(), t = useTranslations("activity.runtime");
+  const [binding, setBinding] = useState<ImageBinding>();
   const [error, setError] = useState<string>(), [busy, setBusy] = useState(false), [blocked, setBlocked] = useState(false);
   const [intentOwner, setIntentOwner] = useState(ownerKey);
   const sequence = useRef(0), mounted = useRef(true), currentOwner = useRef(ownerKey);
@@ -22,17 +24,17 @@ export function useUpdateAction(ownerKey = "") {
   useEffect(() => {
     const supersede = () => { ++sequence.current; };
     mounted.current = true;
-    const off = identityLifetime(adapter).listen(() => { supersede(); setError(undefined); setBusy(false); setBlocked(false); });
+    const off = identityLifetime(adapter).listen(() => { supersede(); setError(undefined); setBinding(undefined); setBusy(false); setBlocked(false); });
     return () => { mounted.current = false; supersede(); off(); };
   }, [adapter]);
-  const reset = () => { ++sequence.current; setError(undefined); setBusy(false); setBlocked(false); };
+  const reset = () => { ++sequence.current; setError(undefined); setBinding(undefined); setBusy(false); setBlocked(false); };
   async function run<T>(action: () => Promise<T>, done?: (value: T) => void, failed?: (error: unknown) => void) {
     const ticket = ++sequence.current, life = identityLifetime(adapter), generation = life.version(), owner = currentOwner.current;
     const owns = () => currentOwner.current === owner && mounted.current && ticket === sequence.current && generation === life.version() && life.active();
-    setIntentOwner(owner); setBusy(true); setError(undefined); setBlocked(false);
+    setIntentOwner(owner); setBusy(true); setError(undefined); setBinding(undefined); setBlocked(false);
     try { const result = await action(); if (owns()) done?.(result); }
-    catch (e) { if (owns() && !isCancelledError(e)) { if (e instanceof AdapterOutcomeError && e.outcome.kind === "error" && (e.outcome.status === 403 || e.outcome.status === 401 || (e.outcome.code === "runtime.admission-unknown" || e.outcome.code === "runtime.outcome-unknown"))) setBlocked(true); failed?.(e); setError(isRunBusy(e) ? t("busy") : e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "runtime.admission-unknown" ? t("ambiguous") : e instanceof AdapterOutcomeError && e.outcome.kind === "conflict" ? t(e.outcome.code === "run.cancelling" ? "cancellingConflict" : e.outcome.code === "run.request-mismatch" ? "mismatch" : "busy") : errorText(e)); } }
+    catch (e) { if (owns() && !isCancelledError(e)) { setBinding(e instanceof AdapterOutcomeError && e.outcome.kind === "error" ? e.outcome.binding : undefined); if (e instanceof AdapterOutcomeError && e.outcome.kind === "error" && (e.outcome.status === 403 || e.outcome.status === 401 || (e.outcome.code === "runtime.admission-unknown" || e.outcome.code === "runtime.outcome-unknown"))) setBlocked(true); failed?.(e); setError(isRunBusy(e) ? t("busy") : e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "runtime.admission-unknown" ? t("ambiguous") : e instanceof AdapterOutcomeError && e.outcome.kind === "conflict" ? t(e.outcome.code === "run.cancelling" ? "cancellingConflict" : e.outcome.code === "run.request-mismatch" ? "mismatch" : "busy") : errorText(e)); } }
     finally { if (owns()) setBusy(false); }
   }
-  return { error: intentOwner === ownerKey ? error : undefined, busy: intentOwner === ownerKey && (busy || blocked), run, reset };
+  return { binding: intentOwner === ownerKey ? binding : undefined, error: intentOwner === ownerKey ? error : undefined, busy: intentOwner === ownerKey && (busy || blocked), run, reset };
 }

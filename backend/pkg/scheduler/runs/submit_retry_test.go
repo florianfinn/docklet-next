@@ -8,6 +8,7 @@ package runs
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -132,4 +133,59 @@ func TestDedupeRunsKeepsLatestCopyAtFirstPosition(t *testing.T) {
 			require.False(t, dedupeRunsInternal(&record))
 		})
 	}
+}
+
+func TestHostUpdateCheckAdmissionJoinsQueuedAndRunningOnlyForSameHost(t *testing.T) {
+	q := newResolutionQueueInternal(t)
+	first, err := q.Submit(t.Context(), st.Request{JobID: "update-check-host", EnvironmentID: "example-host", Trigger: "manual"})
+	require.NoError(t, err)
+	second, err := q.Submit(t.Context(), st.Request{JobID: "update-check-host", EnvironmentID: "example-host", Trigger: "manual"})
+	require.NoError(t, err)
+	require.Equal(t, first.ID, second.ID)
+	require.NoError(t, q.UpdateRun(t.Context(), first, func(current *st.Run) error { current.Status = st.Running; return nil }))
+	third, err := q.Submit(t.Context(), st.Request{JobID: "update-check-host", EnvironmentID: "example-host", Trigger: "manual"})
+	require.NoError(t, err)
+	require.Equal(t, first.ID, third.ID)
+	peer, err := q.Submit(t.Context(), st.Request{JobID: "update-check-host", EnvironmentID: "example-peer", Trigger: "manual"})
+	require.NoError(t, err)
+	require.NotEqual(t, first.ID, peer.ID)
+	all, err := q.Submit(t.Context(), st.Request{JobID: "update-check", EnvironmentID: "0", Trigger: "manual"})
+	require.NoError(t, err)
+	require.NotEqual(t, first.ID, all.ID)
+	require.NoError(t, q.UpdateRun(t.Context(), third, func(current *st.Run) error { current.Status = st.Succeeded; return nil }))
+	next, err := q.Submit(t.Context(), st.Request{JobID: "update-check-host", EnvironmentID: "example-host", Trigger: "manual"})
+	require.NoError(t, err)
+	require.NotEqual(t, first.ID, next.ID)
+}
+
+func TestConcurrentHostCheckSubmissionsShareOneDurableRun(t *testing.T) {
+	q := newResolutionQueueInternal(t)
+	type result struct {
+		run st.Run
+		err error
+	}
+	results := make(chan result, 16)
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for range 16 {
+		workers.Go(func() {
+			<-start
+			run, err := q.Submit(t.Context(), st.Request{JobID: "update-check-host", EnvironmentID: "example-host", Trigger: "manual"})
+			results <- result{run, err}
+		})
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+	id := ""
+	for result := range results {
+		require.NoError(t, result.err)
+		if id == "" {
+			id = result.run.ID
+		}
+		require.Equal(t, id, result.run.ID)
+	}
+	list, err := q.List(t.Context(), "example-host", "update-check-host", 1, 100)
+	require.NoError(t, err)
+	require.Equal(t, 1, list.Total)
 }

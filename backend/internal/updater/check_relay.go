@@ -25,5 +25,7 @@ func relayedCheckRefusal(err error) error {
 	if json.Unmarshal(status.Body, &body) != nil || body.Success || body.Problem.Code != "update.image-binding-unsupported" {
 		return nil
 	}
-	return imageDTO.Failure(body.Problem.Code, status.StatusCode)
+	problem := imageDTO.Failure(body.Problem.Code, status.StatusCode)
+	problem.Problem.Binding = body.Problem.Binding
+	return problem
 }

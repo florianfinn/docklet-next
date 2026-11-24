@@ -422,7 +422,7 @@ func (s *UpdaterService) deliverImagePolicyEntry(ctx context.Context, p *imagePo
 
 // CheckPolicyProject is the public/manual check consumer. Executor checks remain
 // observations only; all policy notifications are deduplicated on the hub.
-func (s *UpdaterService) CheckPolicyProject(ctx context.Context, env, target string) (*projectDTO.UpdateInfo, error) {
+func (s *UpdaterService) checkPolicyProject(ctx context.Context, env, target string) (*projectDTO.UpdateInfo, error) {
 	if s.config != nil && (s.config.AgentMode || s.config.EdgeAgent) {
 		return s.CheckProjectUpdates(ctx, target)
 	}

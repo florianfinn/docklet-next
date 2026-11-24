@@ -74,12 +74,13 @@ for (const locale of ["en-US", "de"] as const) {
     expect(button.title).toBe(catalogs[locale].common.stackUpdates.recoveryHeld);
   });
 }
-it("F5 no empty container box before any gesture or actual control is available", async () => {
+it("shows the manual container check while policy and recovery reads are pending", async () => {
   const f = updateFixture(); f.adapter.getContainerUpdatePolicy = () => new Promise(() => {}); f.adapter.getContainerPreviousImage = () => new Promise(() => {}); await f.adapter.getCurrentUser();
   const c = { id: "direct~example", hostId: "direct", name: "example", origin: "standalone", image: { repository: "example", tag: "1" }, update: { state: "unchecked" } } as ContainerInfo;
   const view = renderWithApp(<ContainerUpdates c={c} select={() => {}} />, f.adapter);
   await act(async () => { await Promise.resolve(); });
-  expect(view.container.querySelector("section") === null).toBe(true);
+  expect(view.container.querySelector("section") !== null).toBe(true);
+  expect(screen.getByRole("button", { name: catalogs.de.containers.updateCheck.check }) !== null).toBe(true);
 });
 for (const locale of ["en-US", "de"] as const) it.each(targetFixture.filter((target) => target.code !== "update.unstable"))(`W-1 ${locale} actual job detail renders Go-produced target $code from the job endpoint`, async (target) => {
   const code = target.code;

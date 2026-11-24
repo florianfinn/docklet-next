@@ -1,6 +1,7 @@
 // American English texts of the containers overview and inspector.
 
 export const enContainers = {
+  updateCheck: { serviceReason: "{service} — {reason}", check: "Check for updates", checking: "Checking for updates…", available: "Update available: {version}", current: "No update", hostResult: "{stacks} stacks and {containers} containers have updates", notOffered: "Update not offered: {reason}", generic: "This image binding cannot support the selected update safely." },
   terminal: {
     title: "Terminal", shell: "Shell", auto: "Automatic (bash or sh)", sh: "sh", bash: "bash", reconnect: "Reconnect",
     checking: "Checking shell availability…", connecting: "Connecting…", live: "Connected", ended: "Shell ended (exit code {code}).", unknownCode: "unknown", input: "Container terminal input",

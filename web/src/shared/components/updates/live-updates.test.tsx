@@ -216,9 +216,8 @@ it("HTTP header check is enabled only by the stack-scoped descriptor", async () 
     return new Response(JSON.stringify(body), { headers: response.headers });
   });
   renderWithApp(<StackHeader stack={{ id: "direct~project", hostId: "direct", name: "Example", labels: [], services: [], autoUpdate: { mode: "check" }, deployments: [], restorePoints: [], compose: "", env: "" }} host={undefined} />, f.adapter);
-  await userEvent.click(screen.getByRole("button", { name: catalogs.de.stacks.detail.redeployMenu }));
-  const item = await screen.findByRole("menuitem", { name: catalogs.de.stacks.detail.actions.check });
-  await waitFor(() => expect(item.getAttribute("aria-disabled") === "true").toBe(false));
+  const item = await screen.findByRole("button", { name: catalogs.de.containers.updateCheck.check });
+  await waitFor(() => expect(item.hasAttribute("disabled")).toBe(false));
   await userEvent.click(item);
   await waitFor(() => expect(f.writes().some((write) => write.path === "/api/environments/direct/updater/projects/project/check")).toBe(true));
 });

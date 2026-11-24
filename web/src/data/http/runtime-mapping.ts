@@ -6,6 +6,7 @@
 
 import type { components } from "@/api/generated/schema";
 import type { CodedRuntimeActionRun } from "../adapter";
+import { imageBinding } from "./update-binding";
 import { runtimeBlocker } from "../runtime-blocker";
 import { AdapterOutcomeError } from "../capability";
 import type { RuntimePresentation, RuntimeView } from "@/features/activity/runtime-presentation";
@@ -26,7 +27,7 @@ export function runtimeResponseError(body: unknown, status: number): AdapterOutc
     return new AdapterOutcomeError({ kind: "conflict", code, activeRunId: data.activeRunId });
   }
   // The frozen conflict port requires an ID. Missing authorized IDs stay coded errors.
-  return new AdapterOutcomeError({ kind: "error", code: typeof code === "string" ? code : "http.error", status, blocker: runtimeBlocker(code, object(envelope.error).blocker) });
+  return new AdapterOutcomeError({ kind: "error", code: typeof code === "string" ? code : "http.error", status, ...(code === "update.image-binding-unsupported" && object(envelope.error).binding !== undefined ? { binding: imageBinding(object(envelope.error).binding) } : {}), blocker: runtimeBlocker(code, object(envelope.error).blocker) });
 }
 
 export function mapRuntime(snapshot: unknown, hostId: string, id?: string, detail?: RuntimeDetail, rights?: RuntimePresentation): RuntimeRun {

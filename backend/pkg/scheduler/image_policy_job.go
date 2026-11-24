@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	st "github.com/florianfinn/docklet-next/types/scheduler"
 	"strings"
 	"sync"
@@ -31,6 +32,21 @@ func RefreshUpdateWindows(ctx context.Context, controller st.JobScheduler, owner
 	check := &st.GenericJob{JobName: "update-check", ScheduleFn: owner.UpdateCheckSchedule, RunFn: owner.RunUpdateCheck,
 		ReconcileFn: func(ctx context.Context, run st.Run) (st.Outcome, error) { return owner.RunUpdateCheck(ctx) }}
 	if err := controller.AddJob(ctx, check); err != nil {
+		return err
+	}
+	// The static host job is manual-only. Its host comes from the durable run,
+	// never from a dynamic job name or agent-local scheduler.
+	hostCheck := &st.GenericJob{JobName: "update-check-host", ScheduleFn: func(context.Context) string { return "" }, ShouldRunFn: func(context.Context) bool { return false },
+		RunFn: func(ctx context.Context) (st.Outcome, error) {
+			run, ok := jobcontext.Run(ctx)
+			if !ok || run.JobID != "update-check-host" {
+				return st.Outcome{Status: st.Failed, Code: "update.invalid-target"}, nil
+			}
+			return owner.RunUpdateCheckHost(ctx, run.EnvironmentID)
+		}, ReconcileFn: func(ctx context.Context, run st.Run) (st.Outcome, error) {
+			return owner.RunUpdateCheckHost(ctx, run.EnvironmentID)
+		}}
+	if err := controller.AddJob(ctx, hostCheck); err != nil {
 		return err
 	}
 	wanted := map[string]bool{}

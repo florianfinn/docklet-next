@@ -155,6 +155,9 @@ func (q *Coordinator) signalInternal() {
 // Manual and remote work never joins another run. Scheduled and recovery work
 // joins an existing run only while it is still waiting to start.
 func coalescesPendingInternal(request st.Request, existing st.Run) bool {
+	if request.JobID == "update-check-host" && request.ObservedAgentRun == nil && existing.Trigger == "manual" && request.Trigger == "manual" {
+		return existing.Status == st.Queued || existing.Status == st.Running || existing.Status == st.Waiting || existing.Status == st.Retrying
+	}
 	if request.ObservedAgentRun != nil || separateTriggerInternal(request.Trigger) || separateTriggerInternal(existing.Trigger) {
 		return false
 	}

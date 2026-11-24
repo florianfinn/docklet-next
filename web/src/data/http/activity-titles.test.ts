@@ -152,3 +152,11 @@ it("titles a system backup resource action from its producer shape in both local
   expect(renderRun(run, "en-US").title).toBe("System backup");
   expect(renderRun(run, "de").title).toBe("Systemsicherung");
 });
+
+it("renders the real manual container-check producer with its host", async () => {
+ const fixture = JSON.parse(readFileSync(join(root, "web/src/features/containers/testdata/manual-update-activity.json"), "utf8"));
+ const run = mapActivityDetail({ activity: fixture, messages: [], output: [], stepTrace: [], outputTruncated: false });
+ const rendered = renderRun(run, "en-US");
+ expect(run.hostId).toBe("example-host");
+ expect(rendered.title).toBe("Update check");
+});

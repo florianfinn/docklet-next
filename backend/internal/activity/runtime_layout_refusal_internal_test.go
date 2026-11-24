@@ -37,3 +37,13 @@ func TestLayoutRefusalOnlyForImageOperations(t *testing.T) {
 	require.Nil(t, runtimeLayoutProblem("container", local))
 	require.Nil(t, runtimeLayoutProblem("stack", errors.New("other")))
 }
+
+func TestRuntimeLayoutBindingIsSetAndPreserved(t *testing.T) {
+	var created *imageDTO.OperationError
+	require.ErrorAs(t, runtimeLayoutProblem("stack", projects.ErrComposeFileNestedBase), &created)
+	require.Equal(t, &imageDTO.Binding{Scope: "project", Reason: "nested-compose-file"}, created.Problem.Binding)
+	created.Problem.Binding = &imageDTO.Binding{Scope: "service", Service: "app", Reason: "variable-reference", Variable: "SERVICE_IMAGE"}
+	var preserved *imageDTO.OperationError
+	require.ErrorAs(t, runtimeTargetFailure(RuntimeUpdateProject, created), &preserved)
+	require.Equal(t, created.Problem.Binding, preserved.Problem.Binding)
+}

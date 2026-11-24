@@ -66,4 +66,7 @@ export function checkResult(value: unknown) {
   for (const [name, raw] of Object.entries(o.serviceUpdates === undefined ? {} : record(o.serviceUpdates))) { id(name); const service = record(raw); id(service.imageRef); if (service.updateInfo !== undefined) observation(service.updateInfo); }
   for (const raw of Object.values(o.updateInfoByRef === undefined ? {} : record(o.updateInfoByRef))) observation(raw);
   reason(o.policyCode); optionalDate(o.lastCheckedAt);
+  const updates = Object.values(o.serviceUpdates === undefined ? {} : record(o.serviceUpdates)).map((raw) => record(raw)).filter((row) => row.updateInfo !== undefined).map((row) => observation(row.updateInfo));
+  const available = updates.find((row) => row.hasUpdate);
+  return { hasUpdate: bool(o.hasUpdate), ...(available ? { version: available.latestVersion || available.currentVersion } : {}) };
 }

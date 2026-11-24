@@ -78,7 +78,7 @@ export const enStacks = {
     tabs: { overview: "Overview", editor: "Editor", logs: "Logs", deployments: "Deployments" },
     tabsLabel: "Stack sections",
     redeployMenu: "More deploy options",
-    actions: { start: "Start", stop: "Stop", restart: "Restart", redeploy: "Pull & redeploy", failDemo: (import.meta.env.DEV ? "Redeploy with error (demo)" : ""), check: "Check for updates" },
+    actions: { checkingSupport: "Checking update support…", updateUnsupported: "Update not offered. See the image binding reason below.", start: "Start", stop: "Stop", restart: "Restart", redeploy: "Pull & redeploy", failDemo: (import.meta.env.DEV ? "Redeploy with error (demo)" : ""), check: "Check for updates" },
   },
   overview: {
     services: "Services",

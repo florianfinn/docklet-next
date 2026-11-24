@@ -86,7 +86,8 @@ var jobMetadataRegistry = map[string]JobMetadata{
 		CanRunManually: true,
 		Prerequisites:  []JobPrerequisiteMetadata{},
 	},
-	"update-check": {ID: "update-check", Name: "Update check", Description: "Checks every enabled host for stack and standalone container updates", Category: "updates", ManagerOnly: true, CanRunManually: true, Prerequisites: []JobPrerequisiteMetadata{}},
+	"update-check":      {ID: "update-check", Name: "Update check", Description: "Checks every enabled host for stack and standalone container updates", Category: "updates", ManagerOnly: true, CanRunManually: true, Prerequisites: []JobPrerequisiteMetadata{}},
+	"update-check-host": {ID: "update-check-host", Name: "Update check", Description: "Checks one enabled host for stack and standalone container updates", Category: "updates", ManagerOnly: true, CanRunManually: true, Prerequisites: []JobPrerequisiteMetadata{}},
 	"scheduled-prune": {
 		ID:             "scheduled-prune",
 		Name:           "Scheduled Prune",

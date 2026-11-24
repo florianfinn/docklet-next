@@ -17,7 +17,7 @@ import (
 // stack layout updates cannot load (a nested COMPOSE_FILE base), else nil.
 func UnsupportedUpdateLayout(err error) error {
 	if errors.Is(err, projects.ErrComposeFileNestedBase) {
-		return lifecycleFailure("update.image-binding-unsupported")
+		return bindingFailure("", "nested-compose-file")
 	}
 	return nil
 }

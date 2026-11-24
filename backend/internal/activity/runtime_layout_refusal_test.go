@@ -78,6 +78,7 @@ func TestNestedComposeFileUpdateRefusedBeforeAdmission(t *testing.T) {
 			var body imageDTO.OperationError
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 			require.Equal(t, "update.image-binding-unsupported", body.Problem.Code)
+			require.Equal(t, &imageDTO.Binding{Scope: "project", Reason: "nested-compose-file"}, body.Problem.Binding)
 			require.Zero(t, lifecycleCalls)
 			require.Zero(t, f.executeCalls.Load())
 			var count int64

@@ -14,7 +14,7 @@ export type AdapterOutcome<T> =
   | { kind: "not-available"; operationId: string; reasonCode: string; resourceRef: ResourceRef }
   | { kind: "conflict"; code: "run.busy" | "run.cancelling"; activeRunId: string }
   | { kind: "conflict"; code: "run.request-mismatch"; activeRunId?: never }
-  | { kind: "error"; code: string; status?: number; blocker?: RuntimeIdentityBlocker };
+  | { kind: "error"; code: string; status?: number; blocker?: RuntimeIdentityBlocker; binding?: components["schemas"]["ImageBinding"] };
 
 export class AdapterOutcomeError extends Error {
   readonly outcome: Exclude<AdapterOutcome<never>, { kind: "ok" }>;

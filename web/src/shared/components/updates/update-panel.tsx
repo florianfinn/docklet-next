@@ -133,6 +133,7 @@ function Footer({ actions, pending }: { actions: UpdateActions; pending: boolean
 function ActionFooter({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
   const adapter = useAdapter(), t = useTranslations("common.updates");
   const user = useIsUser();
+  if (adapter.kind === "http" && !user && actions.blockedReason) return <p role="status" className="p-3 text-xs text-muted-foreground">{actions.blockedReason}</p>;
   if (adapter.kind === "http" && !user) return pending && actions.onUpdate ? <div className="p-3">{actions.onUpdateChecked ? <UpdateSplitButton label={actions.updateLabel ?? t("actionUpdateStack")} disabled={actions.busy} onUpdate={actions.onUpdate} onChecked={actions.onUpdateChecked} /> : <Button size="sm" onClick={actions.onUpdate}>{actions.updateLabel ?? t("actionUpdateStack")}</Button>}</div> : null;
   return <DemoActionFooter actions={actions} pending={pending} />;
 }
