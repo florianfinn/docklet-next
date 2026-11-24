@@ -191,6 +191,7 @@ POST /api/environments/:id/system/convert
 POST /api/environments/:id/system/prune
 POST /api/environments/:id/system/upgrade
 POST /api/environments/:id/updater/:kind/:targetId/restore-points/:pointId/restore
+POST /api/environments/:id/updater/containers/:containerId/check
 POST /api/environments/:id/updater/projects/:projectId/check
 POST /api/environments/:id/updater/projects/:projectId/update
 POST /api/environments/:id/updater/run

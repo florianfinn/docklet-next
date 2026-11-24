@@ -425,7 +425,12 @@ func runtimeImageAPI(router *echo.Echo) huma.API {
 		for typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
 			typ = typ.Elem()
 		}
-		return strings.NewReplacer("/", "_", ".", "_", "-", "_").Replace(typ.PkgPath()) + "_" + huma.DefaultSchemaNamer(typ, hint)
+		// Generic responses (base.ApiResponse[T]) differ only in their type arguments, which the default namer drops.
+		args := ""
+		if i := strings.Index(typ.String(), "["); i >= 0 {
+			args = typ.String()[i:]
+		}
+		return strings.NewReplacer("/", "_", ".", "_", "-", "_", "[", "_", "]", "_", "*", "_", ",", "_", " ", "_").Replace(typ.PkgPath()+args) + "_" + huma.DefaultSchemaNamer(typ, hint)
 	})
 	return humaecho.New(router, config)
 }
