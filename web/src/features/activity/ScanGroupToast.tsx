@@ -10,7 +10,6 @@ import { useTranslations } from "use-intl";
 
 import { useActionRuns } from "@/data/live";
 import type { ActionRun, ActionStatus } from "@/domain/model";
-import { cn } from "@/shared/lib/utils";
 
 import { ActionDetail } from "./ActionDetail";
 import { RunIconTile } from "./ActionSteps";
@@ -46,9 +45,8 @@ function Row({ run, onOpen, onPersistent }: { run: ActionRun; onOpen: (run: Acti
         <span className="mt-0.5 shrink-0 text-(--tone) [&_svg]:size-4"><Icon className={run.status === "running" ? "animate-spin" : undefined} aria-hidden /></span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-medium">{target ? `${target} · ${run.title}` : run.title}</span>
-          <span className={cn("block truncate text-xs", run.status === "failed" ? "text-destructive" : "text-muted-foreground")} data-slot="scan-member-line">
-            {run.status === "failed" ? (run.error ?? line ?? t("status.failed")) : (line ?? t(`status.${run.status}`))}
-          </span>
+          {run.status === "failed" && <span className="block truncate text-xs text-destructive" data-slot="scan-member-error">{run.error ?? t("status.failed")}</span>}
+          {(line || run.status !== "failed") && <span className="block truncate text-xs text-muted-foreground" data-slot="scan-member-line">{line ?? t(`status.${run.status}`)}</span>}
         </span>
       </button>
     </li>

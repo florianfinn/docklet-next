@@ -17,9 +17,13 @@ export const isHostScan = (run: Pick<ActionRun, "kind" | "hostScoped" | "sourceO
 /** Any vulnerability scan run, host, image or candidate; they share one notification. */
 export const isScanRun = (run: Pick<ActionRun, "kind" | "sourceOperation">) => run.kind === "scan" || run.sourceOperation === "vulnerability.candidate-scan";
 
-/** A failed or partial scan result stays until closed (#611); the durable record can be partial under a succeeded activity. */
+/**
+ * A failed or partial scan result stays until closed (#611). The durable record can be partial under a succeeded
+ * activity: a host run with failed images, or a candidate run with deferred or failed targets.
+ */
 export const scanPersistent = (run: ActionRun) =>
-  isScanRun(run) && (run.status === "failed" || ["partial", "failed", "interrupted"].includes(run.scan?.summary?.status ?? ""));
+  isScanRun(run) && (run.status === "failed" || ["partial", "failed", "interrupted"].includes(run.scan?.summary?.status ?? "")
+    || (run.candidateScan !== undefined && (run.candidateScan.deferred > 0 || run.candidateScan.failed > 0)));
 
 /** "6 images scanned · 2 critical · 15 high · 56 s", plus failed images and a partial marker when they apply. */
 export function scanResultLine(summary: ScanRunSummary, t: Translate): string {

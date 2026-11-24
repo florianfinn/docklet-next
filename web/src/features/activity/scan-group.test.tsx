@@ -8,6 +8,9 @@ import { act, cleanup, fireEvent } from "@testing-library/react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { ActionDetailState } from "@/data/adapter";
+import type { GateNotice } from "@/data/run-gate";
+import type { ScanRunSummary } from "@/domain/security";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { mapActivityDetail } from "@/data/http/map-dto";
@@ -17,6 +20,15 @@ import { renderWithApp } from "@/test/render";
 import { actionDialogStore, closeActionDialog, openActionDialog } from "./action-dialog-store";
 import { ActionToasts } from "./ActionToasts";
 import { AppToaster } from "./AppToaster";
+
+// The gate is a proxy of the HTTP adapter; tests drive its notices directly.
+const gate = vi.hoisted(() => ({ listener: undefined as ((notice: GateNotice) => void) | undefined }));
+vi.mock("@/data/run-gate", async (original) => ({
+  ...(await original<typeof import("@/data/run-gate")>()),
+  runGateOf: () => new Proxy({ subscribe: (listener: (notice: GateNotice) => void) => { gate.listener = listener; return () => { gate.listener = undefined; }; } } as Record<string, unknown>, {
+    get: (target, prop) => (typeof prop === "string" && prop in target ? target[prop] : () => undefined),
+  }),
+}));
 
 const at = "2026-11-24T20:16:00Z";
 type Status = "running" | "success" | "failed";
@@ -29,17 +41,31 @@ function deploy(id: string): CodedActionRun {
 
 let client!: QueryClient;
 function Grab() { client = useQueryClient(); return null; }
-function harness(initial: CodedActionRun[] = []) {
+/** Detail owners receive `details[id]` (a durable summary or candidate counters) on top of the listed run. */
+function harness(initial: CodedActionRun[] = [], details: Record<string, Partial<CodedActionRun>> = {}) {
   const adapter = createDemoAdapter();
   let current = initial;
   const listeners = new Set<(runs: CodedActionRun[]) => void>();
+  const observers: { id: string; listener: (state: ActionDetailState) => void; active: boolean }[] = [];
   adapter.listActions = async () => current;
   adapter.subscribeActions = (listener) => { listeners.add(listener); listener(current); return () => { listeners.delete(listener); }; };
-  adapter.observeActionDetail = undefined;
-  const publish = (runs: CodedActionRun[]) => act(() => { current = runs; listeners.forEach((l) => l(runs)); });
+  // Like the real observer, every observation of the run list re-delivers the run's detail while it is observed.
+  const deliver = (o: (typeof observers)[number]) => {
+    const run = current.find((r) => r.id === o.id);
+    if (run && o.active) o.listener({ status: "ready", run: { ...run, ...(run.status === "running" ? {} : details[o.id]) } });
+  };
+  adapter.observeActionDetail = (_host, id, listener) => {
+    const o = { id, listener, active: true };
+    observers.push(o);
+    queueMicrotask(() => deliver(o));
+    return () => { o.active = false; };
+  };
+  const publish = (runs: CodedActionRun[]) => act(() => { current = runs; listeners.forEach((l) => l(runs)); observers.forEach(deliver); });
   renderWithApp(<><Grab /><ActionToasts /><AppToaster /></>, adapter);
-  return { publish };
+  return { publish, observers };
 }
+const summary = (patch: Partial<ScanRunSummary> = {}): ScanRunSummary => ({ status: "completed", targets: 4, scanned: 4, failed: 0, skipped: 0, counts: { critical: 1, high: 2, medium: 0, low: 0, unknown: 0 }, startedAt: at, finishedAt: at, ...patch });
+const withSummary = (value: ScanRunSummary) => ({ scan: { targets: value.targets, done: value.scanned + value.failed, failed: value.failed, summary: value } });
 const toasts = () => [...document.querySelectorAll<HTMLElement>('[data-slot="action-toast"]')];
 const group = () => document.querySelector<HTMLElement>("[data-scan-group]");
 const rows = () => [...document.querySelectorAll<HTMLElement>("[data-scan-member]")].map((el) => el.dataset.scanMember);
@@ -168,4 +194,110 @@ it("keeps a single successful scan's countdown and a single failed scan without 
   await f.publish([scan("a", "first", "success"), scan("b", "first", "failed")]);
   await tick();
   expect(group()?.dataset.status).toBe("failed");
+});
+
+// Row 6 / S23-R01: a scan shown right after a close is not removed by the closed instance's deferred exit.
+it("keeps a scan that starts while the closed group is still leaving", async () => {
+  const f = harness();
+  await f.publish([]);
+  await f.publish([scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick();
+  fireEvent.click(group()!.querySelector('button[aria-label="Close notice"]')!);
+  await tick(16);
+  await f.publish([scan("c", "first", "running"), scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick(1_000);
+  expect(toasts().filter((t) => t.dataset.status === "running").length).toBe(1);
+});
+
+// Row 8 / S23-R02: partial results that only detail owners know keep the group, also for candidate runs.
+it.each([
+  ["host partial", { a: withSummary(summary({ status: "partial", failed: 1, scanned: 3 })) }],
+  ["candidate deferred", { a: { candidateScan: { targets: 5, scanned: 3, cached: 0, deferred: 2, failed: 0 } } }],
+] as const)("keeps a succeeded activity with a %s result until closed", async (_, details) => {
+  const candidate = _ === "candidate deferred" ? { type: "vulnerability.candidate-scan" } : {};
+  const f = harness([], details as Record<string, Partial<CodedActionRun>>);
+  await f.publish([]);
+  await f.publish([scan("b", "second", "running"), scan("a", "first", "running", candidate)]);
+  await tick();
+  await f.publish([scan("b", "second", "success"), scan("a", "first", "success", candidate)]);
+  await tick(50);
+  expect([group()?.dataset.status, lifeTrack() === null]).toEqual(["failed", true]);
+});
+
+it("stops the countdown when a new scan joins and restarts it after that scan succeeded", async () => {
+  const f = harness();
+  await f.publish([]);
+  await f.publish([scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick();
+  await f.publish([scan("b", "second", "success"), scan("a", "first", "success")]);
+  await tick();
+  expect(lifeTrack() !== null).toBe(true);
+  await f.publish([scan("c", "third", "running"), scan("b", "second", "success"), scan("a", "first", "success")]);
+  await tick();
+  expect([rows(), lifeTrack() === null]).toEqual([["a", "b", "c"], true]);
+  await f.publish([scan("c", "third", "success"), scan("b", "second", "success"), scan("a", "first", "success")]);
+  await tick();
+  expect(lifeTrack() !== null).toBe(true);
+});
+
+// S23-R03: a failed host scan shows its error and its durable result.
+it("shows a failed member's error and its result line", async () => {
+  setAppLocale("en-US");
+  const f = harness([], { b: withSummary(summary({ status: "partial", failed: 1, scanned: 3 })) });
+  await f.publish([]);
+  await f.publish([scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick();
+  await f.publish([scan("b", "second", "failed", { messageCode: "vulnerability.scan-failed" }), scan("a", "first", "success")]);
+  await tick(50);
+  const row = document.querySelector('[data-scan-member="b"]')!;
+  expect([row.querySelector('[data-slot="scan-member-error"]') !== null, row.querySelector('[data-slot="scan-member-line"]')?.textContent]).toEqual([true, "3 images scanned · 1 critical · 2 high · 1 failed · partial result · 0 s"]);
+});
+
+// Row 13: a manual and a candidate run on one host keep their own results.
+it("keeps each run's own result for a manual and a candidate run on one host", async () => {
+  setAppLocale("en-US");
+  const f = harness([], { manual: withSummary(summary()), candidate: { candidateScan: { targets: 2, scanned: 2, cached: 0, deferred: 0, failed: 0 } } });
+  await f.publish([]);
+  await f.publish([scan("candidate", "first", "running", { type: "vulnerability.candidate-scan" }), scan("manual", "first", "running")]);
+  await tick();
+  await f.publish([scan("candidate", "first", "success", { type: "vulnerability.candidate-scan" }), scan("manual", "first", "success")]);
+  await tick(50);
+  const line = (id: string) => document.querySelector(`[data-scan-member="${id}"] [data-slot="scan-member-line"]`)?.textContent;
+  expect([line("manual"), line("candidate")]).toEqual(["4 images scanned · 1 critical · 2 high · 0 s", "2 scanned, 0 from cache of 2 targets"]);
+});
+
+// Row 3: a late detail delivery of the old identity cannot bring back its runs.
+it("ignores old detail deliveries after an identity replacement", async () => {
+  const f = harness();
+  await f.publish([]);
+  await f.publish([scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick();
+  act(() => { client.setQueryData(queryKeys.currentUser, { id: "replacement", username: "replacement" }); });
+  // The new identity sees the same runs as history: only the identity reset can remove the old group.
+  await f.publish([scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick(500);
+  expect(toasts().length).toBe(0);
+  act(() => { for (const { id, listener } of f.observers) listener({ status: "ready", run: scan(id, id === "a" ? "first" : "second", "failed") }); });
+  await tick(500);
+  expect(toasts().length).toBe(0);
+});
+
+// Row 11: a gate reveal brings back a dismissed running scan inside the group, unless the dialog shows it.
+it("reveals a dismissed running scan in the group only when it is not covered", async () => {
+  const f = harness();
+  await f.publish([]);
+  await f.publish([scan("b", "second", "running"), scan("a", "first", "running")]);
+  await tick();
+  fireEvent.click(group()!.querySelector('button[aria-label="Close notice"]')!);
+  await tick(500);
+  act(() => openActionDialog("a"));
+  act(() => gate.listener?.({ reason: "inflight", key: "scan:first", runId: "a" }));
+  await tick(500);
+  expect(toasts().length).toBe(0);
+  act(() => closeActionDialog());
+  await tick(500);
+  const shown = toasts().length;
+  act(() => gate.listener?.({ reason: "inflight", key: "scan:second", runId: "b" }));
+  await tick(500);
+  expect([shown <= 1, toasts().length, rows().sort()]).toEqual([true, 1, ["a", "b"]]);
 });

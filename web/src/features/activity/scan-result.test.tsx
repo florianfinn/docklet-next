@@ -85,3 +85,26 @@ it("adds the result after a scan settles while the centre is open", async () => 
   });
   await waitFor(() => expect(resultOf()).toBe("3 images scanned · 2 critical · 1 high · 0 s"));
 });
+
+// Break-map row 9 (in flight): a scan that settles while the first list read is still held gains its line.
+it("adds the result when the scan settles while the list read is in flight", async () => {
+  setAppLocale("en-US");
+  const f = settledScans([]), original = f.fetcher.getMockImplementation()!;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let first = true;
+  f.fetcher.mockImplementation(async (input, init) => {
+    if (String(input).endsWith("/first/vulnerabilities/runs") && first) { first = false; const answer = original(input, init); await held; return answer; }
+    return original(input, init);
+  });
+  await f.adapter.getCurrentUser(); await f.adapter.listHosts();
+  activityStore.set((s) => ({ ...s, open: true, tab: "actions" }));
+  renderWithApp(<ActivityCenter />, f.adapter);
+  await waitFor(() => expect(first).toBe(false));
+  f.state.runs = [{ ...terminalRun, activityId: "scan-active-first", targets: 3, scanned: 3 }];
+  await act(async () => {
+    f.source.onmessage?.({ data: JSON.stringify({ channel: "activities", timestamp: at, activity: { type: "update", environmentId: "first", activity: { id: "scan-active-first", type: "vulnerability_scan", environmentId: "first" } } }), lastEventId: "" } as MessageEvent);
+  });
+  await act(async () => { release(); });
+  await waitFor(() => expect(resultOf()).toBe("3 images scanned · 2 critical · 1 high · 0 s"));
+});

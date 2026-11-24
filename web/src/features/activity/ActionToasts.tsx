@@ -59,11 +59,10 @@ function ActionToast({ id, toastId, onClose }: { id: string; toastId: string | n
     ? <ActionDetail run={run} fallback={view(run)}>{view}</ActionDetail> : view(run);
 }
 
-const SCAN_GROUP = "scan-group";
 interface ScanGroupState { ids: readonly string[]; persistent: ReadonlySet<string> }
 
 /** One sonner toast for every scan run the coordinator shows; a single member keeps the ordinary run toast. */
-function ScanGroup({ store, close }: { store: Store<ScanGroupState>; close: () => void }) {
+function ScanGroup({ store, toastId, close }: { store: Store<ScanGroupState>; toastId: string; close: () => void }) {
   const user = useIsUser();
   const state = useStore(store, (s) => s);
   const onPersistent = useCallback((id: string, value: boolean) => store.set((s) => {
@@ -74,7 +73,7 @@ function ScanGroup({ store, close }: { store: Store<ScanGroupState>; close: () =
   }), [store]);
   // A closed group renders nothing during its exit, so no stale countdown can close a newer group.
   if (!state.ids.length) return null;
-  if (state.ids.length === 1) return <ActionToast id={state.ids[0]!} toastId={SCAN_GROUP} onClose={close} />;
+  if (state.ids.length === 1) return <ActionToast id={state.ids[0]!} toastId={toastId} onClose={close} />;
   return <ScanGroupToast ids={state.ids} persistent={state.persistent} onPersistent={onPersistent} onClose={close}
     onOpen={(run) => (user ? openActionDialog(run.id) : openActivity(run.id))} />;
 }
@@ -111,15 +110,18 @@ export function ActionToasts() {
 
   useEffect(() => {
     const owned = new Set<string>();
-    // Scan runs share one toast (#611). A new epoch retires dismiss callbacks of an earlier group toast.
+    // Scan runs share one toast (#611). Each group instance has its own sonner id, so the deferred exit of a
+    // closed instance can never remove the next one; a dismiss callback only clears the instance it belongs to.
     const group = createStore<ScanGroupState>({ ids: [], persistent: new Set() });
-    let epoch = 0, latest: ActionRun[] = [];
+    let instance = 0, latest: ActionRun[] = [];
+    const groupId = () => `scan-group:${instance}`;
+    const retire = () => { const id = groupId(); instance++; toast.dismiss(id); };
     const renderGroup = () => {
-      if (!group.get().ids.length) { epoch++; toast.dismiss(SCAN_GROUP); return; }
-      const mine = epoch;
-      const forget = () => { if (mine === epoch) { epoch++; group.set({ ids: [], persistent: new Set() }); } };
-      const close = () => { forget(); toast.dismiss(SCAN_GROUP); };
-      toast.custom(() => <ScanGroup store={group} close={close} />, { id: SCAN_GROUP, duration: Number.POSITIVE_INFINITY, unstyled: true, onDismiss: forget });
+      if (!group.get().ids.length) { retire(); return; }
+      const mine = instance, toastId = groupId();
+      const forget = () => { if (mine === instance) { instance++; group.set({ ids: [], persistent: new Set() }); } };
+      const close = () => { if (mine !== instance) return; group.set({ ids: [], persistent: new Set() }); retire(); };
+      toast.custom(() => <ScanGroup store={group} toastId={toastId} close={close} />, { id: toastId, duration: Number.POSITIVE_INFINITY, unstyled: true, onDismiss: forget });
     };
     const setMembers = (change: (ids: readonly string[]) => readonly string[]) => {
       const before = group.get().ids, ids = change(before);
