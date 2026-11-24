@@ -50,6 +50,7 @@ export const enCommon = {
     recoveryHeld: "Recovery is unavailable while this restore point is in use or its outcome is unknown.",
     updateOptions: "Update options",
     updateWithCheck: "Update with check",
+    updateWithCheckHint: "Restores the previous version if it fails",
     updateWithCheckHelp: "Watches the new version for 2 minutes and restores the previous version if it fails. Volume data is not restored.",
     volumeNotRestored: "Volume data was not restored; the app may already have migrated it.",
 
@@ -70,6 +71,7 @@ export const enCommon = {
     snapshot: "Saved configuration and immutable images",
     replace: "Replace the saved configuration with this restore point.",
     restoreNeedsRevision: "Restore is possible once the current configuration can be read.",
+    targetKind: { stack: "Stack", container: "Container" },
     openRun: "Open run {id}",
     close: "Close",
     save: "Save",

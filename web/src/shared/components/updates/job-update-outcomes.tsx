@@ -7,6 +7,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
+import { useHosts } from "@/data/queries";
+import { HostChip } from "@/shared/components/host-chip";
 import { useImageError } from "@/features/images/use-image-error";
 import { ActionDetail } from "@/features/activity/ActionDetail";
 import { UpdateRecovery } from "./update-recovery";
@@ -17,11 +19,11 @@ import type { ActionRun } from "@/domain/model";
 
 export function JobUpdateOutcomes({ run }: { run: ActionRun }) {
   const adapter = useAdapter(), errors = useImageError(), t = useTranslations("common.stackUpdates"), activity = useTranslations("activity");
-  const ref = run.jobRef, host = run.hostId ?? "0";
+  const ref = run.jobRef, host = run.hostId ?? "0", hosts = useHosts();
   const query = useQuery({ queryKey: ["activity", host, "job-targets", ref?.jobId, ref?.runId, run.status], queryFn: () => adapter.getUpdateJobTargets!(host, ref!.jobId, ref!.runId), enabled: !!ref && !!adapter.getUpdateJobTargets, refetchInterval: run.status === "running" || run.status === "queued" ? 2000 : false });
   if (!ref) return null;
   return <>{query.isError && <QueryError compact error={query.error} />}{query.data?.map((target) => <div key={target.id} className="rounded-lg border p-3 text-sm" data-job-target={target.id}>
-    <p>{target.targetId ?? target.id} · {activity(`jobStep.${target.status}`)}</p>
+    <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">{target.targetKind && <span className="text-muted-foreground">{t(`targetKind.${target.targetKind}`)}</span>}<span className="min-w-0 break-all">{target.targetId ?? target.id}</span>{target.environmentId && <HostChip host={hosts.data?.find((h) => h.id === target.environmentId)} />}<span>· {activity(`jobStep.${target.status}`)}</span></p>
     {target.code && <p>{errors(target.code)}</p>}
     {/* The child's recovery evidence decides the volume warning; a target code alone cannot prove an effect. */}
     {target.activityId && target.environmentId && target.status !== "skipped" && <ActionDetail run={{ ...run, id: target.activityId, hostId: target.environmentId, jobRef: undefined, updateRecovery: undefined }}>{(child) => <UpdateRecovery run={child} />}</ActionDetail>}

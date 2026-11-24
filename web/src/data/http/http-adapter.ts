@@ -895,7 +895,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createVolumePrune({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }, listHosts),
     ...createNetworkCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["topology", "containers"])); } }),
     ...createVolumeCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }),
-    listSchedule: createScheduleReader(baseUrl, client, listHosts, getCapability, () => identityGeneration, backups.api.getBackupOverview, () => adapter.getUpdateSettings!()),
+    listSchedule: createScheduleReader(baseUrl, client, listHosts, getCapability, () => identityGeneration, backups.api.getBackupOverview),
     listActions: () => principal?.isAdmin === false ? Promise.resolve(runtime.retained()) : actions.load(),
     observeActionDetail(host, id, listener) {
       const offActions = adapter.subscribeActions(() => {});

@@ -15,7 +15,7 @@ import { createUpdateSettings } from "./update-settings";
 import { createStackUpdates } from "./stack-updates";
 import { READ_TAG_HEADER, type ReadTag } from "./host-read-policy";
 
-export function createScheduleReader(baseUrl: string, client: CsrfClient, hosts: () => Promise<Host[]>, capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>, generation: () => number, overview: DockletAdapter["getBackupOverview"], settings: () => ReturnType<NonNullable<DockletAdapter["getUpdateSettings"]>>): DockletAdapter["listSchedule"] {
+export function createScheduleReader(baseUrl: string, client: CsrfClient, hosts: () => Promise<Host[]>, capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>, generation: () => number, overview: DockletAdapter["getBackupOverview"]): DockletAdapter["listSchedule"] {
   let retained = new Map<string, Awaited<ReturnType<DockletAdapter["listSchedule"]>>>();
   let owner = generation();
   return async (hostIds, tag: ReadTag = "background") => {
@@ -30,16 +30,20 @@ export function createScheduleReader(baseUrl: string, client: CsrfClient, hosts:
     });
     const catalogue = await hosts(); check();
     const selected = hostIds ?? catalogue.map((h) => h.id);
-    let settingsRead: ReturnType<typeof settings> | undefined;
-    const readSettings = () => settingsRead ??= settings();
     // Only this automatic fan-out is tagged; deliberate policy dialogs use their normal client.
-    const policies = createStackUpdates({ baseUrl, capability, generation, changed() {}, client: { ...client, fetch: (input, init) => {
+    const tagged: CsrfClient = { ...client, fetch: (input, init) => {
       const headers = new Headers(init?.headers);
       const host = /\/environments\/([^/]+)\//.exec(String(input))?.[1];
       if (retained.has(decodeURIComponent(host ?? "")) || ["online", "standby"].includes(catalogue.find((h) => h.id === host)?.status ?? "")) headers.set(READ_TAG_HEADER, tag);
       return client.fetch(input, { ...init, headers });
-    } } });
-    const jobs = createUpdateSettings({ baseUrl, client, capability, generation });
+    } };
+    const policies = createStackUpdates({ baseUrl, capability, generation, changed() {}, client: tagged });
+    // One tagged hub jobs read serves the settings projection and the update-check row (#469).
+    let checkRead: ReturnType<ReturnType<typeof createUpdateSettings>["getUpdateCheckJob"]> | undefined;
+    const readCheck = () => checkRead ??= createUpdateSettings({ baseUrl, client: tagged, capability, generation }).getUpdateCheckJob("0");
+    const jobs = createUpdateSettings({ baseUrl, client: tagged, capability, generation, updateCheckJob: readCheck });
+    let settingsRead: ReturnType<typeof jobs.getUpdateSettings> | undefined;
+    const readSettings = () => settingsRead ??= jobs.getUpdateSettings();
     const batches = await Promise.all(selected.map(async (host) => {
       const previous = retained.get(host) ?? [];
       const [backup, updates, updateCheck] = await Promise.all([
@@ -63,7 +67,7 @@ export function createScheduleReader(baseUrl: string, client: CsrfClient, hosts:
             return old.length ? old.map((r) => ({ ...r, unavailable: true })) : [{ id: `${host}~schedule-unavailable`, hostId: host, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];
           }
         })(),
-        (host === "0" ? jobs.getUpdateCheckJob(host).then((j) => [{ id: `${host}~update-check`, hostId: host, kind: "update-check" as const, title: "", cadence: "", nextRunAt: j.nextRun, enabled: j.enabled }], (error: unknown) => {
+        (host === "0" ? readCheck().then((j) => [{ id: `${host}~update-check`, hostId: host, kind: "update-check" as const, title: "", cadence: "", nextRunAt: j.nextRun, enabled: j.enabled }], (error: unknown) => {
           if (isCancelledError(error) || isMaintenanceError(error)) throw error;
           return previous.filter((r) => r.kind === "update-check" && r.id !== `${host}~schedule-unavailable`).map((r) => ({ ...r, unavailable: true }));
         }) : Promise.resolve([])),

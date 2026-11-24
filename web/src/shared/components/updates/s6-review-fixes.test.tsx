@@ -36,7 +36,8 @@ it("a failed job target whose child proved no workload effect omits the volume w
   const box = document.querySelector(`[data-job-target="${target.id}"]`)!;
   expect(box.textContent?.includes(catalogs["en-US"].common.stackUpdates.volumeNotRestored)).toBe(false);
   // The box names the target, not the qualified merge key.
-  expect(box.textContent?.startsWith(`${target.targetId} · `)).toBe(true);
+  expect(box.textContent?.startsWith(`${catalogs["en-US"].common.stackUpdates.targetKind.stack}${target.targetId}`)).toBe(true);
+  expect(box.textContent?.includes(target.id)).toBe(false);
 });
 
 it("only update-window job runs read job targets", () => {

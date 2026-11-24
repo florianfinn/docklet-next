@@ -152,7 +152,7 @@ it("E1/B19 a schedule read whose update policy part meets hub maintenance reject
     : maintenanceResponse());
   const host = { id: "first", name: "first", status: "online" } as Host;
   const read = createScheduleReader(base, client, async () => [host], async (operationId, resourceRef) => ({ operationId, resourceRef, available: true }), () => 0,
-    async () => ({ volumes: [] }) as unknown as Awaited<ReturnType<NonNullable<DockletAdapter["getBackupOverview"]>>>, async () => ({ timeZone: "UTC" }) as never);
+    async () => ({ volumes: [] }) as unknown as Awaited<ReturnType<NonNullable<DockletAdapter["getBackupOverview"]>>>);
   const outcome = await read(["first"]).then((rows) => rows, (error: unknown) => error);
   expect(isMaintenanceError(outcome)).toBe(true);
 });

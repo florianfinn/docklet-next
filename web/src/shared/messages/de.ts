@@ -51,6 +51,7 @@ export const deCommon: typeof enCommon = {
     recoveryHeld: "Eine Wiederherstellung ist nicht verfügbar, solange dieser Punkt verwendet wird oder sein Ergebnis unbekannt ist.",
     updateOptions: "Update-Optionen",
     updateWithCheck: "Update mit Prüfung",
+    updateWithCheckHint: "Stellt bei Fehler die vorige Version wieder her",
     updateWithCheckHelp: "Beobachtet die neue Version 2 Minuten lang und stellt bei einem Fehler die vorherige Version wieder her. Volume-Daten werden nicht wiederhergestellt.",
     volumeNotRestored: "Volume-Daten wurden nicht wiederhergestellt; die App hat sie möglicherweise bereits migriert.",
 
@@ -71,6 +72,7 @@ export const deCommon: typeof enCommon = {
     snapshot: "Gespeicherte Konfiguration und unveränderliche Images",
     replace: "Gespeicherte Konfiguration durch diesen Wiederherstellungspunkt ersetzen.",
     restoreNeedsRevision: "Wiederherstellen ist möglich, sobald die aktuelle Konfiguration lesbar ist.",
+    targetKind: { stack: "Stack", container: "Container" },
     openRun: "Lauf {id} öffnen",
     close: "Schließen",
     save: "Speichern",

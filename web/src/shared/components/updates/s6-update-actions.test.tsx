@@ -39,9 +39,13 @@ for (const locale of ["en-US", "de"] as const) for (const kind of ["container", 
       await waitFor(() => expect(menu.hasAttribute("disabled")).toBe(false));
       menu.focus(); await userEvent.keyboard("{Enter}");
       const item = await screen.findByRole("menuitem", { name: t.updateWithCheck });
-      expect(item.getAttribute("aria-describedby") !== null).toBe(true);
-      expect(document.body.textContent).toContain(t.updateWithCheckHelp);
+      expect(document.getElementById(item.getAttribute("aria-describedby") ?? "")?.textContent).toBe(t.updateWithCheckHint);
+      // #469: the menu owns only menu items and groups; the full help is in the dialog.
+      const menuRole = screen.getByRole("menu");
+      expect([...menuRole.querySelectorAll("*")].every((node) => node.closest("[role=menuitem],[role=group]") !== null || node.getAttribute("role") === "group")).toBe(true);
+      expect(menuRole.textContent?.includes(t.updateWithCheckHelp)).toBe(false);
       item.focus(); await userEvent.keyboard("{Enter}");
+      expect((await screen.findByRole("dialog")).textContent?.includes(t.updateWithCheckHelp)).toBe(true);
     } else {
       const button = await screen.findByRole("button", { name: label });
       await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false)); await userEvent.click(button);
