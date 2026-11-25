@@ -157,6 +157,12 @@ the agent contract stays 23. Update every agent to 1.7.0 afterwards so hub and
 agents share one version; the host cards then show each agent as current.
 Agents on 1.6.0 keep working unchanged.
 
+Upgrading to 1.8.0: there is no migration and no new environment variable. The
+agent contract moves to 24; agents on 1.6.0 and 1.7.0 (contract 23) keep
+working, but their own local job runs show no progress counts until they are
+updated. Update every agent to 1.8.0 afterwards so hub and agents share one
+version.
+
 ## Recover a failed in-app update
 
 The helper keeps a per-operation backup beside the interpolation env file:

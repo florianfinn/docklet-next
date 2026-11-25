@@ -3,7 +3,7 @@ Source: docklet-next/issues/363
 Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 Retrieved: 2026-11-09
 License: Apache-2.0
-Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472); agent contract 21 (#568); agent contract 22 (#586); agent contract 23 (#602).
+Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472); agent contract 21 (#568); agent contract 22 (#586); agent contract 23 (#602); agent contract 24 (#626).
 -->
 
 # Compatibility
@@ -31,14 +31,14 @@ that external Compose version. Updates require the supported layout described in
 
 | Boundary | This release |
 | --- | --- |
-| Agent contract advertised by hub and agent (`AgentHubVersion`) | `23` |
+| Agent contract advertised by hub and agent (`AgentHubVersion`) | `24` |
 | Minimum accepted agent contract (`MinimumAgentVersion`) | `18` |
 | Edge protocol marker | `edge-protocol/1` |
 | Minimum Edge marker value | `1` |
 
 Contract numbers are wire-contract versions, not product SemVer. Agents with
 contracts older than 18 cannot become compatible hosts; the hub reports
-`update-required` and `agent.update-required`. Contracts 18 to 23 must also have
+`update-required` and `agent.update-required`. Contracts 18 to 24 must also have
 their expected schema fingerprints. Health/version reads and the agent update
 recovery routes remain available with authentication. This is the first release
 compatibility boundary for both Direct and Edge agents.
@@ -70,6 +70,12 @@ pre-update eligibility explanation. Their onboarding reports still show
 project-directory write access and can warn when it is unavailable; their
 effective user and group IDs remain unknown. Proxy adoption, the container
 update check and the per-host update check run on the hub.
+
+Contract 24 adds the planned targets, target names and update flags of job runs,
+the waiting witness of a deferred run, job activity counts and the
+`update.image-not-pulled` reason. Agents on contract 18 to 23 keep running their
+jobs; their own local job runs show no progress counts. Host and all-host update
+checks run on the hub and show counts for every agent.
 
 Each Edge peer advertises its own protocol marker. A missing, malformed or
 duplicate marker counts as protocol 1. This release records the marker without
