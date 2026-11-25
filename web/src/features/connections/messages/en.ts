@@ -162,5 +162,6 @@ export const enConnections = {
   "lastSeen": "Last seen: {time}",
   "tagMissing": "The observed peer does not carry tag:docklet-agent. Check its key and policy.",
   "offlineNotice": "{name} disconnected: {link}.",
+  "reconnectedNotice": "{name} reconnected: {link}.",
   "noFailure": "No interruption observed."
 };

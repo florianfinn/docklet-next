@@ -162,5 +162,6 @@ export const deConnections = {
   "lastSeen": "Zuletzt gesehen: {time}",
   "tagMissing": "Der beobachtete Peer trägt nicht tag:docklet-agent. Prüfe Schlüssel und Policy.",
   "offlineNotice": "{name} getrennt: {link}.",
+  "reconnectedNotice": "{name} wieder verbunden: {link}.",
   "noFailure": "Keine Unterbrechung beobachtet."
 };

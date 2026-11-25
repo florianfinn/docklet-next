@@ -2,18 +2,20 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original live update UI for issue #231. M19: total contract-code catalogue maps. M21 #439: Compose self-update controls and capability integration. M40 #615: condensed version hints, no agent hint on the hub host, empty orphan section hidden.
+// Deviations: Original live update UI for issue #231. M19: total contract-code catalogue maps. M21 #439: Compose self-update controls and capability integration. M40 #615: condensed version hints, no agent hint on the hub host, empty orphan section hidden. M41 #624: hints follow the reported agent version and a settled self-update.
 
 import { SYSTEM_HINT_STATE_KEYS, SYSTEM_HINT_KIND_KEYS } from "@/data/wire-catalogue-states";
 import { scopedKey } from "@/data/wire-catalogue";
 import { formatDateTime } from "@/domain/format";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
 
 import { useAdapter } from "@/data/use-adapter";
+import { selfUpdateQueryKey } from "@/shared/components/updates/use-self-update-check";
+import type { SelfUpdateCheck } from "@/domain/self-update";
 import { useCapability } from "@/data/use-capability";
 import { DeletePointDialog } from "@/shared/components/updates/delete-point-dialog";
 import { RestorePointState } from "@/shared/components/updates/restore-point-state";
@@ -37,7 +39,16 @@ function HintReference({ value }: { value: string }) {
 export function HostUpdateSettings({ hostId, name, host }: { hostId: string; name: string; host?: Pick<Host, "identity" | "agentVersion"> }) {
   const adapter = useAdapter(), t = useTranslations("common.stackUpdates"), errorText = useImageError();
   const hintRead = useCapability("listSystemComponents", { kind: "host", id: hostId });
-  const hints = useQuery({ queryKey: ["schedule", hostId, "hints"], queryFn: () => adapter.getSystemImageHints!(hostId), enabled: hintRead.available && !!adapter.getSystemImageHints });
+  // Hints belong to the host's registration and reported agent version, like its self-update check:
+  // an updated agent selects a fresh entry instead of showing the old version as available.
+  const hints = useQuery({ queryKey: ["schedule", hostId, "hints", host?.identity ?? "", host?.agentVersion ?? ""], queryFn: () => adapter.getSystemImageHints!(hostId), enabled: hintRead.available && !!adapter.getSystemImageHints });
+  const selfUpdate = useQuery<SelfUpdateCheck>({ queryKey: selfUpdateQueryKey(hostId, host), enabled: false });
+  const phase = selfUpdate.data?.operation?.phase, lastPhase = useRef(phase), refetchHints = hints.refetch;
+  useEffect(() => {
+    // A settled self-update can report the same version (a failed or repeated update): read the hints once more.
+    if (lastPhase.current && lastPhase.current !== "settled" && phase === "settled") void refetchHints();
+    lastPhase.current = phase;
+  }, [phase, refetchHints]);
   const [deleting, setDeleting] = useState<{ hostId: string; point: UpdatePoint }>();
   const orphanDelete = useCapability("deleteHostRestorePoint", { kind: "host", id: hostId });
   const orphanRead = useCapability("listHostRestorePoints", { kind: "host", id: hostId });
