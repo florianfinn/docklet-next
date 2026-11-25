@@ -350,7 +350,7 @@ func (s *NetworkService) ConnectContainer(ctx context.Context, networkID string,
 		"networkId":   networkID,
 		"containerId": req.ContainerID,
 	}
-	if logErr := s.eventService.LogNetworkEvent(ctx, event.EventTypeNetworkConnect, networkID, networkID, user.ID, user.Username, "0", metadata); logErr != nil {
+	if logErr := s.eventService.LogNetworkEvent(ctx, event.EventTypeNetworkConnect, networkID, cmp.Or(n.Name, networkID), user.ID, user.Username, "0", metadata); logErr != nil {
 		slog.WarnContext(ctx, "could not log network connect action", "error", logErr)
 	}
 
@@ -405,7 +405,7 @@ func (s *NetworkService) DisconnectContainer(ctx context.Context, networkID stri
 		"containerId": req.ContainerID,
 		"force":       req.Force,
 	}
-	if logErr := s.eventService.LogNetworkEvent(ctx, event.EventTypeNetworkDisconnect, networkID, networkID, user.ID, user.Username, "0", metadata); logErr != nil {
+	if logErr := s.eventService.LogNetworkEvent(ctx, event.EventTypeNetworkDisconnect, networkID, cmp.Or(n.Name, networkID), user.ID, user.Username, "0", metadata); logErr != nil {
 		slog.WarnContext(ctx, "could not log network disconnect action", "error", logErr)
 	}
 

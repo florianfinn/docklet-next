@@ -667,12 +667,16 @@ func (h *ProjectHandler) UpdateProject(ctx context.Context, input *UpdateProject
 	}
 
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
+	resourceName := mo.PointerToOption(input.Body.Name).OrEmpty()
+	if resourceName == "" {
+		resourceName = h.projectActivityNameInternal(runtimeCtx, input.ProjectID)
+	}
 	activityID, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{
 		EnvironmentID:  input.EnvironmentID,
 		Type:           activitytypes.TypeResourceAction,
 		ResourceType:   "project",
 		ResourceID:     input.ProjectID,
-		ResourceName:   mo.PointerToOption(input.Body.Name).OrEmpty(),
+		ResourceName:   resourceName,
 		User:           user,
 		Step:           "Updating project",
 		Message:        "Updating project",

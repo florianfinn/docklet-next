@@ -27,16 +27,18 @@ import (
 )
 
 type networkDockerFixture struct {
-	networks      []network.Inspect
-	containers    []container.InspectResponse
-	writes        []string
-	created       network.CreateRequest
-	connected     client.NetworkConnectOptions
-	failList      bool
-	vanishing     bool
-	writeStatus   int
-	writeMessage  string
-	inspectStatus int
+	networks       []network.Inspect
+	containers     []container.InspectResponse
+	writes         []string
+	created        network.CreateRequest
+	connected      client.NetworkConnectOptions
+	failList       bool
+	vanishing      bool
+	writeStatus    int
+	writeMessage   string
+	inspectStatus  int
+	failNameLookup bool
+	networkReads   int
 }
 
 func (f *networkDockerFixture) service(t *testing.T) *NetworkService {
@@ -96,6 +98,12 @@ func (f *networkDockerFixture) service(t *testing.T) *NetworkService {
 			w.WriteHeader(404)
 			_, _ = w.Write([]byte(`{"message":"no such container"}`))
 		case r.Method == "GET" && strings.Contains(path, "/networks/"):
+			f.networkReads++
+			if f.failNameLookup && f.networkReads == 1 {
+				w.WriteHeader(500)
+				_, _ = w.Write([]byte(`{"message":"name lookup failed"}`))
+				return
+			}
 			id := path[strings.LastIndex(path, "/")+1:]
 			for _, n := range f.networks {
 				if n.ID == id || n.Name == id {

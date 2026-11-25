@@ -31,8 +31,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"time"
-	"uuid"
 )
 
 var (
@@ -173,45 +171,6 @@ func (s *Service) validateRequest(ctx context.Context, request backuptypes.Creat
 	return nil
 }
 
-func (s *Service) startRun(ctx context.Context, actor usertypes.Actor, trigger string, request backuptypes.CreateSystemBackupRequest) (*backuptypes.SystemBackupRun, context.Context, error) {
-	if err := s.validateRequest(ctx, request); err != nil {
-		return nil, nil, err
-	}
-	copyTargetID := ""
-	if request.PolicyID != "" {
-		policy, err := s.store.Policy(ctx, request.PolicyID)
-		if err != nil {
-			return nil, nil, err
-		}
-		if policy == nil {
-			return nil, nil, ErrSystemBackupNotFound
-		}
-		copyTargetID = policy.TargetID
-	}
-	id := "system-" + uuid.New().String()
-	answer, err := s.activityService.StartGatedActivity(ctx, activity.GateRequest{
-		EnvironmentID: "0", Operation: "create:" + id, Scope: sharedbackup.SystemAdmissionScope,
-		Type: activitytypes.TypeResourceAction, ResourceType: "system_backup", ResourceID: id,
-		StartedBy: &actor,
-	})
-	if err != nil {
-		var conflict *activity.GateConflict
-		if errors.As(err, &conflict) {
-			return nil, nil, ErrSystemBackupAlreadyRunning
-		}
-		return nil, nil, err
-	}
-	run := &backuptypes.SystemBackupRun{ID: id, ActivityID: answer.Run.ID,
-		CreatedAt: time.Now().UTC(), Status: backuptypes.SystemBackupStatusRunning,
-		Trigger: trigger, PolicyID: request.PolicyID, CopyTargetID: copyTargetID, CopyState: backuptypes.SystemBackupCopyNone}
-	if err := s.store.CreateRun(ctx, run); err != nil {
-		code := "backup.failed"
-		_, _ = s.activityService.CompleteActivity(answer.WorkContext, answer.Run.ID, activitytypes.StatusFailed, code, &code)
-		return nil, nil, err
-	}
-	return run, answer.WorkContext, nil
-}
-
 func (s *Service) StartBackup(ctx context.Context, actor usertypes.Actor, request backuptypes.CreateSystemBackupRequest) (*backuptypes.SystemBackupRun, error) {
 	run, workCtx, err := s.startRun(ctx, actor, backuptypes.SystemBackupTriggerManual, request)
 	if err != nil {
@@ -251,6 +210,7 @@ func (s *Service) DeleteBackup(ctx context.Context, id string) (*backuptypes.Sys
 		return nil, errors.New("backup.failed")
 	}
 	workCtx := answer.WorkContext
+	s.setActivityArchiveName(workCtx, answer.Run.ID, name)
 	run, err := s.store.Run(workCtx, id)
 	if err != nil || run == nil {
 		err = ErrSystemBackupNotFound

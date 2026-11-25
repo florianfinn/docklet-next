@@ -273,7 +273,7 @@ func (h *NetworkHandler) DeleteNetwork(ctx context.Context, input *DeleteNetwork
 		Type:           activitytypes.TypeResourceAction,
 		ResourceType:   "network",
 		ResourceID:     input.NetworkID,
-		ResourceName:   input.NetworkID,
+		ResourceName:   h.networkActivityName(ctx, input.NetworkID),
 		User:           user,
 		Step:           "Removing network",
 		Message:        "Removing network",
@@ -308,7 +308,7 @@ func (h *NetworkHandler) ConnectContainer(ctx context.Context, input *ConnectCon
 		Type:           activitytypes.TypeResourceAction,
 		ResourceType:   "network",
 		ResourceID:     input.NetworkID,
-		ResourceName:   input.NetworkID,
+		ResourceName:   h.networkActivityName(ctx, input.NetworkID),
 		User:           user,
 		Step:           "Connecting container to network",
 		Message:        "Connecting container to network",
@@ -344,7 +344,7 @@ func (h *NetworkHandler) DisconnectContainer(ctx context.Context, input *Disconn
 		Type:           activitytypes.TypeResourceAction,
 		ResourceType:   "network",
 		ResourceID:     input.NetworkID,
-		ResourceName:   input.NetworkID,
+		ResourceName:   h.networkActivityName(ctx, input.NetworkID),
 		User:           user,
 		Step:           "Disconnecting container from network",
 		Message:        "Disconnecting container from network",
@@ -406,4 +406,13 @@ func (h *NetworkHandler) PruneNetworks(ctx context.Context, input *PruneNetworks
 			Data:    out,
 		},
 	}, nil
+}
+
+// Name lookup is display-only; write validation remains with the operation.
+func (h *NetworkHandler) networkActivityName(ctx context.Context, id string) string {
+	n, err := h.networkService.GetNetworkByID(ctx, id)
+	if err != nil || n.Name == "" {
+		return id
+	}
+	return n.Name
 }
