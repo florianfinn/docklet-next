@@ -31,8 +31,8 @@ async function start() {
   const success = vi.spyOn(toast, "success");
   renderWithApp(<Hosts />, f.adapter);
   await screen.findByText("Example agent:online");
-  const send = async (rows: unknown[], text: string) => {
-    await act(async () => f.send({ ...connectedStatus(), hostCount: rows.length }, rows as never));
+  const send = async (rows: unknown[], text: string, status: Partial<ReturnType<typeof connectedStatus>> = {}) => {
+    await act(async () => f.send({ ...connectedStatus(), hostCount: rows.length, ...status }, rows as never));
     if (text) await screen.findByText(text);
   };
   return { f, warning, success, send };
@@ -77,4 +77,40 @@ it("sends no success for a host removed while disconnected", async () => {
   await waitFor(() => expect(screen.queryByText(/Example agent:/) === null).toBe(true));
   await send([peerHost], "Example agent:online");
   expect(success).not.toHaveBeenCalled();
+});
+
+it("waits while the hub link is still failed although the host is online", async () => {
+  const { success, send } = await start();
+  await send([offline], "Example agent:offline");
+  await send([peerHost], "Example agent:online", { connection: { state: "joining" }, routeAvailable: false } as never);
+  await act(async () => { await Promise.resolve(); });
+  expect(success).not.toHaveBeenCalled();
+  await send([peerHost], "Example agent:online");
+  await waitFor(() => expect(success).toHaveBeenCalledWith(expect.any(String), { id: "notice-1" }));
+  expect(success).toHaveBeenCalledTimes(1);
+});
+
+it("waits while the peer is still offline although the host is online", async () => {
+  const { success, send } = await start();
+  await send([offline], "Example agent:offline");
+  await send([{ ...peerHost, tailnet: { ...peerHost.tailnet!, state: "offline", failingLink: "peer" } }], "Example agent:online");
+  await act(async () => { await Promise.resolve(); });
+  expect(success).not.toHaveBeenCalled();
+  await send([peerHost], "Example agent:online");
+  await waitFor(() => expect(success).toHaveBeenCalledWith(reconnected, { id: "notice-1" }));
+});
+
+it("gives a replacement registration no success for the old interruption", async () => {
+  const { success, send } = await start();
+  await send([offline], "Example agent:offline");
+  await send([{ ...peerHost, registrationRevision: 2 }], "Example agent:online");
+  await act(async () => { await Promise.resolve(); });
+  expect(success).not.toHaveBeenCalled();
+});
+
+it("confirms the reconnect of the same registration with a new agent session", async () => {
+  const { success, send } = await start();
+  await send([offline], "Example agent:offline");
+  await send([{ ...peerHost, edgeSessionId: "example-session-2", connectedAt: "2026-11-22T12:05:00Z" }], "Example agent:online");
+  await waitFor(() => expect(success).toHaveBeenCalledWith(reconnected, { id: "notice-1" }));
 });

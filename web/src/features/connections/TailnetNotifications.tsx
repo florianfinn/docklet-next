@@ -34,24 +34,28 @@ export function TailnetNotifications() {
     const next = new Map<string, string>();
     for (const host of hosts.data) {
       if (host.networkRoute !== "tailnet") continue;
-      const first = tailnetHostDown(host) ? tailnetChain(host, status).find((row) => row.state === "failed")?.link : undefined;
+      // One interruption belongs to one registration: identity starts with the registration revision, while the
+      // session part changes on every reconnect. A replacement registration starts without the old notice.
+      const key = `${host.id}|${host.identity?.split("|")[0] ?? ""}`;
+      const failed = tailnetChain(host, status).find((row) => row.state === "failed")?.link;
+      const first = tailnetHostDown(host) ? failed : undefined;
       const value = first ?? "none";
-      const before = previous.current.get(host.id);
-      const notice = open.current.get(host.id);
+      const before = previous.current.get(key);
+      const notice = open.current.get(key);
       if (first && before !== undefined && value !== before) {
         const message = t("offlineNotice", { name: host.name, link: t(`links.${first}`) });
         const id = notice ? toast.warning(message, { id: notice.id }) : toast.warning(message);
         notices.current.add(id);
-        open.current.set(host.id, { id, link: first });
-      } else if (!first && notice && host.status === "online") {
-        // Pending or unknown states are no proof of a reconnect; only a reachable host turns the notice into success.
+        open.current.set(key, { id, link: first });
+      } else if (!first && notice && host.status === "online" && !failed) {
+        // Pending, unknown or a still-failed hub or peer link is no proof of a reconnect.
         toast.success(t("reconnectedNotice", { name: host.name, link: t(`links.${notice.link}`) }), { id: notice.id });
-        open.current.delete(host.id);
+        open.current.delete(key);
       }
-      next.set(host.id, value);
+      next.set(key, value);
     }
-    // A removed host or one that left the tailnet route gets no success notice.
-    for (const id of open.current.keys()) if (!next.has(id)) open.current.delete(id);
+    // A removed host, a replaced registration or a host that left the tailnet route gets no success notice.
+    for (const key of open.current.keys()) if (!next.has(key)) open.current.delete(key);
     previous.current = next;
   }, [hosts.data, hosts.isError, status, t]);
   return null;
