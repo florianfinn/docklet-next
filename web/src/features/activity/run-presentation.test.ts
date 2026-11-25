@@ -269,6 +269,11 @@ describe("update times", () => {
     expect(checkTimes([missing, ...updates])).toEqual({ checkedAt: "2026-10-12T08:00:00.000Z", unchecked: 2, notPulled: 1 });
   });
 
+  it("takes stack image counts from producer gaps and keeps local builds unchecked", () => {
+    expect(checkTimes(updates, { missing: 3, notPulled: 2 })).toEqual({ checkedAt: "2026-10-11T08:00:00.000Z", unchecked: 4, notPulled: 2 });
+    expect(checkTimes(updates, { missing: 0, notPulled: 0 })).toEqual({ checkedAt: "2026-10-11T08:00:00.000Z", unchecked: 1 });
+  });
+
   it("uses only successful update runs of the stack, history and live runs together", () => {
     const r = (kind: ActionKind, status: ActionStatus, finishedAt: string, stackId = "home") => ({ kind, status, finishedAt, stackId });
     const runs = [r("update", "succeeded", "2026-10-09T10:00:00.000Z"), r("update", "failed", "2026-10-11T10:00:00.000Z"), r("redeploy", "succeeded", "2026-10-11T11:00:00.000Z"), r("update", "succeeded", "2026-10-11T12:00:00.000Z", "cloud")];
