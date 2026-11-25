@@ -11,31 +11,29 @@ export interface UpdateTimes {
   checkedAt?: string;
   /** Images without a registry check (never checked or local only). */
   unchecked: number;
-  /** Images absent on the host; counted apart from `unchecked` because the reason is known. */
+  /** Producer count of image references absent on the host. */
   notPulled?: number;
   /** End of the last successful update run. */
   updatedAt?: string;
 }
 
 /**
- * With producer `gaps` (stacks), image counts come from the producer, which counts distinct references; services
- * only add the newest check and local builds, which cannot be checked. Without gaps, each service counts itself.
+ * Producer `gaps` (stacks) name images absent on the host. When they are the stack's only gap, the stack-wide
+ * incomplete flag stands for them and no longer counts services as unchecked.
  */
 export function checkTimes(updates: UpdateInfo[], gaps?: UpdateGaps): Pick<UpdateTimes, "checkedAt" | "unchecked" | "notPulled"> {
   let checkedAt: string | undefined;
-  let unchecked = 0, notPulled = 0, local = 0;
+  let unchecked = 0;
+  const onlyNotPulled = !!gaps && gaps.missing === 0 && gaps.notPulled > 0;
   for (const u of updates) {
-    if (u.state === "local") local++;
-    if (u.notPulled) notPulled++;
     if (!("checkedAt" in u) || !u.checkedAt) {
       unchecked++;
       continue;
     }
-    if (u.incomplete && !u.notPulled) unchecked++;
+    if (u.incomplete && !onlyNotPulled) unchecked++;
     if (!checkedAt || u.checkedAt > checkedAt) checkedAt = u.checkedAt;
   }
-  if (gaps) { unchecked = gaps.missing + local; notPulled = gaps.notPulled; }
-  return { checkedAt, unchecked, ...(notPulled ? { notPulled } : {}) };
+  return { checkedAt, unchecked, ...(gaps?.notPulled ? { notPulled: gaps.notPulled } : {}) };
 }
 
 /** End of the newest successful update run of a stack, live runs included. */

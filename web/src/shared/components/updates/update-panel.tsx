@@ -83,18 +83,18 @@ function TimesList({ times, local, showUpdated }: { times: UpdateTimes; local?: 
                 · {t("partlyUnchecked", { count: times.unchecked })}
               </span>
             )}
-            {!!times.notPulled && (
-              <span data-tone="warn" className="text-(--tone)" data-slot="not-pulled">
-                {" "}
-                · {t("notPulled", { count: times.notPulled })}
-              </span>
-            )}
           </>
         ) : local ? (
           <span className="text-muted-foreground">{t("checkNotPossible")}</span>
         ) : (
           <span data-tone="warn" className="font-medium text-(--tone)">
             {t("neverChecked")}
+          </span>
+        )}
+        {!!times.notPulled && (
+          <span data-tone="warn" className="text-(--tone)" data-slot="not-pulled">
+            {" "}
+            · {t("notPulled", { count: times.notPulled })}
           </span>
         )}
       </dd>

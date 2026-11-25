@@ -11,12 +11,18 @@ import { renderWithApp } from "@/test/render";
 import { StackUpdatePanel } from "./update-panel";
 
 afterEach(cleanup);
+const checked = () => document.querySelector('[data-time="checked"]')?.textContent ?? "";
 
-it("shows producer counts for missing and unchecked images in the stack hover", () => {
+it("names missing images instead of counting them as unchecked when they are the only gap", () => {
   setAppLocale("en-US");
   const current = { repository: "example/agent", tag: "2.0.0" };
-  const services = [{ name: "agent", update: { state: "unknown" as const, current, checkedAt: "2026-11-25T10:00:00Z", incomplete: true, notPulled: true } }];
-  renderWithApp(<StackUpdatePanel services={services} gaps={{ missing: 1, notPulled: 1 }} />);
-  const checked = document.querySelector('[data-time="checked"]')?.textContent ?? "";
-  expect([checked.includes("1 image not on host"), checked.includes("1 image not checked")]).toEqual([true, true]);
+  renderWithApp(<StackUpdatePanel services={[{ name: "agent", update: { state: "unknown", current, checkedAt: "2026-11-25T10:00:00Z", incomplete: true } }]} gaps={{ missing: 0, notPulled: 1 }} />);
+  expect([checked().includes("1 image not on host"), checked().includes("not checked")]).toEqual([true, false]);
+});
+
+it("keeps the missing-image reason when no shown service has a check time", () => {
+  setAppLocale("en-US");
+  const current = { repository: "example/agent", tag: "3.0.0" };
+  renderWithApp(<StackUpdatePanel services={[{ name: "agent", update: { state: "unchecked", current } }]} gaps={{ missing: 0, notPulled: 1 }} />);
+  expect([checked().includes("Never checked"), checked().includes("1 image not on host")]).toEqual([true, true]);
 });

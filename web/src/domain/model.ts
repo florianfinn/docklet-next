@@ -122,8 +122,7 @@ export interface ImageVersion {
 
 export type UpdateLevel = "major" | "minor" | "patch";
 
-/** `notPulled`: the configured image is absent on the host, so no installed image can be compared. */
-export type UpdateInfo = { code?: string; authState?: string; stale?: boolean; incomplete?: boolean; notPulled?: boolean } & (
+export type UpdateInfo = { code?: string; authState?: string; stale?: boolean; incomplete?: boolean } & (
   | { state: "current"; current: ImageVersion; checkedAt: string; registry: string }
   | {
       state: "version";

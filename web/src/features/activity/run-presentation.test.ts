@@ -264,14 +264,11 @@ describe("update times", () => {
     expect([checkTimes(updates), checkTimes([{ state: "unchecked", current: img }])]).toEqual([{ checkedAt: "2026-10-11T08:00:00.000Z", unchecked: 2 }, { checkedAt: undefined, unchecked: 1 }]);
   });
 
-  it("counts an image missing on the host apart from unchecked images", () => {
-    const missing: UpdateInfo = { state: "unknown", current: img, checkedAt: "2026-10-12T08:00:00.000Z", incomplete: true, notPulled: true };
-    expect(checkTimes([missing, ...updates])).toEqual({ checkedAt: "2026-10-12T08:00:00.000Z", unchecked: 2, notPulled: 1 });
-  });
-
-  it("takes stack image counts from producer gaps and keeps local builds unchecked", () => {
-    expect(checkTimes(updates, { missing: 3, notPulled: 2 })).toEqual({ checkedAt: "2026-10-11T08:00:00.000Z", unchecked: 4, notPulled: 2 });
-    expect(checkTimes(updates, { missing: 0, notPulled: 0 })).toEqual({ checkedAt: "2026-10-11T08:00:00.000Z", unchecked: 1 });
+  it("names producer-counted missing images and replaces the incomplete count only when they are the sole gap", () => {
+    const incomplete: UpdateInfo = { state: "current", current: img, checkedAt: "2026-10-12T08:00:00.000Z", registry: "ghcr.io", incomplete: true };
+    expect(checkTimes([incomplete, ...updates], { missing: 0, notPulled: 2 })).toEqual({ checkedAt: "2026-10-12T08:00:00.000Z", unchecked: 2, notPulled: 2 });
+    expect(checkTimes([incomplete, ...updates], { missing: 1, notPulled: 2 })).toEqual({ checkedAt: "2026-10-12T08:00:00.000Z", unchecked: 3, notPulled: 2 });
+    expect(checkTimes([incomplete, ...updates], { missing: 0, notPulled: 0 })).toEqual({ checkedAt: "2026-10-12T08:00:00.000Z", unchecked: 3 });
   });
 
   it("uses only successful update runs of the stack, history and live runs together", () => {

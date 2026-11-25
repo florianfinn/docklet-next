@@ -27,10 +27,6 @@ describe("stored update observation", () => {
     expect(() => mapUpdateInfo({ ...observation("current"), checkedAt: "" }, image, "example:1.0.0")).toThrow();
     expect(() => mapUpdateInfo({ ...observation("current"), authRegistry: 42 } as never, image, "example:1.0.0")).toThrow();
   });
-  it("marks an image missing on the host as not pulled", () => {
-    expect(mapUpdateInfo({ ...observation("unknown"), updateType: "not_pulled" }, image, "example:1.0.0")).toMatchObject({ state: "unknown", notPulled: true });
-    expect(mapUpdateInfo(observation("unknown"), image, "example:1.0.0")).not.toHaveProperty("notPulled");
-  });
   it("does not call a partially checked stack current", () => {
     expect(summarizeUpdates([{ name: "web", update: mapUpdateInfo(observation("current"), image, "example:1.0.0") }, { name: "db", update: { state: "unchecked", current: image } }]).visual).toBe("unchecked");
   });
@@ -54,34 +50,22 @@ it("incomplete project counts cannot turn known service observations into all-cu
 });
 
 
-it("a missing image marks only its own service, not checked neighbours", () => {
-  const runtimeServices: NonNullable<ProjectRow["runtimeServices"]> = [{ name: "web", image: "example:1.0.0", status: "running" }, { name: "agent", image: "example/agent:2.0.0", status: "running" }];
-  const updateInfo: ProjectRow["updateInfo"] = { status: "not_pulled", hasUpdate: false, imageCount: 2, checkedImageCount: 2, imagesWithUpdates: 0, imagesNotPulled: 1, errorCount: 0, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("current") }, agent: { imageRef: "example/agent:2.0.0", updateInfo: { ...observation("unknown"), imageRef: "example/agent:2.0.0", updateType: "not_pulled" } } } };
-  const row: ProjectRow = { id: "project", name: "Example", tags: [], status: "running", isArchived: false, serviceCount: 2, runningCount: 2, path: "/srv/example", createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z", runtimeServices, updateInfo };
-  const mapped = mapStack(row, "host", [], { stale: false });
-  expect(mapped.services.map((s) => [s.update.incomplete, s.update.notPulled])).toEqual([[false, undefined], [true, true]]);
-  expect(checkTimes(mapped.services.map((s) => s.update), mapped.updateGaps)).toMatchObject({ unchecked: 0, notPulled: 1 });
-  // Another gap (an unrecorded image) still marks every service.
-  expect(mapStack({ ...row, updateInfo: { ...updateInfo, imageCount: 3 } }, "host", [], { stale: false }).services.every((s) => s.update.incomplete)).toBe(true);
-});
-
-// Hover counts follow the producer, which counts distinct references; services cannot reconstruct hidden images.
-it("takes missing and unchecked image counts from the producer", () => {
+// The hover names missing images from producer counts; only when they are the sole gap do they replace "not checked".
+it("names missing images from producer counts without hiding other gaps", () => {
   const missing = (ref: string) => ({ imageRef: ref, updateInfo: { ...observation("unknown"), imageRef: ref, updateType: "not_pulled" } });
   const runtimeServices: NonNullable<ProjectRow["runtimeServices"]> = [{ name: "web", image: "example:1.0.0", status: "running" }, { name: "a1", image: "example/a:1", status: "running" }, { name: "a2", image: "example/a:1", status: "running" }];
-  const updateInfo: ProjectRow["updateInfo"] = { status: "not_pulled", hasUpdate: false, imageCount: 3, checkedImageCount: 3, imagesWithUpdates: 0, imagesNotPulled: 2, notPulledImageRefs: ["example/a:1", "example/b:1"], errorCount: 0, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("current") }, a1: missing("example/a:1"), a2: missing("example/a:1") } };
+  const updateInfo: ProjectRow["updateInfo"] = { status: "not_pulled", hasUpdate: false, imageCount: 2, checkedImageCount: 2, imagesWithUpdates: 0, imagesNotPulled: 1, notPulledImageRefs: ["example/a:1"], errorCount: 0, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("current") }, a1: missing("example/a:1"), a2: missing("example/a:1") } };
   const row: ProjectRow = { id: "project", name: "Example", tags: [], status: "running", isArchived: false, serviceCount: 3, runningCount: 3, path: "/srv/example", createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z", runtimeServices, updateInfo };
-  const view = (info: ProjectRow["updateInfo"]) => { const m = mapStack({ ...row, updateInfo: info }, "host", [], { stale: false }); return [m.services[0]!.update.incomplete, checkTimes(m.services.map((s) => s.update), m.updateGaps)]; };
-  // Missing b has no shown service: the checked neighbour stays incomplete, with and without the reference list.
-  expect(view(updateInfo)).toEqual([true, { checkedAt: expect.any(String), unchecked: 0, notPulled: 2 }]);
-  expect(view({ ...updateInfo, notPulledImageRefs: undefined })[0]).toBe(true);
-  // Only the shared image a is missing: the neighbour is complete and a counts once.
-  const shared = { ...updateInfo, imageCount: 2, checkedImageCount: 2, imagesNotPulled: 1, notPulledImageRefs: ["example/a:1"] };
-  expect(view(shared)).toEqual([false, { checkedAt: expect.any(String), unchecked: 0, notPulled: 1 }]);
-  expect(view({ ...shared, notPulledImageRefs: undefined })[0]).toBe(false);
-  // A missing image does not hide an unrecorded or failed one.
-  expect(view({ ...shared, imageCount: 3 })[1]).toMatchObject({ unchecked: 1, notPulled: 1 });
-  expect(view({ ...shared, errorCount: 1 })[1]).toMatchObject({ unchecked: 1, notPulled: 1 });
+  const times = (info: ProjectRow["updateInfo"], services = runtimeServices) => { const m = mapStack({ ...row, runtimeServices: services, updateInfo: info }, "host", [], { stale: false }); return checkTimes(m.services.map((s) => s.update), m.updateGaps); };
+  // Shared missing image a is the only gap: checked neighbours stay checked and a counts once.
+  expect(times(updateInfo)).toMatchObject({ unchecked: 0, notPulled: 1 });
+  // An unattributed missing image b counts too.
+  expect(times({ ...updateInfo, imagesNotPulled: 2, notPulledImageRefs: ["example/a:1", "example/b:1"] })).toMatchObject({ unchecked: 0, notPulled: 2 });
+  // Unrecorded or failed images keep the unchecked count beside the missing one.
+  expect(times({ ...updateInfo, imageCount: 3 })).toMatchObject({ unchecked: 3, notPulled: 1 });
+  expect(times({ ...updateInfo, errorCount: 1 })).toMatchObject({ unchecked: 3, notPulled: 1 });
+  // A service without its own observation stays unchecked although its reference counts as checked.
+  expect(times(updateInfo, [...runtimeServices, { name: "web2", image: "example:2.0.0", status: "running" }])).toMatchObject({ unchecked: 1, notPulled: 1 });
 });
 
 it("version observations accept release build metadata without changing update level", () => {

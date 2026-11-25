@@ -94,8 +94,7 @@ export function stackAddress(urls: readonly string[] | null | undefined): string
 export function mapStack(row: ProjectRow, hostId: string, containers: ContainerInfo[], inventory: InventoryObservation): Stack {
   if (!representableId(row?.id) || typeof row.name !== "string" || !row.name || typeof row.status !== "string") throw new Error("inventory.invalid-project");
   if (row.updateInfo) checkResult(row.updateInfo);
-  // Unrecorded or failed images leave every service incomplete; a missing image only its own service, when flagged.
-  const gap = !!row.updateInfo && (row.updateInfo.checkedImageCount < row.updateInfo.imageCount || row.updateInfo.errorCount > 0);
+  const incomplete = !!row.updateInfo && (row.updateInfo.checkedImageCount < row.updateInfo.imageCount || row.updateInfo.errorCount > 0 || row.updateInfo.imagesNotPulled > 0);
   const members = containers.filter((item) => item.stackId === inventoryId(hostId, row.id));
   // Missing or unowned inventory cannot disprove explicit backend membership.
   // Only a concrete conflicting web owner excludes a runtime entry.
@@ -103,8 +102,7 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
     const id = runtime.containerId;
     return !id || !containers.some((item) => item.id === inventoryId(hostId, id) && !!item.stackId && item.stackId !== inventoryId(hostId, row.id));
   });
-  const sources = runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }));
-  const services: Service[] = sources.map((runtime) => {
+  const services: Service[] = (runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
     const container = members.find((item) => item.id === inventoryId(hostId, runtime.containerId || "absent"));
     const common = { name: runtime.name, ...(runtime.status === "not-created" ? { containersRemoved: true } : runtime.containerId ? { containerId: inventoryId(hostId, runtime.containerId) } : {}), state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
       ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0 } as const;
@@ -113,17 +111,8 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
     if (!runtime.image && !runtime.containerId) return { ...common, image: { repository: "", tag: "" }, buildOnly: true as const, update: { state: "local" as const, current: { repository: "", tag: "" } } };
     const image = imageVersion(runtime.image);
     return { ...common, image,
-      update: mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale) };
+      update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale), incomplete } };
   });
-  // The producer counts and lists distinct missing references; one not shown by a flagged service marks every service.
-  const flagged: string[] = [];
-  for (const [i, service] of services.entries()) {
-    const ref = sources[i]?.image;
-    if (service.update.notPulled && ref && !flagged.some((f) => sameImageReference(f, ref))) flagged.push(ref);
-  }
-  const listed = row.updateInfo?.notPulledImageRefs;
-  const unflagged = !!row.updateInfo && (listed ? listed.some((ref) => !flagged.some((f) => sameImageReference(f, ref))) : row.updateInfo.imagesNotPulled > flagged.length);
-  for (const service of services) if (!("buildOnly" in service)) service.update = { ...service.update, incomplete: gap || unflagged || !!service.update.notPulled };
   const url = stackAddress(row.urls);
   const role = members.map((item) => systemRole(item.dockerLabels)).find((value) => value !== undefined);
   return { id: inventoryId(hostId, row.id), hostId, name: row.name, ...(url ? { url } : {}), path: row.path, definitionHint: row.definitionHint, definitionReason: row.definitionReason, definitionFile: safeRuntimeFile(row.definitionFile) ? row.definitionFile : undefined, definitionVariable: safeVariable(row.definitionVariable), composeNamePeers: safePeers(row.composeNamePeers), reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, ...(row.updateInfo ? { updateGaps: { missing: Math.max(0, row.updateInfo.imageCount - row.updateInfo.checkedImageCount) + row.updateInfo.errorCount, notPulled: row.updateInfo.imagesNotPulled } } : {}), autoUpdate: { mode: "check" }, inventory,
