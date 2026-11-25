@@ -71,11 +71,21 @@ export const OVERDUE_SLACK_MS = 30_000;
 
 const time = (value: string | undefined) => (value ? Date.parse(value) : Number.NaN);
 
-/** Probes of the current run: a restart keeps the earlier run's entries in the log. */
+/** RFC 3339 time as [whole-second ms, nanoseconds], so Docker's nanosecond order survives; undefined when unreadable. */
+export function nanoTime(value: string | undefined): [number, number] | undefined {
+  const m = value ? /^(.*T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/.exec(value) : null;
+  const seconds = m ? Date.parse(m[1]! + m[3]!) : Number.NaN;
+  return Number.isFinite(seconds) ? [seconds, Number((m![2] ?? "").padEnd(9, "0"))] : undefined;
+}
+
+/** Probes of the current run only: a restart keeps the earlier run's entries, and an unreadable start never counts. */
 function currentProbes(d: ContainerHealthDetails): HealthProbe[] {
-  const started = time(d.startedAt);
-  if (!Number.isFinite(started)) return d.probes;
-  return d.probes.filter((p) => !(time(p.start) < started));
+  const started = nanoTime(d.startedAt);
+  if (!started) return [];
+  return d.probes.filter((p) => {
+    const at = nanoTime(p.start);
+    return !!at && (at[0] > started[0] || (at[0] === started[0] && at[1] >= started[1]));
+  });
 }
 
 /** Latest moment the first probe should have finished: one (start) interval plus its timeout. */
@@ -113,7 +123,7 @@ export function diagnoseHealth(d: ContainerHealthDetails, now: number): HealthDi
   const newest = probes.at(-1);
   if (newest && newest.exitCode !== 0) return classifyProbe(newest);
   if (d.status === "unhealthy") {
-    const failed = [...(probes.length ? probes : d.probes)].reverse().find((p) => p.exitCode !== 0);
+    const failed = [...probes].reverse().find((p) => p.exitCode !== 0);
     return failed ? classifyProbe(failed) : { reason: "failing" };
   }
   if (!newest && d.startedAt && now > firstProbeDue(d.check, d.startedAt) + OVERDUE_SLACK_MS) return { reason: "pending-overdue" };

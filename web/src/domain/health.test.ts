@@ -66,6 +66,23 @@ describe("diagnoseHealth", () => {
     expect(diagnoseHealth(d, Date.parse(STARTED) + 1_000).reason).toBe("pending");
   });
 
+  it("an unhealthy container whose logged probes all predate the current start gets no earlier-run reason", () => {
+    const d = details({ probes: [probe(1, OUT.wget404, "2026-11-25T22:00:00Z")] });
+    expect(diagnoseHealth(d, NOW)).toEqual({ reason: "failing" });
+  });
+
+  it("drops probes without a readable start and keeps nanosecond order at the start boundary", () => {
+    const started = "2026-11-25T22:02:55.000000500Z";
+    const missing: HealthProbe = { exitCode: 1, output: OUT.wget404 };
+    const before = probe(1, OUT.refused, "2026-11-25T22:02:55.000000400Z");
+    const at = probe(-1, OUT.timeout, "2026-11-25T22:02:55.000000500Z");
+    expect([
+      diagnoseHealth(details({ startedAt: started, probes: [missing] }), NOW).reason,
+      diagnoseHealth(details({ startedAt: started, probes: [before] }), NOW).reason,
+      diagnoseHealth(details({ startedAt: started, probes: [before, at] }), NOW).reason,
+    ]).toEqual(["failing", "failing", "timeout"]);
+  });
+
   it("explains failing probes while still starting", () => {
     expect(diagnoseHealth(details({ status: "starting", probes: [probe(-1, OUT.timeout)] }), NOW).reason).toBe("timeout");
   });
