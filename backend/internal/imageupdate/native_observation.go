@@ -36,7 +36,7 @@ type NativeResult struct {
 }
 
 func (s *ImageUpdateService) NativeObservation(ctx context.Context, ref, target, platform string) (NativeResult, error) {
-	local, created, err := s.nativeReference(ctx, ref, platform)
+	local, err := s.nativeReference(ctx, ref, platform)
 	if err != nil {
 		return NativeResult{}, err
 	}
@@ -58,7 +58,7 @@ func (s *ImageUpdateService) NativeObservation(ctx context.Context, ref, target,
 	if err != nil {
 		return NativeResult{}, err
 	}
-	return NativeResult{Observation: observed, CurrentCreated: created, LatestCreated: imageDTO.BuildTime(candidate.Created)}, nil
+	return NativeResult{Observation: observed, CurrentCreated: local.Created, LatestCreated: imageDTO.BuildTime(candidate.Created)}, nil
 }
 func (i *ImageUpdateRecord) SetNativeObservation(n identity.NativeObservation) {
 	p, current, latest := n.Storage()
@@ -128,7 +128,7 @@ func (s *ImageUpdateService) NativeServiceObservation(ctx context.Context, ref, 
 	if err != nil {
 		return NativeResult{}, err
 	}
-	return NativeResult{Observation: observed, CurrentCreated: imageDTO.BuildTimeText(img.Created), LatestCreated: imageDTO.BuildTime(next.Created)}, nil
+	return NativeResult{Observation: observed, CurrentCreated: current.Created, LatestCreated: imageDTO.BuildTime(next.Created)}, nil
 }
 
 func repositoryEvidence(ref string, digests []string) bool {
@@ -144,18 +144,17 @@ func repositoryEvidence(ref string, digests []string) bool {
 	}
 	return false
 }
-func (s *ImageUpdateService) nativeReference(ctx context.Context, ref, platform string) (identity.LocalImage, *time.Time, error) {
+func (s *ImageUpdateService) nativeReference(ctx context.Context, ref, platform string) (identity.LocalImage, error) {
 	c, e := s.dockerClientInternal(ctx)
 	if e != nil {
-		return identity.LocalImage{}, nil, e
+		return identity.LocalImage{}, e
 	}
 	img, e := c.ImageInspect(ctx, ref)
 	if e != nil {
-		return identity.LocalImage{}, nil, e
+		return identity.LocalImage{}, e
 	}
 	if !repositoryEvidence(ref, img.RepoDigests) {
-		return identity.LocalImage{}, nil, imageDTO.Failure("update.check-unavailable", 503)
+		return identity.LocalImage{}, imageDTO.Failure("update.check-unavailable", 503)
 	}
-	local, e := identity.Resolve(ctx, c, img.InspectResponse, platform, nil)
-	return local, imageDTO.BuildTimeText(img.Created), e
+	return identity.Resolve(ctx, c, img.InspectResponse, platform, nil)
 }

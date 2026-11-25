@@ -38,6 +38,15 @@ describe("stored update observation", () => {
     expect(mapUpdateInfo({ ...unlabelled, latestVersion: "1.2.3" }, latestTag, "example:latest")).toMatchObject({ latest: { version: "1.2.3" } });
     expect(() => mapUpdateInfo({ ...unlabelled, latestCreated: "yesterday" }, latestTag, "example:latest")).toThrow();
   });
+  it("ignores a rebuild version that only repeats the running one", () => {
+    const patterned = { repository: "example", tag: "release-1.0.0" };
+    const echoed = { ...observation("rebuild"), imageRef: "example:release-1.0.0", currentVersion: "1.0.0", latestVersion: "1.0.0", latestCreated: "2026-11-24T06:00:00Z", updateType: "digest" };
+    const tagPolicy = mapUpdateInfo(echoed, patterned, "example:release-1.0.0");
+    expect(tagPolicy.state === "rebuild" && tagPolicy.latest).toEqual({ ...patterned, published: "2026-11-24T06:00:00Z" });
+    const droppedLabel = mapUpdateInfo({ ...echoed, imageRef: "example:stable", currentVersion: "1.2.3", latestVersion: "1.2.3" }, { repository: "example", tag: "stable" }, "example:stable");
+    expect(droppedLabel.state === "rebuild" && droppedLabel.latest.version).toBe(undefined);
+    expect(mapUpdateInfo({ ...echoed, latestVersion: "1.0.1" }, patterned, "example:release-1.0.0")).toMatchObject({ latest: { version: "1.0.1" } });
+  });
   it("does not call a partially checked stack current", () => {
     expect(summarizeUpdates([{ name: "web", update: mapUpdateInfo(observation("current"), image, "example:1.0.0") }, { name: "db", update: { state: "unchecked", current: image } }]).visual).toBe("unchecked");
   });

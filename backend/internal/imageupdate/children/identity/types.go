@@ -10,6 +10,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	"regexp"
 	"strings"
+	"time"
 
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -30,9 +31,12 @@ type RegistryCandidate struct {
 	platform Platform
 }
 type LocalImage struct {
-	ID         LocalID
-	Key        NativeKey
-	Platform   Platform
+	ID       LocalID
+	Key      NativeKey
+	Platform Platform
+	// Created is the build time of the config verified for Platform; nil
+	// when the daemon cannot attribute one to that platform.
+	Created    *time.Time
 	containerd bool
 }
 

@@ -2,7 +2,7 @@
 // Revision: 89f69980c01d08714ce96c49365fb19065e3d6ba
 // Retrieved: 2026-11-04
 // License: Apache-2.0
-// Deviations: Original real image producer, Direct sender/receiver and Edge command-path notification proofs.
+// Deviations: Original real image producer, Direct sender/receiver and Edge command-path notification proofs; #634 build time relay.
 
 package updater
 
@@ -65,7 +65,8 @@ func TestDefaultChecksAndHubNotificationsDirectEdge(t *testing.T) {
 			t.Cleanup(registryServer.Close)
 			repository := strings.TrimPrefix(registryServer.URL, "http://") + "/app"
 			makeImage := func(version string) v1.Image {
-				img, e := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: "amd64", Config: v1.Config{Labels: map[string]string{"org.opencontainers.image.version": version}}})
+				built := map[string]time.Time{"1.0.0": time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC), "1.1.0": time.Date(2026, 11, 24, 6, 0, 0, 0, time.UTC)}[version]
+				img, e := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: "amd64", Created: v1.Time{Time: built}, Config: v1.Config{Labels: map[string]string{"org.opencontainers.image.version": version}}})
 				require.NoError(t, e)
 				return img
 			}
@@ -92,7 +93,7 @@ func TestDefaultChecksAndHubNotificationsDirectEdge(t *testing.T) {
 				case strings.HasSuffix(r.URL.Path, "/containers/json"):
 					_, _ = fmt.Fprintf(w, `[{"Id":"app-a","Names":["/app-a"],"Image":%q,"ImageID":%q,"State":"running","Labels":{}},{"Id":"app-b","Names":["/app-b"],"Image":%q,"ImageID":%q,"State":"running","Labels":{}}]`, ref, configID.String(), ref, configID.String())
 				case strings.Contains(r.URL.Path, "/images/"):
-					_, _ = fmt.Fprintf(w, `{"Id":%q,"RepoDigests":[%q],"Os":"linux","Architecture":"amd64","Config":{"Labels":{"org.opencontainers.image.version":"1.0.0"}}}`, configID.String(), repository+"@"+manifestID.String())
+					_, _ = fmt.Fprintf(w, `{"Id":%q,"Created":"2026-11-12T08:00:00Z","RepoDigests":[%q],"Os":"linux","Architecture":"amd64","Config":{"Labels":{"org.opencontainers.image.version":"1.0.0"}}}`, configID.String(), repository+"@"+manifestID.String())
 				case strings.Contains(r.URL.Path, "/containers/"):
 					parts := strings.Split(r.URL.Path, "/")
 					id := parts[len(parts)-2]
@@ -229,6 +230,9 @@ func TestDefaultChecksAndHubNotificationsDirectEdge(t *testing.T) {
 				hubRouter.ServeHTTP(w, request)
 				require.Equal(t, 200, w.Code, w.Body.String())
 				require.Equal(t, 2, hub.notifications)
+				// The hub relays both agent build times unchanged over Direct and Edge.
+				require.Contains(t, w.Body.String(), `"currentCreated":"2026-11-12T08:00:00Z"`)
+				require.Contains(t, w.Body.String(), `"latestCreated":"2026-11-24T06:00:00Z"`)
 			}
 			_, e = hub.s.RunUpdateCheck(t.Context())
 			require.NoError(t, e)

@@ -44,7 +44,7 @@ func (s *ImageUpdateService) saveConsumerObservation(ctx context.Context, consum
 	if err != nil || current.Container.ID != consumer.ID || current.Container.Image != consumer.ImageID || current.Container.Config == nil || imageref.UpdatePolicyKey(current.Container.Config.Image, current.Container.Config.Labels) != key {
 		result.State, result.HasUpdate, result.Code = "unknown", false, "update.check-unavailable"
 	}
-	record := ImageUpdateRecord{ID: "container::" + consumer.ID, ContainerID: consumer.ID, ImageID: consumer.ImageID, PolicyKey: key, Repository: reference.TrimNamed(named).String(), Tag: tagged.Tag(), CheckTime: result.CheckTime, CurrentVersion: result.CurrentVersion, LatestVersion: &result.LatestVersion, UpdateType: result.UpdateType, HasUpdate: result.HasUpdate, AuthMethod: &result.AuthState, CurrentCreated: result.CurrentCreated, LatestCreated: result.LatestCreated}
+	record := ImageUpdateRecord{ID: "container::" + consumer.ID, ContainerID: consumer.ID, ImageID: consumer.ImageID, PolicyKey: key, Repository: reference.TrimNamed(named).String(), Tag: tagged.Tag(), CheckTime: result.CheckTime, CurrentVersion: result.CurrentVersion, LatestVersion: &result.LatestVersion, UpdateType: result.UpdateType, HasUpdate: result.HasUpdate, AuthMethod: &result.AuthState}
 	if result.State != "unknown" && result.State != "error" && result.Error == "" && local.ID.String() == consumer.ImageID {
 		if native == nil {
 			// The same-tag observation was already resolved for this consumer's store.
@@ -58,6 +58,8 @@ func (s *ImageUpdateService) saveConsumerObservation(ctx context.Context, consum
 		if native != nil {
 			record.SetNativeObservation(*native)
 		}
+		// Build times belong to the identity evidence kept above.
+		record.CurrentCreated, record.LatestCreated = result.CurrentCreated, result.LatestCreated
 	}
 	if result.Error != "" {
 		record.LastError = &result.Error
@@ -89,7 +91,7 @@ func (s *ImageUpdateService) invalidateConsumerObservations(ctx context.Context,
 	if code == "" {
 		code = "update.check-unavailable"
 	}
-	err = s.db.WithContext(ctx).Model(&ImageUpdateRecord{}).Where("repository=? AND tag=? AND container_id <> ''", reference.TrimNamed(named).String(), tagged.Tag()).Updates(map[string]any{"platform": nil, "has_update": false, "last_error": imageDTO.Failure(code, 503).Error(), "check_time": result.CheckTime}).Error
+	err = s.db.WithContext(ctx).Model(&ImageUpdateRecord{}).Where("repository=? AND tag=? AND container_id <> ''", reference.TrimNamed(named).String(), tagged.Tag()).Updates(map[string]any{"platform": nil, "has_update": false, "last_error": imageDTO.Failure(code, 503).Error(), "check_time": result.CheckTime, "current_created": nil, "latest_created": nil}).Error
 	if err != nil {
 		return imageDTO.Failure("update.persistence-failed", 500)
 	}

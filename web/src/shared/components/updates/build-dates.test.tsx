@@ -33,4 +33,15 @@ for (const locale of ["de", "en-US"] as const) {
     expect(screen.getAllByTitle(copy.builtAt.replace("{date}", formatDateTime("2026-11-24T06:00:00Z"))).length).toBe(2);
     view.unmount();
   });
+  it(`leads a rebuild chip with the build date, not a repeated version, in ${locale}`, () => {
+    setAppLocale(locale);
+    const patterned = { repository: "example", tag: "release-1.0.0" };
+    const update: UpdateInfo = { state: "rebuild", current: { ...patterned, version: "1.0.0", published: "2026-11-12T08:00:00Z" }, latest: { ...patterned, version: "1.0.1", published: "2026-11-24T06:00:00Z" }, checkedAt: "2026-11-25T08:00:00Z", registry: "docker.io" };
+    const view = renderWithApp(<><StackUpdatePanel services={[{ name: "web", update }]} /><UpdateChip update={update} /></>, updateFixture().adapter);
+    const text = document.body.textContent ?? "";
+    expect(text.includes(`release-1.0.0 · ${formatDate("2026-11-12T08:00:00Z")}`)).toBe(true);
+    expect(text.includes(`1.0.1 · ${formatDate("2026-11-24T06:00:00Z")}`)).toBe(true);
+    expect(screen.getAllByText(formatDate("2026-11-24T06:00:00Z")).length).toBe(1);
+    view.unmount();
+  });
 }

@@ -11,10 +11,13 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 )
 
 func apiAtLeast(raw string, minor int) bool {
@@ -71,6 +74,7 @@ func Resolve(ctx context.Context, c *client.Client, img image.InspectResponse, r
 		}
 		local.Platform = p
 		local.Key = NativeKey{id.value}
+		local.Created = imageDTO.BuildTimeText(img.Created)
 		return local, nil
 	}
 	if !apiAtLeast(c.ClientVersion(), 48) || img.Descriptor.Digest.String() != id.value {
@@ -100,6 +104,7 @@ func Resolve(ctx context.Context, c *client.Client, img image.InspectResponse, r
 			return LocalImage{}, unavailable()
 		}
 		local.Key = NativeKey{container.Digest.String()}
+		local.Created = qualifiedCreated(ctx, c, id.value, p, container.Digest.String())
 		return local, nil
 	}
 	if apiAtLeast(c.ClientVersion(), 49) {
@@ -113,6 +118,7 @@ func Resolve(ctx context.Context, c *client.Client, img image.InspectResponse, r
 			return LocalImage{}, unavailable()
 		}
 		local.Key = NativeKey{qualified.Descriptor.Digest.String()}
+		local.Created = imageDTO.BuildTimeText(qualified.Created)
 		return local, nil
 	}
 	manifests, e := c.ImageInspect(ctx, id.value, client.ImageInspectWithManifests(true))
@@ -138,6 +144,20 @@ func Resolve(ctx context.Context, c *client.Client, img image.InspectResponse, r
 		return LocalImage{}, unavailable()
 	}
 	return local, nil
+}
+
+// qualifiedCreated reads the build time of exactly one platform manifest; an
+// unqualified containerd inspect may describe another platform's config.
+func qualifiedCreated(ctx context.Context, c *client.Client, id string, p Platform, manifest string) *time.Time {
+	if !apiAtLeast(c.ClientVersion(), 49) {
+		return nil
+	}
+	platform := p.OCI()
+	qualified, e := c.ImageInspect(ctx, id, client.ImageInspectWithPlatform(&platform))
+	if e != nil || qualified.Descriptor == nil || qualified.Descriptor.Digest.String() != manifest {
+		return nil
+	}
+	return imageDTO.BuildTimeText(qualified.Created)
 }
 
 func daemonPlatform(ctx context.Context, c *client.Client, img image.InspectResponse) (Platform, error) {

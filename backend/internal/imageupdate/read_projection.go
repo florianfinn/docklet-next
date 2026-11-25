@@ -83,7 +83,6 @@ func (s *ImageUpdateService) readImageObservationAt(ctx context.Context, ref, re
 		return finish()
 	}
 	observedID = local.ID
-	info.CurrentCreated = imageDTO.BuildTimeText(local.Created)
 	if strings.Contains(ref, "@sha256:") {
 		return finish()
 	}
@@ -97,6 +96,7 @@ func (s *ImageUpdateService) readImageObservationAt(ctx context.Context, ref, re
 		return finish()
 	}
 	info.Platform = resolved.Platform.String()
+	info.CurrentCreated = resolved.Created
 	if local.Config != nil {
 		info.CurrentVersion = local.Config.Labels["org.opencontainers.image.version"]
 	}

@@ -7,6 +7,7 @@
 package image
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -22,4 +23,9 @@ func TestBuildTimeKeepsOnlyPlausibleBuilds(t *testing.T) {
 	built := BuildTimeText("2026-11-24T07:00:00+01:00")
 	require.NotNil(t, built)
 	require.Equal(t, "2026-11-24T06:00:00Z", built.Format(time.RFC3339), "build times are stored in UTC")
+	require.Nil(t, BuildTimeText("9999-12-31T23:30:00-01:00"), "UTC would cross into year 10000")
+	edge := BuildTimeText("9999-12-31T23:30:00Z")
+	require.NotNil(t, edge)
+	_, err := json.Marshal(UpdateInfo{LatestCreated: edge})
+	require.NoError(t, err, "accepted build times stay encodable")
 }

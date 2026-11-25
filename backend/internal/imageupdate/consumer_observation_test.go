@@ -35,6 +35,8 @@ func TestConsumerObservationLateIdentityAndFailureInvalidation(t *testing.T) {
 			require.NoError(t, err)
 			saved := ImageUpdateRecord{ID: "container::consumer", ContainerID: consumer.ID, ImageID: id, Repository: "registry.example.com/app", Tag: "1.0.0", PolicyKey: imageref.UpdatePolicyKey(ref, labels), HasUpdate: true, CheckTime: time.Now().Add(-time.Hour)}
 			saved.SetNativeObservation(native)
+			built := time.Date(2026, 11, 24, 6, 0, 0, 0, time.UTC)
+			saved.CurrentCreated, saved.LatestCreated = &built, &built
 			require.NoError(t, db.Create(&saved).Error)
 			inspected := container.InspectResponse{ID: consumer.ID, Image: id, Config: &container.Config{Image: ref, Labels: labels}}
 			switch change {
@@ -61,7 +63,7 @@ func TestConsumerObservationLateIdentityAndFailureInvalidation(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, "unknown", result.State)
 			} else {
-				result := &checkDTO.Response{ImageRef: ref, State: "version", HasUpdate: true, CurrentDigest: id, LatestDigest: next, CheckTime: time.Now().UTC()}
+				result := &checkDTO.Response{ImageRef: ref, State: "version", HasUpdate: true, CurrentDigest: id, LatestDigest: next, CheckTime: time.Now().UTC(), CurrentCreated: &built, LatestCreated: &built}
 				require.NoError(t, svc.saveConsumerObservation(t.Context(), consumer, result, identity.LocalImage{}, &native))
 				require.Equal(t, "unknown", result.State)
 			}
@@ -70,6 +72,8 @@ func TestConsumerObservationLateIdentityAndFailureInvalidation(t *testing.T) {
 			require.False(t, after.HasUpdate, "a slow or failed check must replace earlier candidate eligibility")
 			require.Nil(t, after.Platform, "unproven consumer bytes cannot acquire native provenance")
 			require.NotNil(t, after.LastError)
+			require.Nil(t, after.CurrentCreated, "build times leave with their identity evidence")
+			require.Nil(t, after.LatestCreated)
 		})
 	}
 }

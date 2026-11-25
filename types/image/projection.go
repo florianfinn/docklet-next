@@ -130,12 +130,13 @@ func CompareRelease(a, b string) (int, bool) {
 }
 
 // BuildTime keeps a plausible image config build time; reproducible builds
-// often stamp the epoch, which names no build.
+// often stamp the epoch, which names no build. The UTC value must stay
+// encodable as RFC 3339 (year 9999 at most).
 func BuildTime(t time.Time) *time.Time {
-	if t.Year() < 2000 {
+	u := t.UTC()
+	if u.Year() < 2000 || u.Year() > 9999 {
 		return nil
 	}
-	u := t.UTC()
 	return &u
 }
 

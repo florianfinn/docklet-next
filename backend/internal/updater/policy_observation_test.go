@@ -147,7 +147,12 @@ func testPolicyNativeObservation(t *testing.T, store string, sameConfig bool, op
 					localID = oldDigest.String()
 				}
 			}
-			row := map[string]any{"Id": localID, "Created": "2026-11-12T08:00:00Z", "Os": "linux", "Architecture": arch, "Variant": variant, "RepoDigests": []string{repository + "@" + oldDigest.String()}, "Config": map[string]any{"Labels": map[string]string{"org.opencontainers.image.version": "1.0.0"}}}
+			// An unqualified containerd inspect may describe another platform's config.
+			created := "2026-11-12T08:00:00Z"
+			if store == "containerd" && r.URL.Query().Get("platform") == "" {
+				created = "2026-01-01T00:00:00Z"
+			}
+			row := map[string]any{"Id": localID, "Created": created, "Os": "linux", "Architecture": arch, "Variant": variant, "RepoDigests": []string{repository + "@" + oldDigest.String()}, "Config": map[string]any{"Labels": map[string]string{"org.opencontainers.image.version": "1.0.0"}}}
 			if store == "containerd" {
 				mediaType := "application/vnd.oci.image.index.v1+json"
 				if r.URL.Query().Get("platform") != "" {

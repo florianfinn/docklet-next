@@ -27,6 +27,8 @@ func TestIdentityPullAcknowledgementStores(t *testing.T) {
 				next := "sha256:" + strings.Repeat("b", 64)
 				later := "sha256:" + strings.Repeat("c", 64)
 				record := ImageUpdateRecord{ID: "project::example", ProjectID: "project", Repository: "registry.example.com/app", Tag: "stable", CheckTime: time.Now().UTC(), Platform: new("native-v1:" + store + ":linux/amd64"), CurrentDigest: &old, LatestDigest: &next, HasUpdate: true, UpdateType: UpdateTypeDigest}
+				built, rebuilt := time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC), time.Date(2026, 11, 24, 6, 0, 0, 0, time.UTC)
+				record.CurrentCreated, record.LatestCreated = &built, &rebuilt
 				if scenario == "wrong-native" {
 					record.LatestDigest = &later
 				}
@@ -59,9 +61,11 @@ func TestIdentityPullAcknowledgementStores(t *testing.T) {
 				if scenario == "matching" {
 					require.False(t, got.HasUpdate)
 					require.Equal(t, next, *got.CurrentDigest)
+					require.True(t, rebuilt.Equal(*got.CurrentCreated), "the pulled candidate's build time becomes the running one")
 				} else {
 					require.True(t, got.HasUpdate)
 					require.Equal(t, old, *got.CurrentDigest)
+					require.True(t, built.Equal(*got.CurrentCreated), "an unmatched pull keeps the running build time")
 				}
 				if scenario == "newer-preview" {
 					require.Equal(t, later, *got.LatestDigest)
