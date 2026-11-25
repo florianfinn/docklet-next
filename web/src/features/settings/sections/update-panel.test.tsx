@@ -82,6 +82,19 @@ describe("row 6b: the anchor target stays in view while content above loads (can
     top = 1500; shift();
     expect(scrolled.filter((e) => e === target).length).toBe(before + 1);
   });
+  it("stops for good once focus has left the target, even if it returns before the next resize (accfix-1 B1)", async () => {
+    FakeResizeObserver.all = []; vi.stubGlobal("ResizeObserver", FakeResizeObserver); cleanups.push(() => vi.unstubAllGlobals());
+    const scrolled: Element[] = [];
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { scrolled.push(this); });
+    mount(<LiveUpdatesSelfUpdate hostId="b" name="Beta" />, adapterWith({ getSelfUpdate: vi.fn(async () => answer({})) }), "/settings/updates#agent-update-b");
+    const target = await screen.findByRole("button", { name: t("settings.updates.selfUpdate.agentOn", { name: "Beta" }) });
+    await waitFor(() => expect(document.activeElement === target).toBe(true));
+    const before = scrolled.filter((e) => e === target).length;
+    let top = 100; vi.spyOn(target, "getBoundingClientRect").mockImplementation(() => ({ top } as DOMRect));
+    act(() => { screen.getByRole("button", { name: t("settings.updates.selfUpdate.checkFor", { name: "Beta" }) }).focus(); target.focus(); });
+    top = 900; shift();
+    expect(scrolled.filter((e) => e === target).length).toBe(before);
+  });
 });
 
 describe("row 7: manual-command disclosure", () => {

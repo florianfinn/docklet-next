@@ -8,7 +8,7 @@ const INPUT = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
 /**
  * Keeps a just-focused anchor target in view while reads above it still change the page height. It stops on
- * the first user input, when focus leaves the target, or after `ms`.
+ * the first user input, the first time focus leaves the target, or after `ms`.
  */
 export function keepInView(target: HTMLElement, ms = 5000): () => void {
   if (typeof ResizeObserver === "undefined") return () => {};
@@ -25,8 +25,10 @@ export function keepInView(target: HTMLElement, ms = 5000): () => void {
     if (stopped) return;
     stopped = true; observer.disconnect(); clearTimeout(timer);
     for (const type of INPUT) window.removeEventListener(type, stop, true);
+    target.removeEventListener("focusout", stop);
   }
   for (const node of new Set([document.documentElement, target.closest("main") ?? document.body])) observer.observe(node);
   for (const type of INPUT) window.addEventListener(type, stop, { capture: true, passive: true });
+  target.addEventListener("focusout", stop);
   return stop;
 }
