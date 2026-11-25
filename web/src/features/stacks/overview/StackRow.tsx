@@ -94,7 +94,7 @@ export const StackRow = memo(function StackRow({ stack, host, mode, view, column
   };
   const online = host?.status === "online";
   const status = <StackStatusBadge stack={stack} host={host} />;
-  const services = <ServicesHover services={stack.services} host={host} name={stack.name} />;
+  const services = <ServicesHover stackId={user ? undefined : stack.id} services={stack.services} host={host} name={stack.name} />;
   const ports = <span className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{formatPorts(stack.services.flatMap((s) => s.ports)) || "–"}</span>;
   const live = useAdapter().kind === "http";
   const policyText = useTranslations("common.stackUpdates");

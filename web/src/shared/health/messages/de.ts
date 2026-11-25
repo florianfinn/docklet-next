@@ -2,9 +2,10 @@
 // Revision: 7a44b4b5c32ccc64b68e027a5496fab1d26e90e2
 // Retrieved: 2026-11-26
 // License: Apache-2.0
-// Deviations: Original M42 stack Health tab and reusable health details.
+// Deviations: Original M42 stack Health tab and reusable health details. M42 #637: container section and hover link labels.
 
 export const deHealth = {
+  title: "Health", showHealth: "Health anzeigen",
   noContainer: "Kein Container",
   unavailable: "Health-Details nicht verfügbar",
   historyUnavailable: "Verfügbarkeit nicht verfügbar",

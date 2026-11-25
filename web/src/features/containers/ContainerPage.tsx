@@ -24,6 +24,7 @@ import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { ToneBadge } from "@/shared/components/tone";
 import { UpdatePanel } from "@/shared/components/updates/update-panel";
 import { HelpTarget } from "@/shared/help/help-tooltip";
+import { HealthDetails } from "@/shared/health/HealthDetails";
 import { ContainerHistory } from "@/shared/history/HistorySection";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { cn } from "@/shared/lib/utils";
@@ -141,6 +142,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
 function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | undefined; onEdit: () => void; onUpdate: (restore: boolean, autoRestore?: boolean) => void }) {
   const adapter = useAdapter();
   const t = useTranslations("containers.page");
+  const th = useTranslations("health");
   const ti = useTranslations("containers.inspector");
   const ts = useTranslations("common.status");
   const m = useMetrics((s) => s?.containers[c.id]);
@@ -209,6 +211,10 @@ function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | un
           </CardContent>
         </Card>
       </div>
+      <Card className="mt-4 gap-3 py-4">
+        <CardHeader className="px-4"><CardTitle className="text-sm">{th("title")}</CardTitle></CardHeader>
+        <CardContent className="px-4"><HealthDetails key={c.id} containerId={c.id} /></CardContent>
+      </Card>
       <div className="mt-4">
         <ContainerHistory hostId={c.hostId} name={c.name} />
       </div>
