@@ -46,6 +46,7 @@ the job engine are not exposed. Elapsed time is never taken as evidence of waiti
 
 The web separates phases (an optional waiting phase, then running) from the outcome. A terminal
 status is never shown as a failed phase. Bulk runs show "k of N checked" while running ("k checked
-so far" while the plan is incomplete). The outcome shows checked, updates, failed and skipped
-counts, with zero parts left out. Item rows show the name with a link when the target still
-resolves, a status tone and the localized reason.
+so far" while the plan is incomplete), where k counts successful checks so it never drops at the
+end; failed and skipped counts follow. The outcome adds the update count, with zero parts left out.
+Item rows show the name with a link when the target still resolves, a status tone and the localized
+reason.

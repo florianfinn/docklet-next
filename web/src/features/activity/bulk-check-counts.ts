@@ -9,16 +9,16 @@ import type { ActionRun, BulkCheckCounts } from "@/domain/model";
 
 type CountText = (key: "checked" | "soFar" | "checkedUnknown" | "updates" | "failed" | "skipped" | "separator", values?: { count: number; planned?: number }) => string;
 
-/** Completed includes every settled target; the terminal checked part counts successes only. */
+/** The checked part counts successes while running and at the end, so it never drops at settlement. */
 export function formatBulkCheckCounts(bulk: BulkCheckCounts, running: boolean, t: CountText): string {
-  const count = running ? bulk.completed : bulk.succeeded;
+  const count = bulk.succeeded;
   const parts: string[] = [];
   if (running || count > 0 || bulk.failed + bulk.skipped + bulk.updates === 0) {
     parts.push(t(bulk.plannedKnown ? "checked" : running ? "soFar" : "checkedUnknown", { count, planned: bulk.planned }));
   }
   if (!running && bulk.updates > 0) parts.push(t("updates", { count: bulk.updates }));
   if (bulk.failed > 0) parts.push(t("failed", { count: bulk.failed }));
-  if (!running && bulk.skipped > 0) parts.push(t("skipped", { count: bulk.skipped }));
+  if (bulk.skipped > 0) parts.push(t("skipped", { count: bulk.skipped }));
   return parts.join(t("separator"));
 }
 

@@ -2,7 +2,7 @@
 // Revision: 5cb649fa7d72146ff0a078f5d6c7ea5c5b3e8454
 // Retrieved: 2026-10-26
 // License: Apache-2.0
-// Deviations: Original live update UI for issue #231. M19: total contract-code catalogue maps. M21 #439: Compose self-update controls and capability integration. M40 #615: condensed version hints, no agent hint on the hub host, empty orphan section hidden. M41 #624: hints follow the reported agent version and a settled self-update.
+// Deviations: Original live update UI for issue #231. M19: total contract-code catalogue maps. M21 #439: Compose self-update controls and capability integration. M40 #615: condensed version hints, no agent hint on the hub host, empty orphan section hidden. M41 #624: hints and restore points follow the reported agent version and a settled self-update.
 
 import { SYSTEM_HINT_STATE_KEYS, SYSTEM_HINT_KIND_KEYS } from "@/data/wire-catalogue-states";
 import { scopedKey } from "@/data/wire-catalogue";
@@ -44,15 +44,17 @@ export function HostUpdateSettings({ hostId, name, host }: { hostId: string; nam
   const hints = useQuery({ queryKey: ["schedule", hostId, "hints", host?.identity ?? "", host?.agentVersion ?? ""], queryFn: () => adapter.getSystemImageHints!(hostId), enabled: hintRead.available && !!adapter.getSystemImageHints });
   const selfUpdate = useQuery<SelfUpdateCheck>({ queryKey: selfUpdateQueryKey(hostId, host), enabled: false });
   const phase = selfUpdate.data?.operation?.phase, lastPhase = useRef(phase), refetchHints = hints.refetch;
-  useEffect(() => {
-    // A settled self-update can report the same version (a failed or repeated update): read the hints once more.
-    if (lastPhase.current && lastPhase.current !== "settled" && phase === "settled") void refetchHints();
-    lastPhase.current = phase;
-  }, [phase, refetchHints]);
   const [deleting, setDeleting] = useState<{ hostId: string; point: UpdatePoint }>();
   const orphanDelete = useCapability("deleteHostRestorePoint", { kind: "host", id: hostId });
   const orphanRead = useCapability("listHostRestorePoints", { kind: "host", id: hostId });
-  const orphans = useQuery({ queryKey: ["schedule", hostId, "orphan-points"], queryFn: () => adapter.listHostRestorePoints!(hostId), enabled: orphanRead.available && !!adapter.listHostRestorePoints });
+  // Like the hints, restore points read during an agent restart may have failed; the recovered agent gets a fresh read.
+  const orphans = useQuery({ queryKey: ["schedule", hostId, "orphan-points", host?.identity ?? "", host?.agentVersion ?? ""], queryFn: () => adapter.listHostRestorePoints!(hostId), enabled: orphanRead.available && !!adapter.listHostRestorePoints });
+  const refetchOrphans = orphans.refetch;
+  useEffect(() => {
+    // A settled self-update can report the same version (a failed or repeated update): read both once more.
+    if (lastPhase.current && lastPhase.current !== "settled" && phase === "settled") { void refetchHints(); void refetchOrphans(); }
+    lastPhase.current = phase;
+  }, [phase, refetchHints, refetchOrphans]);
   const refreshPoints = async () => { const result = await orphans.refetch(); if (result.isError) throw result.error; return result.data!; };
   // The hub's own Docker runs no agent: its agent hint compares the hub image and can never be checked.
   const hintRows = hints.data?.images.filter((h) => hostId !== "0" || h.kind !== "agent") ?? [];

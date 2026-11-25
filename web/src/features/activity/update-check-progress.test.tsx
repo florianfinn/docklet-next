@@ -23,8 +23,10 @@ afterEach(() => { cleanup(); setAppLocale("de"); });
 it.each(["en-US", "de"] as const)("formats known, unknown and terminal bulk counts across toast and facts (%s)", (locale) => {
   setAppLocale(locale);
   const cases = [
-    ["running", counts, locale === "de" ? "2 von 4 geprüft · 1 fehlgeschlagen" : "2 of 4 checked · 1 failed"],
-    ["running", { ...counts, plannedKnown: false }, locale === "de" ? "2 bisher geprüft · 1 fehlgeschlagen" : "2 checked so far · 1 failed"],
+    // The checked part counts successes while running too, so it never drops at settlement.
+    ["running", counts, locale === "de" ? "1 von 4 geprüft · 1 fehlgeschlagen" : "1 of 4 checked · 1 failed"],
+    ["running", { ...counts, plannedKnown: false }, locale === "de" ? "1 bisher geprüft · 1 fehlgeschlagen" : "1 checked so far · 1 failed"],
+    ["running", { ...counts, completed: 3, skipped: 1 }, locale === "de" ? "1 von 4 geprüft · 1 fehlgeschlagen · 1 übersprungen" : "1 of 4 checked · 1 failed · 1 skipped"],
     ["partial", { ...counts, completed: 4, succeeded: 2, skipped: 1 }, locale === "de" ? "2 von 4 geprüft · 1 mit Updates · 1 fehlgeschlagen · 1 übersprungen" : "2 of 4 checked · 1 with updates · 1 failed · 1 skipped"],
     ["succeeded", { ...counts, completed: 4, succeeded: 4, failed: 0, updates: 0 }, locale === "de" ? "4 von 4 geprüft" : "4 of 4 checked"],
   ] as const;
