@@ -2,7 +2,7 @@
 // Revision: 24638d9cd8ce431af9ee9b829ec68b171c77e287
 // Retrieved: 2026-11-26
 // License: Apache-2.0
-// Deviations: Original M42 lazy service health hints and admin deep links.
+// Deviations: Original M42 lazy service health hints and admin deep links. M42 #637: shared hint text and one-sentence probe line.
 
 import { useState } from "react";
 import { Link } from "react-router";
@@ -12,6 +12,7 @@ import { diagnoseHealth } from "@/domain/health";
 import type { Service, Tone } from "@/domain/model";
 import { InteractiveHoverCard } from "@/shared/components/interactive-hover-card";
 import { ToneBadge } from "@/shared/components/tone";
+import { useHealthHint } from "./health-hint";
 
 /** The caller supplies admin navigation context; closed previews never poll. */
 export function ServiceHealthHint({ containerId, stackId, serviceName, open }: {
@@ -19,10 +20,7 @@ export function ServiceHealthHint({ containerId, stackId, serviceName, open }: {
 }) {
   const t = useTranslations("health");
   const health = useContainerHealth(containerId, open);
-  const diagnosis = health.data ? diagnoseHealth(health.data, health.dataUpdatedAt) : undefined;
-  const hint = !diagnosis || diagnosis.reason === "healthy" ? null : diagnosis.reason === "http-status"
-    ? diagnosis.httpStatus === 404 ? t("reasons.http404") : t("reasons.http-status", { status: diagnosis.httpStatus ?? "–" })
-    : diagnosis.reason === "tool-missing" ? t("reasons.tool-missing", { tool: diagnosis.tool ?? "–" }) : t(`reasons.${diagnosis.reason}`);
+  const hint = useHealthHint()(health.data ? diagnoseHealth(health.data, health.dataUpdatedAt) : undefined);
   return <div className="grid gap-2 text-xs">
     {health.isError ? <p role="alert">{t("unavailable")}</p> : hint ? <p>{hint}</p> : health.isPending ? <p>{t("loading")}</p> : null}
     <Link className="text-primary-text underline-offset-4 hover:underline" to={`/stacks/${encodeURIComponent(stackId)}?tab=health&service=${encodeURIComponent(serviceName)}`}>{t("showHealth")}</Link>

@@ -2,7 +2,7 @@
 // Revision: 7a44b4b5c32ccc64b68e027a5496fab1d26e90e2
 // Retrieved: 2026-11-26
 // License: Apache-2.0
-// Deviations: Original M42 stack Health tab and reusable health details. M42 #637: container section and hover link labels.
+// Deviations: Original M42 stack Health tab and reusable health details. M42 #637: container section and hover link labels. M42 #637: shared hint text and one-sentence probe line.
 
 export const deHealth = {
   title: "Health", showHealth: "Health anzeigen",
@@ -14,7 +14,7 @@ export const deHealth = {
   streak: "Fehlversuche in Folge: {count}",
   command: "Prüfbefehl", interval: "Intervall", timeout: "Zeitlimit", retries: "Wiederholungen", startPeriod: "Startphase",
   default: "Standard", seconds: "{value} s", minutes: "{value} Min.", hours: "{value} Std.",
-  start: "Start", exitCode: "Exit-Code {code}", noProbes: "Noch keine Prüfungen",
+  probeLine: "Start: {time} · Exit-Code {code}", noProbes: "Noch keine Prüfungen",
   reasons: {
     "not-running": "Container läuft nicht.",
     "no-healthcheck": "Kein Healthcheck definiert.",

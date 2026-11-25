@@ -2,7 +2,7 @@
 // Revision: 7a44b4b5c32ccc64b68e027a5496fab1d26e90e2
 // Retrieved: 2026-11-26
 // License: Apache-2.0
-// Deviations: Original M42 stack Health tab and reusable health details.
+// Deviations: Original M42 stack Health tab and reusable health details. M42 #637: shared hint text and one-sentence probe line.
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "use-intl";
@@ -13,6 +13,7 @@ import { formatDateTime } from "@/domain/format";
 import { StatusStrip } from "@/shared/history/HistorySection";
 import { Button } from "@/shared/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/shared/ui/collapsible";
+import { useHealthHint } from "./health-hint";
 
 /** Only the health projection is rendered; missing identities never start a read. */
 export function HealthDetails({ containerId, historyRef, range = "24h" }: {
@@ -35,10 +36,7 @@ function ProbeDetails({ details: d }: { details: ContainerHealthDetails }) {
     const timer = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(timer);
   }, []);
-  const diagnosis = diagnoseHealth(d, now);
-  const hint = diagnosis.reason === "healthy" ? null : diagnosis.reason === "http-status"
-    ? diagnosis.httpStatus === 404 ? t("reasons.http404") : t("reasons.http-status", { status: diagnosis.httpStatus ?? "–" })
-    : diagnosis.reason === "tool-missing" ? t("reasons.tool-missing", { tool: diagnosis.tool ?? "–" }) : t(`reasons.${diagnosis.reason}`);
+  const hint = useHealthHint()(diagnoseHealth(d, now));
   const duration = (ms: number) => ms === 0 ? t("default") : ms % 3_600_000 === 0 ? t("hours", { value: ms / 3_600_000 }) : ms % 60_000 === 0 ? t("minutes", { value: ms / 60_000 }) : t("seconds", { value: ms / 1000 });
   const check = d.check;
   return <>
@@ -56,7 +54,7 @@ function ProbeDetails({ details: d }: { details: ContainerHealthDetails }) {
         </dl>}
         {d.probes.length === 0 && <p>{t("noProbes")}</p>}
         {[...d.probes].reverse().map((probe, i) => <div key={i} className="min-w-0 rounded border p-3">
-          <p>{t("start")}: {probe.start ? formatDateTime(probe.start) : "–"} · {t("exitCode", { code: probe.exitCode })}</p>
+          <p>{t("probeLine", { time: probe.start ? formatDateTime(probe.start) : "–", code: probe.exitCode })}</p>
           <pre className="overflow-x-auto whitespace-pre-wrap break-all text-xs">{probe.output}</pre>
         </div>)}
       </CollapsibleContent>
