@@ -169,6 +169,8 @@ export interface Service {
   condition?: RuntimeCondition;
   containersRemoved?: boolean;
   containerId?: string;
+  /** Docker container name; the hub keys runtime history by it. */
+  containerName?: string;
   name: string;
   /** Empty for a service that is only built locally and was never created (`build:` without `image:`, `buildOnly`). */
   image: ImageVersion;
