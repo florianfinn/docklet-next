@@ -152,6 +152,11 @@ OAuth client with only `tag:docklet-hub` needs the owner chain from the setup
 policy snippet (`tag:docklet-hub` owns `tag:docklet-agent`); existing setups keep
 working.
 
+Upgrading to 1.7.0: there is no migration and no new environment variable, and
+the agent contract stays 23. Update every agent to 1.7.0 afterwards so hub and
+agents share one version; the host cards then show each agent as current.
+Agents on 1.6.0 keep working unchanged.
+
 ## Recover a failed in-app update
 
 The helper keeps a per-operation backup beside the interpolation env file:
