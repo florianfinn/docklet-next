@@ -31,7 +31,10 @@ no API, schema or adapter change.
   - Orphaned restore points render only with entries or a read error.
 - **Card link.** The target badge links to the host's panel (`#hub-update` for the hub,
   `#agent-update-<id>` for agents). That panel alone scrolls into view and focuses its Update button,
-  or its heading when the button is disabled. Simple users see versions only.
+  or its heading when the button is disabled.
+- **Simple users.** The Hosts page stays administrator-only ([simple-users.md](simple-users.md) §4),
+  so simple users see no host cards and no update check runs for them. Independently of the route,
+  the check, the target badge and the link require the `selfUpdate` capability.
 
 ## Proofs
 
