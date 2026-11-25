@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed standalone build workshop; coded run trace and service effects; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M17 runtime history and personal preferences; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Compose self-update run kinds; proxy release audit code (#473/#474). M27 proxy contract foundation (#473/#474).
+// Deviations: Functional cut: removed standalone build workshop; coded run trace and service effects; notification and Auto Heal contracts and delivery for #296; M14 container and host operation contracts; M17 runtime history and personal preferences; M20 removal of inbound webhooks and remote CLI, retaining hub commands and typed refusals; Compose self-update run kinds; proxy release audit code (#473/#474). M27 proxy contract foundation (#473/#474). M41 #626: bulk counts on job activities.
 
 package activity
 
@@ -59,34 +59,49 @@ const (
 
 type Type string
 
+// BulkProgress counts a multi-target run's planned targets and their results.
+// Planned is final only when PlannedKnown is true; counts consider planned targets only.
+type BulkProgress struct {
+	Unit         string `json:"unit" enum:"target"`
+	Planned      int    `json:"planned"`
+	PlannedKnown bool   `json:"plannedKnown"`
+	Completed    int    `json:"completed"`
+	Succeeded    int    `json:"succeeded"`
+	Failed       int    `json:"failed"`
+	Skipped      int    `json:"skipped"`
+	Updates      int    `json:"updates"`
+}
+
 type MessageLevel string
 
 type Activity struct {
 	ImageLifecycle *updater.LifecycleResult `json:"imageLifecycle,omitempty"`
 	*RuntimeKnowledge
-	ID                    string         `json:"id"`
-	EnvironmentID         string         `json:"environmentId"`
-	BatchID               *string        `json:"batchId,omitempty"`
-	SourceEnvironmentID   string         `json:"sourceEnvironmentId,omitempty"`
-	SourceEnvironmentName string         `json:"sourceEnvironmentName,omitempty"`
-	Type                  Type           `json:"type"`
-	Status                Status         `json:"status"`
-	ResourceType          *string        `json:"resourceType,omitempty"`
-	ResourceID            *string        `json:"resourceId,omitempty"`
-	ResourceName          *string        `json:"resourceName,omitempty"`
-	Progress              *int           `json:"progress,omitempty"`
-	Step                  string         `json:"step,omitempty"`
-	LatestMessage         string         `json:"latestMessage,omitempty"`
-	MessageCode           string         `json:"messageCode,omitempty" enum:"container.recreate-recovered,container.recreate-ambiguous,container.origin-locked,runtime.idempotency-mismatch,run.request-mismatch,runtime.outcome-unknown,runtime.interrupted,runtime.cancelled,runtime.failed,runtime.wait-timeout,runtime.waiter-disconnected,runtime.parent-unresolved,runtime.target-removed,runtime.target-changed,runtime.target-unavailable,runtime.invalid-acknowledgement,runtime.peer-acknowledged,run.started,run.joined,run.fresh,run.busy,run.cancelling,activity.queued,activity.running,activity.success,activity.failed,activity.cancelled,activity.message,deploy.pull,job.queued,job.waiting,job.running,job.retrying,job.succeeded,job.partial,job.skipped,job.failed,job.needs_attention,job.canceled,container.die,container.oom,container.rename,container.unhealthy,image.untag,image.import,image.prune,volume.prune,network.prune,container.start,container.stop,container.restart,container.delete,container.create,container.scan,container.update,container.deploy,container.kill,container.pause,container.unpause,container.error,image.pull,image.load,image.tag,image.commit,image.delete,image.scan,image.error,image.vulnerability_scan,project.deploy,project.delete,project.start,project.stop,project.create,project.update,project.error,volume.create,volume.rename,volume.delete,volume.error,volume.file.create,volume.file.delete,volume.file.upload,volume.file.update,volume.workspace.update,volume.backup.create,volume.backup.delete,volume.backup.restore,volume.backup.restore_files,volume.backup.download,volume.backup.target.key_viewed,network.create,network.delete,network.connect,network.disconnect,network.error,system.prune,user.login,user.logout,system.auto_update,system.upgrade,environment.create,environment.connect,environment.disconnect,environment.update,environment.delete,environment.api_key.regenerated,environment.mtls.ca_generated,environment.mtls.cert_issued,environment.mtls.enroll,environment.mtls.download,notification.send,autoheal.restarted,autoheal.restart-failed,autoheal.limit-reached,autoheal.interrupted,notification.delivery-failed,load.sustained,container.condition.down,container.condition.unhealthy,container.condition.restart-loop,container.condition.running-again,update.self-failed,update.outcome-unknown,proxy.operation.released"`
-	AffectedServices      []string       `json:"affectedServices,omitempty"`
-	StartedBy             *StartedBy     `json:"startedBy,omitempty"`
-	StartedAt             time.Time      `json:"startedAt"`
-	EndedAt               *time.Time     `json:"endedAt,omitempty"`
-	DurationMs            *int64         `json:"durationMs,omitempty"`
-	Error                 *string        `json:"error,omitempty"`
-	Metadata              map[string]any `json:"metadata,omitempty"`
-	CreatedAt             time.Time      `json:"createdAt"`
-	UpdatedAt             *time.Time     `json:"updatedAt,omitempty"`
+	ID                    string  `json:"id"`
+	EnvironmentID         string  `json:"environmentId"`
+	BatchID               *string `json:"batchId,omitempty"`
+	SourceEnvironmentID   string  `json:"sourceEnvironmentId,omitempty"`
+	SourceEnvironmentName string  `json:"sourceEnvironmentName,omitempty"`
+	Type                  Type    `json:"type"`
+	Status                Status  `json:"status"`
+	ResourceType          *string `json:"resourceType,omitempty"`
+	ResourceID            *string `json:"resourceId,omitempty"`
+	ResourceName          *string `json:"resourceName,omitempty"`
+	Progress              *int    `json:"progress,omitempty"`
+	// Bulk carries the target counts of a multi-target job run (update checks).
+	Bulk             *BulkProgress  `json:"bulk,omitempty"`
+	Step             string         `json:"step,omitempty"`
+	LatestMessage    string         `json:"latestMessage,omitempty"`
+	MessageCode      string         `json:"messageCode,omitempty" enum:"container.recreate-recovered,container.recreate-ambiguous,container.origin-locked,runtime.idempotency-mismatch,run.request-mismatch,runtime.outcome-unknown,runtime.interrupted,runtime.cancelled,runtime.failed,runtime.wait-timeout,runtime.waiter-disconnected,runtime.parent-unresolved,runtime.target-removed,runtime.target-changed,runtime.target-unavailable,runtime.invalid-acknowledgement,runtime.peer-acknowledged,run.started,run.joined,run.fresh,run.busy,run.cancelling,activity.queued,activity.running,activity.success,activity.failed,activity.cancelled,activity.message,deploy.pull,job.queued,job.waiting,job.running,job.retrying,job.succeeded,job.partial,job.skipped,job.failed,job.needs_attention,job.canceled,container.die,container.oom,container.rename,container.unhealthy,image.untag,image.import,image.prune,volume.prune,network.prune,container.start,container.stop,container.restart,container.delete,container.create,container.scan,container.update,container.deploy,container.kill,container.pause,container.unpause,container.error,image.pull,image.load,image.tag,image.commit,image.delete,image.scan,image.error,image.vulnerability_scan,project.deploy,project.delete,project.start,project.stop,project.create,project.update,project.error,volume.create,volume.rename,volume.delete,volume.error,volume.file.create,volume.file.delete,volume.file.upload,volume.file.update,volume.workspace.update,volume.backup.create,volume.backup.delete,volume.backup.restore,volume.backup.restore_files,volume.backup.download,volume.backup.target.key_viewed,network.create,network.delete,network.connect,network.disconnect,network.error,system.prune,user.login,user.logout,system.auto_update,system.upgrade,environment.create,environment.connect,environment.disconnect,environment.update,environment.delete,environment.api_key.regenerated,environment.mtls.ca_generated,environment.mtls.cert_issued,environment.mtls.enroll,environment.mtls.download,notification.send,autoheal.restarted,autoheal.restart-failed,autoheal.limit-reached,autoheal.interrupted,notification.delivery-failed,load.sustained,container.condition.down,container.condition.unhealthy,container.condition.restart-loop,container.condition.running-again,update.self-failed,update.outcome-unknown,proxy.operation.released"`
+	AffectedServices []string       `json:"affectedServices,omitempty"`
+	StartedBy        *StartedBy     `json:"startedBy,omitempty"`
+	StartedAt        time.Time      `json:"startedAt"`
+	EndedAt          *time.Time     `json:"endedAt,omitempty"`
+	DurationMs       *int64         `json:"durationMs,omitempty"`
+	Error            *string        `json:"error,omitempty"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	UpdatedAt        *time.Time     `json:"updatedAt,omitempty"`
 }
 
 type StartedBy struct {

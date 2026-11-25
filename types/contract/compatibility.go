@@ -23,8 +23,15 @@ const AgentHubV21Fingerprint = "081a36566f1e1c401e071059756a35b8843e74d52c980a51
 // a v22 agent sends no binding detail and has no eligibility read, so the web shows today's generic refusal text.
 const AgentHubV22Fingerprint = "c2b15889bef9d47a22c686d268c49119e581536584c9fd0b20bff61d304e1ee4"
 
+// AgentHubV23Fingerprint is the 1.6.0/1.7.0 surface. v24 adds hub-side check plans, target names and the
+// missing-local-image reason; a v23 agent reports no plan, so its local job runs show no counts.
+const AgentHubV23Fingerprint = "7f484ee06162f4c9fa320d0d7f22c5be1931c8aa1654970b7c19d0ede5b4a12b"
+
 // AgentCompatible rejects older contracts and a changed schema at the same version.
 func AgentCompatible(version int, fingerprint string) bool {
+	if version == 23 {
+		return fingerprint == AgentHubV23Fingerprint
+	}
 	if version == 22 {
 		return fingerprint == AgentHubV22Fingerprint
 	}
@@ -61,5 +68,5 @@ func AgentRecoveryRoute(method, path string) bool {
 func ModuleCompatible(version int, fingerprint string) bool {
 	// Proxy module requests changed in contract 20 (M28: resolvers, certificate check,
 	// operation kind), so v19 agents get update-required for every module request.
-	return (version == 20 && fingerprint == AgentHubV20Fingerprint) || (version == 21 && fingerprint == AgentHubV21Fingerprint) || (version == 22 && fingerprint == AgentHubV22Fingerprint) || (version >= 23 && fingerprint == AgentHubFingerprint)
+	return (version == 20 && fingerprint == AgentHubV20Fingerprint) || (version == 21 && fingerprint == AgentHubV21Fingerprint) || (version == 22 && fingerprint == AgentHubV22Fingerprint) || (version == 23 && fingerprint == AgentHubV23Fingerprint) || (version >= 24 && fingerprint == AgentHubFingerprint)
 }

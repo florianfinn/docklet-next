@@ -95,6 +95,7 @@ export const UPDATE_REASON_KEYS = {
   "update.auto-excluded": IMAGE_ERROR_KEYS["update.auto-excluded"],
   "update.baseline-unavailable": IMAGE_ERROR_KEYS["update.baseline-unavailable"],
   "update.check-unavailable": IMAGE_ERROR_KEYS["update.check-unavailable"],
+  "update.image-not-pulled": IMAGE_ERROR_KEYS["update.image-not-pulled"],
   "update.config-drift": IMAGE_ERROR_KEYS["update.config-drift"],
   "update.deploy-failed": IMAGE_ERROR_KEYS["update.deploy-failed"],
   "update.image-binding-unsupported": IMAGE_ERROR_KEYS["update.image-binding-unsupported"],

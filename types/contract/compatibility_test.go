@@ -21,6 +21,11 @@ func TestAgentCompatibilityAndRecoveryRoutes(t *testing.T) {
 	require.True(t, ModuleCompatible(22, AgentHubV22Fingerprint), "v23 changes no agent module request")
 	require.False(t, AgentCompatible(22, AgentHubFingerprint), "a changed v22 schema is refused")
 	require.False(t, ModuleCompatible(23, AgentHubV22Fingerprint), "a changed v23 schema is refused")
+	// M41: v24 adds hub-side check plans and names only, so v23 (1.6.0/1.7.0) agents keep every request.
+	require.True(t, AgentCompatible(23, AgentHubV23Fingerprint), "1.7.0 agents stay supported")
+	require.True(t, ModuleCompatible(23, AgentHubV23Fingerprint), "v24 changes no agent module request")
+	require.False(t, AgentCompatible(23, AgentHubFingerprint), "a changed v23 schema is refused")
+	require.False(t, ModuleCompatible(24, AgentHubV23Fingerprint), "a changed v24 schema is refused")
 	require.False(t, AgentCompatible(21, AgentHubFingerprint))
 	require.False(t, AgentCompatible(20, AgentHubFingerprint))
 	require.True(t, AgentCompatible(19, AgentHubV19Fingerprint))

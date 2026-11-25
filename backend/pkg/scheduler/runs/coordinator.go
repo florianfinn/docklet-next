@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite-only local persistence; retried admission starts from the new run and startup repairs duplicated run IDs; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; SQLite-only local persistence; retried admission starts from the new run and startup repairs duplicated run IDs; M18 live scheduling, policy and contract foundation. M41 #626: persisted plans and predecessor deferral.
 
 // Package runs coordinates durable scheduler execution and recovery.
 package runs
@@ -135,6 +135,13 @@ func (q *Coordinator) Submit(ctx context.Context, request st.Request) (st.Run, e
 			return nil
 		}
 		pruneRunsInternal(record, now)
+		// Runs of one job execute in order: an unfinished predecessor is the witness that this run waits.
+		for _, existing := range record.Runs {
+			if existing.Status == st.Running || existing.Status == st.Queued || existing.Status == st.Waiting || existing.Status == st.Retrying {
+				result.DeferredBy = existing.ID
+				break
+			}
+		}
 		record.Runs = append(record.Runs, result)
 		return nil
 	})
@@ -611,6 +618,10 @@ func mergeTargetProgressInternal(previous, outcome st.Outcome) st.Outcome {
 		}
 	}
 	outcome.ActivityID = cmp.Or(outcome.ActivityID, previous.ActivityID)
+	// A job returns its targets but not its plan; the persisted plan of this attempt stays authoritative.
+	if outcome.PlannedIDs == nil && !outcome.PlannedKnown {
+		outcome.PlannedIDs, outcome.PlannedKnown = previous.PlannedIDs, previous.PlannedKnown
+	}
 	return outcome
 }
 
@@ -657,6 +668,18 @@ func (q *Coordinator) ResetAfterRestore() {
 	defer q.mu.Unlock()
 	q.owner = uuid.New().String()
 	q.checkpointed = make(map[string]bool)
+}
+
+// Plan persists the current attempt's planned target IDs under the execution ownership fence.
+func (q *Coordinator) Plan(ctx context.Context, run st.Run, ids []string, known bool) error {
+	return q.UpdateRun(ctx, run, func(current *st.Run) error {
+		if current.Status != st.Running || current.Owner != run.Owner {
+			return ErrRunConflict
+		}
+		current.Outcome.PlannedIDs = append([]string(nil), ids...)
+		current.Outcome.PlannedKnown = known
+		return nil
+	})
 }
 
 // Progress persists one target under the current execution ownership fence.

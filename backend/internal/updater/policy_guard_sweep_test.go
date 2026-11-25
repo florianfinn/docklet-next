@@ -150,7 +150,7 @@ func TestPolicyReadAndWriteFailuresAreVisible(t *testing.T) {
 				expected = "update.check-unavailable"
 				f.check.Status = "error"
 			case "not-pulled-check":
-				expected = "update.check-unavailable"
+				expected = "update.image-not-pulled"
 				f.check.Status = "not_pulled"
 			case "prepare-write":
 				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE INSERT ON image_policy_children BEGIN SELECT RAISE(ABORT,'synthetic prepare failure'); END").Error)

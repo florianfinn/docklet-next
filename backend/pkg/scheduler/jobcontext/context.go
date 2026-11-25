@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M41 #626: plan persistence.
 
 // Package jobcontext carries durable execution progress through domain operations.
 package jobcontext
@@ -15,8 +15,28 @@ import (
 
 type (
 	progressKeyInternal struct{}
+	planKeyInternal     struct{}
 	runKeyInternal      struct{}
 )
+
+// PlanFunc persists the current attempt's planned target IDs and whether the plan is complete.
+type PlanFunc func(ids []string, known bool) error
+
+// WithPlan adds the plan persistence of the current execution.
+func WithPlan(ctx context.Context, persist PlanFunc) context.Context {
+	if persist == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, planKeyInternal{}, persist)
+}
+
+// Plan records the targets the current attempt will report; ids replace any earlier plan.
+func Plan(ctx context.Context, ids []string, known bool) error {
+	if persist, ok := ctx.Value(planKeyInternal{}).(PlanFunc); ok {
+		return persist(ids, known)
+	}
+	return nil
+}
 
 func WithExecution(ctx context.Context, run schedulertypes.Run, persist func(schedulertypes.TargetOutcome) error) context.Context {
 	ctx = context.WithValue(ctx, runKeyInternal{}, run)

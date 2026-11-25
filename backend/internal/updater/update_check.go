@@ -15,6 +15,7 @@ import (
 	policy "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	st "github.com/florianfinn/docklet-next/types/scheduler"
+	dto "github.com/florianfinn/docklet-next/types/updater"
 )
 
 func (s *UpdaterService) RunUpdateCheck(ctx context.Context) (st.Outcome, error) {
@@ -27,21 +28,41 @@ func (s *UpdaterService) RunUpdateCheck(ctx context.Context) (st.Outcome, error)
 		return st.Outcome{}, err
 	}
 	out := st.Outcome{Status: st.Succeeded}
-	for _, host := range hosts {
+	// The plan grows host by host and is complete only after the last snapshotted host was discovered.
+	planned, seen := []string{}, map[string]bool{}
+	for index, host := range hosts {
 		if ctx.Err() != nil {
-			return policyResult(out), ctx.Err()
+			return checkResult(out), ctx.Err()
 		}
-		one, err := s.runUpdateCheckHost(ctx, p, host)
+		last := index == len(hosts)-1
+		plan := func(ids []string) error {
+			for _, id := range ids {
+				if !seen[id] {
+					seen[id] = true
+					planned = append(planned, id)
+				}
+			}
+			return jobcontext.Plan(ctx, planned, last)
+		}
+		one, err := s.runUpdateCheckHost(ctx, p, host, plan)
 		out.Targets = append(out.Targets, one.Targets...)
 		if err != nil {
-			return policyResult(out), err
+			return checkResult(out), err
+		}
+	}
+	if len(hosts) == 0 {
+		if err := jobcontext.Plan(ctx, planned, true); err != nil {
+			return out, err
 		}
 	}
 	if err := p.store.PruneHistory(ctx, time.Now().UTC()); err != nil {
-		return policyResult(out), err
+		return checkResult(out), err
 	}
-	return policyResult(out), nil
+	return checkResult(out), nil
 }
+
+// hostPlan reports the qualified IDs one host's check will emit.
+type hostPlan func(ids []string) error
 
 type hostCheckFence struct{}
 
@@ -59,32 +80,42 @@ func (s *UpdaterService) RunUpdateCheckHost(ctx context.Context, env string) (st
 	read := func(row any) error {
 		return s.deps.DB.WithContext(ctx).Table("environments").Select("enabled,created_at,credential_revision").Where("id = ?", env).Take(row).Error
 	}
+	plan := func(ids []string) error { return jobcontext.Plan(ctx, ids, true) }
 	if read(&initial) != nil || !initial.Enabled {
-		return s.recordHostCheckFailure(ctx, p, env)
+		return s.recordHostCheckFailure(ctx, p, env, plan)
 	}
 	valid := func() bool {
 		current := initial
 		return read(&current) == nil && current.Enabled && current.CreatedAt.Equal(initial.CreatedAt) && current.CredentialRevision == initial.CredentialRevision
 	}
 	ctx = context.WithValue(ctx, hostCheckFence{}, valid)
-	return s.runUpdateCheckHost(ctx, p, env)
+	return s.runUpdateCheckHost(ctx, p, env, plan)
 }
 
-func (s *UpdaterService) runUpdateCheckHost(ctx context.Context, p *imagePolicyService, env string) (st.Outcome, error) {
+func (s *UpdaterService) runUpdateCheckHost(ctx context.Context, p *imagePolicyService, env string, plan hostPlan) (st.Outcome, error) {
 	reg, err := p.ports.host(ctx, env)
 	if err != nil {
-		return s.recordHostCheckFailure(ctx, p, env)
+		return s.recordHostCheckFailure(ctx, p, env, plan)
 	}
 	targets, err := p.ports.targets(ctx, env)
 	if err != nil {
-		return s.recordHostCheckFailure(ctx, p, env)
+		return s.recordHostCheckFailure(ctx, p, env, plan)
+	}
+	ids := []string{}
+	for _, target := range targets {
+		if target.Eligible {
+			ids = append(ids, qualifyUpdateTarget(env, target.Kind, target.ID, st.TargetOutcome{}).ID)
+		}
+	}
+	if err := plan(ids); err != nil {
+		return st.Outcome{Status: st.Succeeded}, err
 	}
 	out := st.Outcome{Status: st.Succeeded}
 	present := map[string]bool{}
 	valid, _ := ctx.Value(hostCheckFence{}).(func() bool)
 	for _, target := range targets {
 		if valid != nil && !valid() {
-			return s.recordHostCheckFailure(ctx, p, env)
+			return s.recordHostCheckFailure(ctx, p, env, plan)
 		}
 		if !target.Eligible {
 			continue
@@ -108,38 +139,47 @@ func (s *UpdaterService) runUpdateCheckHost(ctx context.Context, p *imagePolicyS
 		var result st.TargetOutcome
 		if target.Kind == "container" {
 			check, e := p.ports.checkContainer(ctx, env, target)
-			if e == nil && check != nil && check.Status != "failed" && check.Status != "unknown" && check.Status != "error" && check.Status != "not_pulled" {
-				_, e = s.observeImagePolicy(ctx, p, one, check)
-			} else if e == nil {
+			var candidates []dto.UpdateCandidate
+			notPulled := e == nil && check != nil && check.Status == "not_pulled"
+			if e == nil && check != nil && check.Status != "failed" && check.Status != "unknown" && check.Status != "error" && !notPulled {
+				candidates, e = s.observeImagePolicy(ctx, p, one, check)
+			} else if e == nil && !notPulled {
 				e = errors.New("unavailable observation")
 			}
 			result = policyTarget(target.ID, st.Succeeded, "")
-			if e != nil {
+			result.UpdateAvailable = len(candidates) > 0
+			if notPulled {
+				result = policyTarget(target.ID, st.Skipped, "update.image-not-pulled")
+			} else if e != nil {
 				result = policyTarget(target.ID, st.Failed, policyCode(e, "update.check-unavailable"))
 			}
 			result = s.recordImagePolicyStatus(ctx, p, one, "update-check", result)
 		} else {
 			result, _ = s.runImagePolicyTarget(ctx, p, one, "", "update-check")
-			if result.Status == st.Skipped {
+			// Only a missing local image is an honest skip for a host check; every other skip is a failed check.
+			if result.Status == st.Skipped && result.Code != "update.image-not-pulled" {
 				result.Status = st.Failed
 			}
 		}
 		result = qualifyUpdateTarget(env, target.Kind, target.ID, result)
+		result.Name = target.Name
 		out.Targets = append(out.Targets, result)
 		if err := jobcontext.Progress(ctx, result); err != nil {
 			return out, err
 		}
 	}
 	if valid != nil && !valid() {
-		return s.recordHostCheckFailure(ctx, p, env)
+		return s.recordHostCheckFailure(ctx, p, env, plan)
 	}
 	if err := p.store.PruneAbsent(ctx, env, reg, present, time.Now().UTC()); err != nil {
 		return out, err
 	}
-	return policyResult(out), nil
+	return checkResult(out), nil
 }
 
-func (s *UpdaterService) recordHostCheckFailure(ctx context.Context, p *imagePolicyService, env string) (st.Outcome, error) {
+// recordHostCheckFailure fails every retained policy of an undiscoverable host, or one environment
+// target without policies, and plans exactly those targets so counts never exceed the plan.
+func (s *UpdaterService) recordHostCheckFailure(ctx context.Context, p *imagePolicyService, env string, plan hostPlan) (st.Outcome, error) {
 	var rows []policy.Policy
 	if err := p.store.DB.WithContext(ctx).Where("environment_id = ?", env).Find(&rows).Error; err != nil {
 		return st.Outcome{}, err
@@ -152,12 +192,19 @@ func (s *UpdaterService) recordHostCheckFailure(ctx context.Context, p *imagePol
 	if len(out.Targets) == 0 {
 		out.Targets = append(out.Targets, st.TargetOutcome{ID: env + "~environment~" + env, EnvironmentID: env, TargetID: env, ResourceType: "environment", Status: st.Failed, Code: "agent.unavailable"})
 	}
+	ids := make([]string, 0, len(out.Targets))
+	for _, result := range out.Targets {
+		ids = append(ids, result.ID)
+	}
+	if err := plan(ids); err != nil {
+		return out, err
+	}
 	for _, result := range out.Targets {
 		if err := jobcontext.Progress(ctx, result); err != nil {
 			return out, err
 		}
 	}
-	return out, nil
+	return checkResult(out), nil
 }
 
 func (s *UpdaterService) RunUpdateWindow(ctx context.Context, id string) (st.Outcome, error) {

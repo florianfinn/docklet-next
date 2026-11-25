@@ -33,6 +33,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Observed updates and recovery](scheduled-update-recovery.md) | Two-minute observation, opt-in manual checks, container/stack recovery, outcomes, limits and failed-candidate suppression |
 | [Stack updates UI contract](updates-ui.md) | Production update/restore dialogs, policy and notification states, contract gaps and behavioural proofs |
 | [Hub-owned stack update policies](update-policies.md) | Policy trigger state table, scheduler authority, frozen runtime admission and durable candidate notifications |
+| [Update-check progress and results](update-check-progress.md) | Persisted check plans, derived bulk counts, named target results, missing local images and the waiting-phase witness |
 | [Update policy model](update-policy-model.md) | M18 decision: check-only default for stacks and containers, global interval, install windows, migration 018, pruning and agent v14 |
 | [Schedule rule and hub time zone](schedule-rule.md) | M18 decision: one wall-clock rule with spring gap and autumn fold, selectable hub zone and manual scans |
 | [Restore points before deploy](deploy-restore-points.md) | M18 decision: points before deploy and redeploy, durable point evidence, recovery offer and startup cleanup |

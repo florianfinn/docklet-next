@@ -8,7 +8,6 @@
   "resourceType": "job",
   "resourceId": "update-check-host",
   "resourceName": "Update check",
-  "step": "queued",
   "latestMessage": "Update check: queued",
   "messageCode": "job.queued",
   "startedBy": {

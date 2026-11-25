@@ -123,6 +123,7 @@ export const deImageErrors = {
   "registry_sync-failed": "Die Registry-Konfiguration konnte nicht mit einem Host synchronisiert werden.",
   "registry_unavailable": "Die Registry konnte nicht erreicht werden.",
   "update_check-unavailable": "Update-Informationen sind nicht verfügbar.",
+  "update_image-not-pulled": "Das konfigurierte Image ist auf diesem Host nicht vorhanden. Es gibt kein installiertes Image zum Vergleichen.",
   "update_deploy-failed": "Das Update konnte nicht bereitgestellt werden.",
   "update_invalid-target": "Dieses Ziel unterstützt den angeforderten Update-Vorgang nicht.",
   "update_persistence-failed": "Der Update-Status konnte nicht gespeichert werden.",

@@ -123,6 +123,7 @@ export const enImageErrors = {
   "registry_sync-failed": "The registry configuration could not be synchronized to a host.",
   "registry_unavailable": "The registry could not be reached.",
   "update_check-unavailable": "Update information is unavailable.",
+  "update_image-not-pulled": "The configured image is not present on this host, so there is no installed image to compare.",
   "update_deploy-failed": "The update could not be deployed.",
   "update_invalid-target": "This target does not support the requested update operation.",
   "update_persistence-failed": "The update state could not be saved.",

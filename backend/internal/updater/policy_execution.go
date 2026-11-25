@@ -39,6 +39,37 @@ func qualifyUpdateTarget(env, kind, id string, out st.TargetOutcome) st.TargetOu
 	out.ResourceType = kind
 	return out
 }
+
+// checkResult aggregates update-check jobs: failed without any success, partial with
+// successes and failures, skipped when every target was skipped.
+func checkResult(outcome st.Outcome) st.Outcome {
+	if outcome.Status == st.Failed {
+		return outcome
+	}
+	succeeded, failed, skipped := 0, 0, 0
+	for _, target := range outcome.Targets {
+		switch target.Status {
+		case st.Succeeded:
+			succeeded++
+		case st.Failed:
+			failed++
+		case st.Skipped:
+			skipped++
+		}
+	}
+	switch {
+	case failed > 0 && succeeded == 0:
+		outcome.Status = st.Failed
+	case failed > 0:
+		outcome.Status = st.Partial
+	case succeeded == 0 && skipped > 0:
+		outcome.Status = st.Skipped
+	default:
+		outcome.Status = st.Succeeded
+	}
+	return outcome
+}
+
 func policyResult(outcome st.Outcome) st.Outcome {
 	if outcome.Status == st.Failed {
 		return outcome
@@ -130,7 +161,11 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 		return skip(policyCode(err, "update.check-unavailable"))
 	}
 	// A build-only project is an empty observation: it replaces earlier candidates like any check.
-	if !withoutRegistryImages(check) && (check.Status == "failed" || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled") {
+	if !withoutRegistryImages(check) && check.Status == "not_pulled" {
+		// Nothing installed to compare: a saved, undeployed definition whose image is absent on the host.
+		return skip("update.image-not-pulled")
+	}
+	if !withoutRegistryImages(check) && (check.Status == "failed" || check.Status == "unknown" || check.Status == "error") {
 		return skip("update.check-unavailable")
 	}
 	candidates, err := s.observeImagePolicy(ctx, p, one, check)
@@ -138,7 +173,9 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 		return policyTarget(one.TargetID, st.Failed, policyCode(err, "update.persistence-failed")), false
 	}
 	if job != "auto-update" || len(candidates) == 0 {
-		return policyTarget(one.TargetID, st.Succeeded, ""), false
+		out := policyTarget(one.TargetID, st.Succeeded, "")
+		out.UpdateAvailable = len(candidates) > 0
+		return out, false
 	}
 	actorCtx, err = p.ports.actor(ctx, one.EnvironmentID, one.ActorID, one.ActorKeyID, true)
 	if err != nil {

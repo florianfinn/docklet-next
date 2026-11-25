@@ -9,6 +9,7 @@ package activity
 import (
 	"cmp"
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -235,6 +236,7 @@ func activityToDTOInternal(model *Activity) activity.Activity {
 		ResourceID:          copyPtrInternal(model.ResourceID),
 		ResourceName:        copyPtrInternal(model.ResourceName),
 		Progress:            clampProgressPtrInternal(model.Progress),
+		Bulk:                bulkFromMetadataInternal(model.Metadata),
 		Step:                model.Step,
 		LatestMessage:       model.LatestMessage,
 		MessageCode:         model.MessageCode,
@@ -534,6 +536,16 @@ func jobActivityInternal(run scheduler.Run, name string) Activity {
 			"runUpdatedAt": run.UpdatedAt.Format(time.RFC3339Nano), "domainActivityId": run.Outcome.ActivityID,
 		},
 	}
+	// An immediately started run has no waiting phase; only a recorded predecessor makes queued a step.
+	if run.Status == scheduler.Queued && run.DeferredBy == "" {
+		model.Step = ""
+	}
+	if counts, ok := run.Outcome.Counts(); ok {
+		model.Metadata["bulk"] = activity.BulkProgress{
+			Unit: "target", Planned: counts.Planned, PlannedKnown: counts.PlannedKnown, Completed: counts.Completed,
+			Succeeded: counts.Succeeded, Failed: counts.Failed, Skipped: counts.Skipped, Updates: counts.Updates,
+		}
+	}
 	services := make([]string, 0, len(run.Outcome.Targets))
 	for _, target := range run.Outcome.Targets {
 		if target.ResourceType == "service" {
@@ -696,4 +708,21 @@ func compareActivitiesInternal(a, b activity.Activity, params pagination.QueryPa
 		result = -result
 	}
 	return cmp.Or(result, strings.Compare(a.ID, b.ID))
+}
+
+// bulkFromMetadataInternal reads the counts the job projection stored; activities without them have none.
+func bulkFromMetadataInternal(metadata database.JSON) *activity.BulkProgress {
+	raw, ok := metadata["bulk"]
+	if !ok || raw == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var bulk activity.BulkProgress
+	if json.Unmarshal(encoded, &bulk) != nil || bulk.Unit != "target" {
+		return nil
+	}
+	return &bulk
 }

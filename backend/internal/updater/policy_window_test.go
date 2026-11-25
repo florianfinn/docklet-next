@@ -39,7 +39,7 @@ func runFixtureWindows(s *UpdaterService, ctx context.Context, env, job string) 
 	}()
 	p := s.policies
 	if job == "image-polling" {
-		return s.runUpdateCheckHost(ctx, p, env)
+		return s.runUpdateCheckHost(ctx, p, env, func([]string) error { return nil })
 	}
 	var rows []policy.Policy
 	if e := p.store.DB.Where("environment_id = ? AND registration_id = ?", env, "example-registration").Order("target_id").Find(&rows).Error; e != nil {

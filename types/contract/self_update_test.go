@@ -22,7 +22,7 @@ func TestSelfUpdateV17FrozenProducers(t *testing.T) {
 			RunKinds      []string
 		}
 	}
-	raw, err := os.ReadFile("testdata/agent-hub-v23.json")
+	raw, err := os.ReadFile("testdata/agent-hub-v24.json")
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(raw, &fixture))
 	var spec struct {
@@ -44,7 +44,7 @@ func TestSelfUpdateV17FrozenProducers(t *testing.T) {
 		require.NotContains(t, spec.Paths, path)
 	}
 	require.Equal(t, []string{"hub.update", "agent.update"}, fixture.SelfUpdate.RunKinds)
-	require.Equal(t, 23, AgentHubVersion)
+	require.Equal(t, 24, AgentHubVersion)
 	require.Equal(t, 18, MinimumAgentVersion)
 	require.False(t, AgentCompatible(16, AgentHubFingerprint))
 }

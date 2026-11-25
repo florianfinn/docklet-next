@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None; M16 bind mounts and backup completion; M17 history and preference codes in the shared reason catalogue; M18 live scheduling, policy and contract foundation. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts.
+// Deviations: None; M16 bind mounts and backup completion; M17 history and preference codes in the shared reason catalogue; M18 live scheduling, policy and contract foundation. M21 #438: candidate scans and verified manifest binding. M24 recovery evidence, validation and reason contracts. M41 #626: plan, target name/update flag and predecessor deferral fields.
 
 package scheduler
 
@@ -35,7 +35,7 @@ func (s RunStatus) Terminal() bool {
 }
 
 type TargetOutcome struct {
-	Code          image.ReasonCode `json:"code,omitempty" enum:"agent.unavailable,container.origin-locked,container.recreate-ambiguous,container.recreate-recovered,autoheal.interrupted,autoheal.limit-reached,autoheal.restart-failed,autoheal.restarted,backup.copy.insufficient-space,backup.copy.mount-failed,backup.copy.write-failed,deploy.point-unavailable,deploy.point-no-baseline,feature-disabled,history.invalid-range,history.sample-invalid,history.sample-too-large,history.unavailable,host.restarting,image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,preferences.invalid,preferences.no-user,preferences.too-large,preferences.unknown-section,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,settings.invalid-time-zone,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,runtime.invalid-acknowledgement,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.service-coupled,update.snapshot-unavailable,update.system-version-unknown,update.candidate-changed,update.target-changed,update.target-not-found,volume.workspace-busy,vulnerability.agent-job-retired,vulnerability.busy,vulnerability.database-unavailable,vulnerability.dispatch-interrupted,vulnerability.dispatch-unknown,vulnerability.host-incompatible,vulnerability.host-offline,vulnerability.host-pending,vulnerability.image-not-found,vulnerability.image-removed,vulnerability.no-eligible-hosts,vulnerability.platform-unavailable,vulnerability.report-invalid,vulnerability.request-too-large,vulnerability.response-too-large,vulnerability.run-not-found,vulnerability.scan-cancelled,vulnerability.scan-failed,vulnerability.scan-interrupted,vulnerability.scan-timeout,vulnerability.scanner-unavailable,vulnerability.storage-full,candidate.deferred,candidate.unavailable,vulnerability.storage-unavailable,update.unstable,update.auto-restored,update.auto-restore-failed,update.auto-restore-unavailable,update.interrupted,update.candidate-failed,restore.files-changed,container.auto-remove"`
+	Code          image.ReasonCode `json:"code,omitempty" enum:"agent.unavailable,container.origin-locked,container.recreate-ambiguous,container.recreate-recovered,autoheal.interrupted,autoheal.limit-reached,autoheal.restart-failed,autoheal.restarted,backup.copy.insufficient-space,backup.copy.mount-failed,backup.copy.write-failed,deploy.point-unavailable,deploy.point-no-baseline,feature-disabled,history.invalid-range,history.sample-invalid,history.sample-too-large,history.unavailable,host.restarting,image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,preferences.invalid,preferences.no-user,preferences.too-large,preferences.unknown-section,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,settings.invalid-time-zone,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,runtime.invalid-acknowledgement,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.image-not-pulled,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.service-coupled,update.snapshot-unavailable,update.system-version-unknown,update.candidate-changed,update.target-changed,update.target-not-found,volume.workspace-busy,vulnerability.agent-job-retired,vulnerability.busy,vulnerability.database-unavailable,vulnerability.dispatch-interrupted,vulnerability.dispatch-unknown,vulnerability.host-incompatible,vulnerability.host-offline,vulnerability.host-pending,vulnerability.image-not-found,vulnerability.image-removed,vulnerability.no-eligible-hosts,vulnerability.platform-unavailable,vulnerability.report-invalid,vulnerability.request-too-large,vulnerability.response-too-large,vulnerability.run-not-found,vulnerability.scan-cancelled,vulnerability.scan-failed,vulnerability.scan-interrupted,vulnerability.scan-timeout,vulnerability.scanner-unavailable,vulnerability.storage-full,candidate.deferred,candidate.unavailable,vulnerability.storage-unavailable,update.unstable,update.auto-restored,update.auto-restore-failed,update.auto-restore-unavailable,update.interrupted,update.candidate-failed,restore.files-changed,container.auto-remove"`
 	RecoveryData  jsontext.Value   `json:"-" msgpack:"recoveryData,omitempty"`
 	ResourceType  string           `json:"resourceType,omitempty"`
 	ID            string           `json:"id"`
@@ -45,14 +45,22 @@ type TargetOutcome struct {
 	Status        RunStatus        `json:"status"`
 	Message       string           `json:"message,omitempty"`
 	ActivityID    string           `json:"activityId,omitempty"`
+	// Name is the target's display name when it was checked; links resolve from TargetKind and TargetID.
+	Name string `json:"name,omitempty"`
+	// UpdateAvailable reports that the check observed a newer candidate for this target.
+	UpdateAvailable bool `json:"updateAvailable,omitempty"`
 }
 
 type Outcome struct {
-	Code       image.ReasonCode `json:"code,omitempty" enum:"agent.unavailable,container.origin-locked,container.recreate-ambiguous,container.recreate-recovered,autoheal.interrupted,autoheal.limit-reached,autoheal.restart-failed,autoheal.restarted,backup.copy.insufficient-space,backup.copy.mount-failed,backup.copy.write-failed,deploy.point-unavailable,deploy.point-no-baseline,feature-disabled,history.invalid-range,history.sample-invalid,history.sample-too-large,history.unavailable,host.restarting,image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,preferences.invalid,preferences.no-user,preferences.too-large,preferences.unknown-section,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,settings.invalid-time-zone,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,runtime.invalid-acknowledgement,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.service-coupled,update.snapshot-unavailable,update.system-version-unknown,update.candidate-changed,update.target-changed,update.target-not-found,volume.workspace-busy,vulnerability.agent-job-retired,vulnerability.busy,vulnerability.database-unavailable,vulnerability.dispatch-interrupted,vulnerability.dispatch-unknown,vulnerability.host-incompatible,vulnerability.host-offline,vulnerability.host-pending,vulnerability.image-not-found,vulnerability.image-removed,vulnerability.no-eligible-hosts,vulnerability.platform-unavailable,vulnerability.report-invalid,vulnerability.request-too-large,vulnerability.response-too-large,vulnerability.run-not-found,vulnerability.scan-cancelled,vulnerability.scan-failed,vulnerability.scan-interrupted,vulnerability.scan-timeout,vulnerability.scanner-unavailable,vulnerability.storage-full,candidate.deferred,candidate.unavailable,vulnerability.storage-unavailable,update.unstable,update.auto-restored,update.auto-restore-failed,update.auto-restore-unavailable,update.interrupted,update.candidate-failed,restore.files-changed,container.auto-remove"`
+	Code       image.ReasonCode `json:"code,omitempty" enum:"agent.unavailable,container.origin-locked,container.recreate-ambiguous,container.recreate-recovered,autoheal.interrupted,autoheal.limit-reached,autoheal.restart-failed,autoheal.restarted,backup.copy.insufficient-space,backup.copy.mount-failed,backup.copy.write-failed,deploy.point-unavailable,deploy.point-no-baseline,feature-disabled,history.invalid-range,history.sample-invalid,history.sample-too-large,history.unavailable,host.restarting,image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,preferences.invalid,preferences.no-user,preferences.too-large,preferences.unknown-section,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,settings.invalid-time-zone,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,runtime.invalid-acknowledgement,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.image-not-pulled,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.service-coupled,update.snapshot-unavailable,update.system-version-unknown,update.candidate-changed,update.target-changed,update.target-not-found,volume.workspace-busy,vulnerability.agent-job-retired,vulnerability.busy,vulnerability.database-unavailable,vulnerability.dispatch-interrupted,vulnerability.dispatch-unknown,vulnerability.host-incompatible,vulnerability.host-offline,vulnerability.host-pending,vulnerability.image-not-found,vulnerability.image-removed,vulnerability.no-eligible-hosts,vulnerability.platform-unavailable,vulnerability.report-invalid,vulnerability.request-too-large,vulnerability.response-too-large,vulnerability.run-not-found,vulnerability.scan-cancelled,vulnerability.scan-failed,vulnerability.scan-interrupted,vulnerability.scan-timeout,vulnerability.scanner-unavailable,vulnerability.storage-full,candidate.deferred,candidate.unavailable,vulnerability.storage-unavailable,update.unstable,update.auto-restored,update.auto-restore-failed,update.auto-restore-unavailable,update.interrupted,update.candidate-failed,restore.files-changed,container.auto-remove"`
 	Status     RunStatus        `json:"status"`
 	Message    string           `json:"message,omitempty"`
 	ActivityID string           `json:"activityId,omitempty"`
 	Targets    []TargetOutcome  `json:"targets,omitempty"`
+	// PlannedIDs lists the target IDs of the current attempt's plan; counts consider only these targets.
+	PlannedIDs []string `json:"plannedIds,omitempty"`
+	// PlannedKnown is true once the plan is complete, so len(PlannedIDs) is the final total.
+	PlannedKnown bool `json:"plannedKnown,omitempty"`
 }
 
 type Request struct {
@@ -83,33 +91,35 @@ type RunResolution struct {
 }
 
 type Run struct {
-	ActivityEnvironmentID   string         `json:"activityEnvironmentId,omitempty"`
-	ActivityID              string         `json:"activityId,omitempty"`
-	Resolution              *RunResolution `json:"resolution,omitempty"`
-	RequestedWithKey        string         `json:"requestedWithKey,omitempty"`
-	ID                      string         `json:"id"`
-	JobID                   string         `json:"jobId"`
-	EnvironmentID           string         `json:"environmentId"`
-	Trigger                 string         `json:"trigger"`
-	RequestedBy             string         `json:"requestedBy,omitempty"`
-	Status                  RunStatus      `json:"status"`
-	CreatedAt               time.Time      `json:"createdAt"`
-	UpdatedAt               time.Time      `json:"updatedAt"`
-	StartedAt               *time.Time     `json:"startedAt,omitempty"`
-	FinishedAt              *time.Time     `json:"finishedAt,omitempty"`
-	NextAttempt             *time.Time     `json:"nextAttempt,omitempty"`
-	AttemptCount            int            `json:"attemptCount"`
-	Owner                   string         `json:"owner,omitempty"`
-	Outcome                 Outcome        `json:"outcome"`
-	Attempts                []Attempt      `json:"attempts,omitempty"`
-	RemoteDeliveryAttempted bool           `json:"remoteDeliveryAttempted"`
-	RemoteOutcome           *Outcome       `json:"remoteOutcome,omitempty"`
-	RemoteRetryRequested    bool           `json:"remoteRetryRequested,omitempty"`
-	RemoteRetryAttempted    bool           `json:"remoteRetryAttempted,omitempty"`
-	RemoteAttemptCount      int            `json:"remoteAttemptCount,omitempty"`
-	RemoteAccepted          bool           `json:"remoteAccepted"`
-	RemoteSettled           bool           `json:"remoteSettled"`
-	LastConfirmedAt         *time.Time     `json:"lastConfirmedAt,omitempty"`
+	ActivityEnvironmentID string         `json:"activityEnvironmentId,omitempty"`
+	ActivityID            string         `json:"activityId,omitempty"`
+	Resolution            *RunResolution `json:"resolution,omitempty"`
+	RequestedWithKey      string         `json:"requestedWithKey,omitempty"`
+	ID                    string         `json:"id"`
+	JobID                 string         `json:"jobId"`
+	EnvironmentID         string         `json:"environmentId"`
+	Trigger               string         `json:"trigger"`
+	RequestedBy           string         `json:"requestedBy,omitempty"`
+	// DeferredBy names the active run this run waited behind when it was submitted.
+	DeferredBy              string     `json:"deferredBy,omitempty"`
+	Status                  RunStatus  `json:"status"`
+	CreatedAt               time.Time  `json:"createdAt"`
+	UpdatedAt               time.Time  `json:"updatedAt"`
+	StartedAt               *time.Time `json:"startedAt,omitempty"`
+	FinishedAt              *time.Time `json:"finishedAt,omitempty"`
+	NextAttempt             *time.Time `json:"nextAttempt,omitempty"`
+	AttemptCount            int        `json:"attemptCount"`
+	Owner                   string     `json:"owner,omitempty"`
+	Outcome                 Outcome    `json:"outcome"`
+	Attempts                []Attempt  `json:"attempts,omitempty"`
+	RemoteDeliveryAttempted bool       `json:"remoteDeliveryAttempted"`
+	RemoteOutcome           *Outcome   `json:"remoteOutcome,omitempty"`
+	RemoteRetryRequested    bool       `json:"remoteRetryRequested,omitempty"`
+	RemoteRetryAttempted    bool       `json:"remoteRetryAttempted,omitempty"`
+	RemoteAttemptCount      int        `json:"remoteAttemptCount,omitempty"`
+	RemoteAccepted          bool       `json:"remoteAccepted"`
+	RemoteSettled           bool       `json:"remoteSettled"`
+	LastConfirmedAt         *time.Time `json:"lastConfirmedAt,omitempty"`
 }
 
 type RunList struct {

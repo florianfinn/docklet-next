@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed GitOps and saved Git repositories; notification and Auto Heal contracts and delivery for #296; M18 live scheduling, policy and contract foundation.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed GitOps and saved Git repositories; notification and Auto Heal contracts and delivery for #296; M18 live scheduling, policy and contract foundation. M41 #626: plan persistence wiring.
 
 package job
 
@@ -789,7 +789,9 @@ func (s *JobService) runContextInternal(ctx context.Context, run scheduler.Run) 
 	ctx = jobcontext.WithExecution(ctx, run, func(target scheduler.TargetOutcome) error {
 		return s.runs.Progress(ctx, run, target)
 	})
-	return ctx
+	return jobcontext.WithPlan(ctx, func(ids []string, known bool) error {
+		return s.runs.Plan(ctx, run, ids, known)
+	})
 }
 
 func requiresDockerInternal(jobID string) bool {

@@ -99,6 +99,7 @@ export const IMAGE_ERROR_KEYS = {
   "update.auto-excluded": "images.errors.update_auto-excluded",
   "update.baseline-unavailable": "images.errors.update_baseline-unavailable",
   "update.check-unavailable": "images.errors.update_check-unavailable",
+  "update.image-not-pulled": "images.errors.update_image-not-pulled",
   "update.config-drift": "images.errors.update_config-drift",
   "update.deploy-failed": "images.errors.update_deploy-failed",
   "update.image-binding-unsupported": "images.errors.update_image-binding-unsupported",
