@@ -221,7 +221,11 @@ export interface Stack {
 export type DeployStepKey = "validate" | "pull" | "build" | "create" | "stop" | "start" | "health" | "scan" | "collect" | "save" | "wait" | "connect" | "other";
 export type StepState = "pending" | "running" | "done" | "error" | "skipped";
 
+export type SchedulerState = "queued" | "waiting" | "running" | "retrying" | "succeeded" | "partial" | "failed" | "skipped" | "canceled" | "needs_attention";
+
 export interface ActionStep {
+  /** Scheduler identity survives localization; terminal states describe outcomes, not phases. */
+  schedulerState?: SchedulerState;
   key: DeployStepKey;
   label: string;
   detail?: string;
@@ -277,7 +281,20 @@ export interface RunOutputLine {
   level?: "error" | "warn";
 }
 
+export interface BulkCheckCounts {
+  unit: "target";
+  planned: number;
+  plannedKnown: boolean;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  updates: number;
+}
+
 export interface ActionRun {
+  /** Compact scheduler counts shared by list, detail and stream projections. */
+  bulk?: BulkCheckCounts;
   recreateResult?: { oldId: string; newId: string; oldName: string; newName: string };
   updateRecovery?: { outcome: "restored" | "restore-failed" | "unavailable" | "not-needed" | "interrupted"; code?: string };
   jobRef?: { jobId: string; runId: string };

@@ -40,9 +40,9 @@ it("a failed job target whose child proved no workload effect omits the volume w
   expect(box.textContent?.includes(target.id)).toBe(false);
 });
 
-it("only update-window job runs read job targets", () => {
+it("update-window and update-check job runs read job targets", () => {
   expect(jobRun("update-window:direct").jobRef !== undefined).toBe(true);
-  expect(jobRun("update-check").jobRef === undefined).toBe(true);
+  expect(jobRun("update-check").jobRef !== undefined).toBe(true);
 });
 
 it("pending restore points do not claim that none were recorded", async () => {

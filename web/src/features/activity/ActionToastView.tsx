@@ -1,3 +1,4 @@
+import { useBulkCheckCounts } from "./bulk-check-counts";
 import { useRunTarget } from "./use-run-target";
 import { scanPersistent, useScanCounts } from "./scan-counts";
 import { useDeployProgress } from "./deploy-progress";
@@ -37,21 +38,22 @@ const own = (event: MouseEvent) => event.stopPropagation();
 /** Texts every design shows; each fits one line so a toast keeps its size from start to result. */
 function useToastFacts(run: ActionRun, now: number) {
   const t = useTranslations("activity");
-  const { index, step } = runPhase(run);
+  const { index, step, phases, outcome } = runPhase(run);
   const seconds = elapsedSeconds(run, now);
   const target = useRunTarget(run), scan = useScanCounts(run);
-  const done = run.steps.filter((s) => s.state === "done").length;
+  const done = phases.filter((s) => s.state === "done").length;
   const state = runtimeState(run);
   const deploy = useDeployProgress(run);
-  const progress = scan ?? deploy;
+  const bulk = useBulkCheckCounts(run);
+  const progress = bulk ?? scan ?? deploy;
   const status = state ? t(`runtime.${state}`) : progress ?? (
     run.status === "running" && step
-      ? t("phase", { current: index + 1, total: run.steps.length, label: step.label })
-      : run.status === "failed" && step?.label.trim()
+      ? t("phase", { current: index + 1, total: phases.length, label: step.label })
+      : run.status === "failed" && step?.state === "error" && step.label.trim()
         ? t("failedAt", { label: step.label })
-        : run.status === "succeeded" ? t("done", { seconds }) : t(`status.${run.status}`));
-  const line = state ? t(`runtime.${state}Body`) : run.status === "failed" ? (run.error ?? t("toast.unknownError")) : run.status === "running" ? (scan ?? step?.detail ?? target) : scan ?? target;
-  return { status, line, progress, target, seconds, done, total: run.steps.length };
+        : outcome ? t(`jobStep.${outcome}`) : run.status === "succeeded" ? t("done", { seconds }) : t(`status.${run.status}`));
+  const line = bulk ?? (state ? t(`runtime.${state}Body`) : run.status === "failed" ? (run.error ?? t("toast.unknownError")) : run.status === "running" ? (scan ?? step?.detail ?? target) : scan ?? target);
+  return { status, line, progress, target, seconds, done, total: phases.length };
 }
 
 type Facts = ReturnType<typeof useToastFacts>;
@@ -196,7 +198,7 @@ function BarDesign(props: DesignProps) {
       </div>
       {detail !== "compact" && <Meta run={run} facts={facts} />}
       <div data-slot="toast-track">
-        <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} labels={detail === "full"} />
+        <StepTrack steps={run.outcomeState === "unknown" ? [] : runPhase(run).phases} status={run.status} labels={detail === "full"} />
       </div>
       <DetailRow run={run} facts={facts} onClose={onClose} />
       {!props.holdLife && <LifeBar run={run} onEnd={onClose} />}
@@ -225,7 +227,7 @@ function CompactDesign(props: DesignProps) {
         <CloseButton onClose={onClose} />
       </div>
       <div className="px-3 pb-2" data-slot="toast-track">
-        <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} thin />
+        <StepTrack steps={run.outcomeState === "unknown" ? [] : runPhase(run).phases} status={run.status} thin />
       </div>
       {facts.progress && run.status === "failed" && <p className="px-3 pb-2 text-xs text-muted-foreground" data-slot="toast-scan-counts">{facts.progress}</p>}
       {!props.holdLife && <LifeBar run={run} onEnd={onClose} />}
@@ -254,7 +256,7 @@ function EdgeDesign(props: DesignProps) {
         <CloseButton onClose={onClose} className="-mt-1" />
       </div>
       <div data-slot="toast-track">
-        <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} labels={detail !== "compact"} />
+        <StepTrack steps={run.outcomeState === "unknown" ? [] : runPhase(run).phases} status={run.status} labels={detail !== "compact"} />
       </div>
       <DetailRow run={run} facts={facts} onClose={onClose} />
       {!props.holdLife && <LifeBar run={run} onEnd={onClose} />}

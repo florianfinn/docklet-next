@@ -3,10 +3,14 @@ import { useEffect, useState } from "react";
 
 import type { ActionRun, ActionStatus, ActionStep, StepState } from "@/domain/model";
 
-/** Current (running or failed) step of a run. */
-export function runPhase(run: ActionRun): { index: number; step: ActionStep | undefined } {
-  const index = run.steps.findIndex((s) => s.state === "running" || s.state === "error");
-  return { index, step: run.steps[index] };
+const TERMINAL = new Set(["succeeded", "partial", "failed", "skipped", "canceled", "needs_attention"]);
+
+/** Keep the observed phase trace intact, separating scheduler settlement from actual work. */
+export function runPhase(run: ActionRun) {
+  const phases = run.steps.filter((step) => !step.schedulerState || !TERMINAL.has(step.schedulerState));
+  const outcome = run.steps.findLast((step) => step.schedulerState && TERMINAL.has(step.schedulerState))?.schedulerState;
+  const index = phases.findIndex((step) => step.state === "running" || step.state === "error");
+  return { phases, outcome, index, step: phases[index] as ActionStep | undefined };
 }
 
 /** How long a settled action toast stays; failures stay longer so the diagnosis can be read. */

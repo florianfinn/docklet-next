@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: None; byte-identical L4 snapshot. See web/PROVENANCE.md. #126 guarded command mapping and recovery presentation; #110 observed transitions and identifiable current intents. #126 console count and duration use existing catalogue keys. #126 R1: distinct dialog state keys and truthful permission, admission and retained outcome presentation. M9 D1: show command rejections inline, preserve dialog drafts and clear feedback on edits. M24 S6: recovery evidence in every detail design. List summaries and owned detail reads with bounded recovery (#225, #223). Simple-user management, assigned-stack access and mode-aware self-service.
 
+import { useBulkCheckCounts } from "./bulk-check-counts";
 import { useRunTarget } from "./use-run-target";
 import { useIsUser } from "@/data/use-principal";
 import { UpdateRecovery } from "@/shared/components/updates/update-recovery";
@@ -26,7 +27,7 @@ import { actionDialogStore, closeActionDialog, openActionDialog } from "./action
 import { activityStore, openActivity } from "./activity-store";
 import { RunBadge, RunIconTile, StepList, StepTrack } from "./ActionSteps";
 import { useOutputOpen } from "./output-view-store";
-import { elapsedSeconds, RUN_ICON, RUN_TONE, useNow } from "./run-phase";
+import { elapsedSeconds, RUN_ICON, RUN_TONE, runPhase, useNow } from "./run-phase";
 import { RunErrorBox, RunFacts, RunFocusBody, RunStatusLine } from "./RunFocus";
 import { RuntimeControls } from "./RuntimeControls";
 import { runtimeState } from "./runtime-presentation";
@@ -42,7 +43,7 @@ function TimelineBody({ run, now }: { run: ActionRun; now: number }) {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <RunStatusLine run={run} className="shrink-0 text-sm" />
       <div className="shrink-0">
-        <StepTrack steps={run.steps} status={run.status} labels />
+        <StepTrack steps={runPhase(run).phases} status={run.status} labels />
       </div>
       <div className="grid shrink-0 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <StepList run={run} dense />
@@ -59,17 +60,19 @@ function TimelineBody({ run, now }: { run: ActionRun; now: number }) {
 /** "Konsole": a compact progress strip on top, the raw output fills the rest. */
 function ConsoleBody({ run, now }: { run: ActionRun; now: number }) {
   const t = useTranslations("activity.toast");
-  const done = run.steps.filter((s) => s.state === "done").length;
+  const bulk = useBulkCheckCounts(run);
+  const phases = runPhase(run).phases;
+  const done = phases.filter((s) => s.state === "done").length;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex shrink-0 items-center gap-3">
         <RunStatusLine run={run} className="min-w-0 flex-1 text-sm" />
         <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-          {run.outcomeState === "unknown" ? "–" : t("stepsDone", { done, total: run.steps.length })} · {t("seconds", { seconds: elapsedSeconds(run, now) })}
+          {bulk ?? (run.outcomeState === "unknown" ? "–" : t("stepsDone", { done, total: phases.length }))} · {t("seconds", { seconds: elapsedSeconds(run, now) })}
         </span>
       </div>
       <div className="shrink-0">
-        <StepTrack steps={run.steps} status={run.status} labels thin />
+        <StepTrack steps={runPhase(run).phases} status={run.status} labels thin />
       </div>
       <RunErrorBox run={run} />
       <UpdateRecovery run={run} />

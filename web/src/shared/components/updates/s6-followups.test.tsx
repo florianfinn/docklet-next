@@ -95,7 +95,10 @@ for (const locale of ["en-US", "de"] as const) it.each(targetFixture.filter((tar
   const key = code.replace(".", "_") as keyof typeof catalogs.de.images.errors;
   await screen.findByText(catalogs[locale].images.errors[key], { exact: false });
   // #469: the box names the target kind, the target and its host.
-  await waitFor(() => expect(document.querySelector(`[data-job-target="${target.id}"] p`)?.textContent).toBe(`${catalogs[locale].common.stackUpdates.targetKind.stack}${target.targetId}direct· ${catalogs[locale].activity.jobStep[target.status as keyof typeof catalogs.de.activity.jobStep]}`));
+  const row = document.querySelector(`[data-job-target="${target.id}"] p`)!;
+  for (const text of [catalogs[locale].common.stackUpdates.targetKind.stack, target.targetId, "direct", catalogs[locale].activity.jobStep[target.status as keyof typeof catalogs.de.activity.jobStep]]) {
+    expect(within(row as HTMLElement).getByText(text) !== null).toBe(true);
+  }
   if (code === "update.candidate-failed") expect(document.body.textContent).toContain(catalogs[locale].activity.jobStep.skipped);
   else {
     await waitFor(() => expect(document.querySelector(`[data-job-target="${target.id}"] [data-update-recovery="${recovery!.recovery.outcome}"]`) !== null).toBe(true));

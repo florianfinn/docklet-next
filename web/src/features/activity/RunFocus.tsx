@@ -1,3 +1,4 @@
+import { useBulkCheckCounts } from "./bulk-check-counts";
 import { useRunTarget } from "./use-run-target";
 import { useScanCounts } from "./scan-counts";
 import { useDeployProgress } from "./deploy-progress";
@@ -20,12 +21,13 @@ import { RunOutput } from "./RunOutput";
 
 export function RunStatusLine({ run, className }: { run: ActionRun; className?: string }) {
   const t = useTranslations("activity");
-  const { index, step } = runPhase(run);
+  const { index, step, phases, outcome } = runPhase(run);
   const state = runtimeState(run);
   const deploy = useDeployProgress(run), check = useRepositoryCheckText(run, String);
   // A running repository check without a reached stage names no step count either.
-  const progress = deploy ?? check ?? (run.kind === "repository-check" && run.status === "running" ? t("status.running") : undefined);
-  const text = state ? t(`runtime.${state}`) : progress ?? ( run.status === "running" && step ? t("phase", { current: index + 1, total: run.steps.length, label: step.label }) : run.status === "failed" && step?.label.trim() ? t("failedAt", { label: step.label }) : run.status === "succeeded" ? t("dialog.result.succeeded") : t(`status.${run.status}`));
+  const bulk = useBulkCheckCounts(run);
+  const progress = bulk ?? deploy ?? check ?? (run.kind === "repository-check" && run.status === "running" ? t("status.running") : undefined);
+  const text = state ? t(`runtime.${state}`) : progress ?? ( run.status === "running" && step ? t("phase", { current: index + 1, total: phases.length, label: step.label }) : run.status === "failed" && step?.state === "error" && step.label.trim() ? t("failedAt", { label: step.label }) : outcome ? t(`jobStep.${outcome}`) : run.status === "succeeded" ? t("dialog.result.succeeded") : t(`status.${run.status}`));
   return (
     <p role="status" aria-live="polite" data-tone={RUN_TONE[run.status]} className={cn("truncate font-medium text-(--tone)", className)}>
       {text}
@@ -38,14 +40,16 @@ export function RunFacts({ run, now, className }: { run: ActionRun; now: number;
   const t = useTranslations("activity.dialog");
   const deploy = useDeployProgress(run), check = useRepositoryCheckText(run, String);
   const target = useRunTarget(run), scan = useScanCounts(run);
-  const done = run.steps.filter((s) => s.state === "done").length;
+  const { phases } = runPhase(run);
+  const done = phases.filter((s) => s.state === "done").length;
   // A repository check has no fixed stage count, so its cell shows the stage or result, never a ratio.
-  const progress = scan ?? deploy ?? (run.kind === "repository-check" ? check ?? "–" : undefined);
+  const bulk = useBulkCheckCounts(run);
+  const progress = bulk ?? scan ?? deploy ?? (run.kind === "repository-check" ? check ?? "–" : undefined);
   const items = [
-    ["progress", t("progress"), progress ?? (run.outcomeState === "unknown" || run.steps.length === 0 || !summaryStepsAvailable(run) ? "–" : `${done}/${run.steps.length} · ${withPercent(run.progress)}`)],
+    ["progress", t("progress"), progress ?? (run.outcomeState === "unknown" || phases.length === 0 || !summaryStepsAvailable(run) ? "–" : `${done}/${phases.length} · ${withPercent(run.progress)}`)],
     ["elapsed", t("elapsed"), `${elapsedSeconds(run, now)} s`],
     ["target", t("target"), target],
-    ["services", t("services"), run.services.join(", ") || t("none")],
+    ...(!bulk ? [["services", t("services"), run.services.join(", ") || t("none")]] as const : []),
   ] as const;
   return (
     <dl className={cn("grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-[auto_auto_minmax(0,1fr)_minmax(0,2fr)]", className)} data-slot="dialog-facts">
@@ -79,7 +83,7 @@ export function RunErrorBox({ run }: { run: ActionRun }) {
  * height and is the only scroll area.
  */
 export function RunFocusBody({ run, now, fill = false, outputOpen = false, className }: { run: ActionRun; now: number; fill?: boolean; outputOpen?: boolean; className?: string }) {
-  const { step } = runPhase(run);
+  const { step, phases } = runPhase(run);
   const target = useRunTarget(run);
   const Icon = RUN_ICON[run.status];
   return (
@@ -96,7 +100,7 @@ export function RunFocusBody({ run, now, fill = false, outputOpen = false, class
         </p>
       </div>
       <div className="shrink-0">
-        <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} labels />
+        <StepTrack steps={run.outcomeState === "unknown" ? [] : phases} status={run.status} labels />
       </div>
       <RunFacts run={run} now={now} className="shrink-0 rounded-xl border bg-background/40 p-3" />
       <RunErrorBox run={run} />

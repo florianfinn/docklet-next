@@ -7,7 +7,7 @@ import { IconTile, ToneBadge } from "@/shared/components/tone";
 import { cn } from "@/shared/lib/utils";
 import { useUiStyle, type RunMotion } from "@/shared/preferences/ui-style-store";
 
-import { stepTone } from "./run-phase";
+import { runPhase, stepTone } from "./run-phase";
 
 /** Shared tone components know only semantic tones; a running run takes the brand primary. */
 const RUNNING_STYLE = { "--tone": "var(--primary-text)" } as CSSProperties;
@@ -59,11 +59,12 @@ export function StepTrack({ steps, status, labels = false, thin = false, motion 
 /** Vertical step list with state, label and detail (validate → health). */
 export function StepList({ run, dense }: { run: ActionRun; dense?: boolean }) {
   const t = useTranslations("activity.step");
+  const { phases } = runPhase(run);
   return (
     <ol className={cn("relative flex flex-col", dense ? "gap-1.5" : "gap-2.5")}>
-      {run.steps.map((s, i) => (
+      {phases.map((s, i) => (
         <li key={s.key + i} className="relative flex gap-2.5">
-          {i < run.steps.length - 1 && <span aria-hidden className="absolute top-6 left-[11px] h-[calc(100%-12px)] w-px bg-border" />}
+          {i < phases.length - 1 && <span aria-hidden className="absolute top-6 left-[11px] h-[calc(100%-12px)] w-px bg-border" />}
           <span
             data-tone={stepTone(s.state, run.status)}
             className={cn(

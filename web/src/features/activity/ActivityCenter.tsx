@@ -1,3 +1,5 @@
+import { useBulkCheckCounts } from "./bulk-check-counts";
+import { JobUpdateOutcomes } from "@/shared/components/updates/job-update-outcomes";
 import { useRunTarget } from "./use-run-target";
 import { useDeployProgress } from "./deploy-progress";
 import { useConnectedSettings } from "@/data/queries";
@@ -47,7 +49,8 @@ const LEVEL_TONE: Record<EventLevel, "err" | "warn" | "ok" | "info"> = { error: 
 function RunDescription({ run, summary }: { run: ActionRun; summary?: ScanRunSummary }) {
   const t = useTranslations("activity"), target = useRunTarget(run);
   const listed = useScanResultLine(summary), observed = useScanCounts(run);
-  const result = listed ?? (run.status === "running" || run.status === "queued" ? undefined : observed);
+  const bulk = useBulkCheckCounts(run);
+  const result = bulk ?? listed ?? (run.status === "running" || run.status === "queued" ? undefined : observed);
   return <span className={cn(run.status === "failed" && "text-destructive")}>
     {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)}{target ? ` · ${target}` : ""}
     {run.error ? ` · ${run.error}` : ""}
@@ -76,6 +79,8 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
       <CollapsibleContent className="min-w-0 data-[state=open]:animate-in data-[state=open]:fade-in-0">
         <ActionDetail run={run}>{(run) => <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-xl border bg-background/50 p-3">
           <ScanResult run={run} />
+          <BulkCheckResult run={run} />
+          {run.kind === "check-updates" && <JobUpdateOutcomes run={run} />}
           <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
             <div className="min-w-0 flex-1 max-sm:w-full">
               <StepList run={run.outcomeState === "unknown" ? { ...run, steps: [] } : run} />
@@ -105,6 +110,11 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
       </CollapsibleContent>
     </Collapsible>
   );
+}
+
+function BulkCheckResult({ run }: { run: ActionRun }) {
+  const text = useBulkCheckCounts(run);
+  return text ? <p className="text-sm font-medium" data-slot="bulk-check-result">{text}</p> : null;
 }
 
 function DeployProgressLine({ run }: { run: ActionRun }) {

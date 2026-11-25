@@ -290,11 +290,12 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   });
   return Object.assign({
     id: run.id,
+    ...(run.bulk ? { bulk: { ...run.bulk } } : {}),
     deployProgress: deployProgress(run),
     ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
     ...(updateRecovery ? { updateRecovery } : {}),
     ...(job && run.metadata?.jobStatus === "partial" ? { partial: true } : {}),
-    ...(job && typeof run.metadata?.jobId === "string" && (run.metadata.jobId === "update-check-host" || /^update-window:/.test(run.metadata.jobId)) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
+    ...(job && typeof run.metadata?.jobId === "string" && (run.metadata.jobId === "update-check-host" || run.metadata.jobId === "update-check" || /^update-window:/.test(run.metadata.jobId)) && typeof run.metadata?.runId === "string" ? { jobRef: { jobId: run.metadata.jobId, runId: run.metadata.runId } } : {}),
     kind, sourceOperation: run.type,
     title: repositoryCheck ? { code: `activity.runKind.${kind}`, params: {} } : activityTitle(run),
     hostScoped,
@@ -320,6 +321,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
         )
       : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
+      ...(job && JOB_STEPS.has(step.name) ? { schedulerState: step.name as import("@/domain/model").SchedulerState } : {}),
       key: stepKey(step.name), state: stepState(step.status),
       label: (run.type === "project_deploy" || run.type === "project_redeploy") && (step.name === "pull" || step.name === "deploy") ? { code: `activity.deployProgress.${step.name}`, params: {} }
         : Object.hasOwn(RECREATE_STEPS, step.name) ? { code: `containers.recreate.steps.${RECREATE_STEPS[step.name]}`, params: {}, sourceText: step.name }

@@ -38,7 +38,19 @@ export interface SystemHints {
     compatibleReference?: string; state: "current" | "available" | "pinned" | "unknown";
     requiresHubUpdate: boolean; manualOnly: true; code?: string }[];
 }
-export interface UpdateJobTarget { id: string; status: UpdateRunStatus; code?: string; activityId?: string; environmentId?: string; targetKind?: "stack" | "container"; targetId?: string }
+export interface UpdateJobTarget {
+  inCurrentPlan?: boolean;
+  name?: string;
+  updateAvailable?: boolean;
+  id: string;
+  status: UpdateRunStatus;
+  code?: string;
+  activityId?: string;
+  environmentId?: string;
+  targetKind?: "stack" | "container";
+  targetId?: string;
+}
+
 type WireEligibility = import("@/api/generated/schema").components["schemas"]["UpdaterUpdateEligibility"];
 export type UpdateEligibility = Omit<WireEligibility, "services"> & { services: NonNullable<WireEligibility["services"]> };
 export interface UpdateCheckResult { hasUpdate: boolean; version?: string }
