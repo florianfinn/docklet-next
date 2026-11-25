@@ -8,6 +8,7 @@ package activity
 
 import (
 	"encoding/json/v2"
+	"fmt"
 	"testing"
 	"time"
 
@@ -60,4 +61,33 @@ func TestLegacyJobActivityHasNoBulkCounts(t *testing.T) {
 	run.Outcome = scheduler.Outcome{Targets: []scheduler.TargetOutcome{{ID: "a", Status: scheduler.Failed}}}
 	model := jobActivityInternal(run, "Update check")
 	require.Nil(t, activityToDTOInternal(&model).Bulk)
+}
+
+func TestCountOnlyJobUpdatesAddNoMessages(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	service := NewActivityService(db, nil)
+	run := exampleJobRun(scheduler.Running)
+	run.EnvironmentID = "0"
+	run.Outcome = scheduler.Outcome{PlannedIDs: make([]string, 200), PlannedKnown: true}
+	for i := range run.Outcome.PlannedIDs {
+		run.Outcome.PlannedIDs[i] = fmt.Sprintf("target-%03d", i)
+	}
+	require.NoError(t, service.SyncJobRun(t.Context(), run, "Update check"))
+	for i := range 200 {
+		run.UpdatedAt = run.UpdatedAt.Add(time.Millisecond)
+		run.Outcome.Targets = append(run.Outcome.Targets, scheduler.TargetOutcome{ID: run.Outcome.PlannedIDs[i], Status: scheduler.Succeeded})
+		require.NoError(t, service.SyncJobRun(t.Context(), run, "Update check"))
+	}
+	var messages int64
+	require.NoError(t, db.Model(&ActivityMessage{}).Where("activity_id = ?", run.ActivityID).Count(&messages).Error)
+	require.EqualValues(t, 1, messages)
+	detail, err := service.GetActivityDetail(t.Context(), "0", run.ActivityID, 10)
+	require.NoError(t, err)
+	require.Equal(t, 200, detail.Activity.Bulk.Completed)
+
+	run.Status, run.UpdatedAt = scheduler.Succeeded, run.UpdatedAt.Add(time.Second)
+	run.FinishedAt = new(run.UpdatedAt)
+	require.NoError(t, service.SyncJobRun(t.Context(), run, "Update check"))
+	require.NoError(t, db.Model(&ActivityMessage{}).Where("activity_id = ?", run.ActivityID).Count(&messages).Error)
+	require.EqualValues(t, 2, messages)
 }

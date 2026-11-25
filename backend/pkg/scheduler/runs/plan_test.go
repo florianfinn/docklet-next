@@ -90,3 +90,39 @@ func TestCountsIgnoreTargetsOutsideTheCurrentPlan(t *testing.T) {
 	_, legacy := st.Outcome{Targets: []st.TargetOutcome{{ID: "a", Status: st.Succeeded}}}.Counts()
 	require.False(t, legacy)
 }
+
+func TestSubmitDeferralFollowsTheDispatchRule(t *testing.T) {
+	future, past := time.Now().Add(time.Hour).UTC(), time.Now().Add(-time.Minute).UTC()
+	for _, tc := range []struct {
+		name     string
+		status   st.RunStatus
+		next     *time.Time
+		deferred bool
+	}{
+		{"future retry is skipped by dispatch", st.Retrying, &future, false},
+		{"future waiting run is skipped by dispatch", st.Waiting, &future, false},
+		{"due retry runs first", st.Retrying, &past, true},
+		{"queued predecessor runs first", st.Queued, nil, true},
+		{"needs attention does not block", st.NeedsAttention, nil, false},
+		{"finished run does not block", st.Failed, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := newResolutionQueueInternal(t)
+			first, err := q.Submit(t.Context(), st.Request{JobID: "deliver", Trigger: "manual"})
+			require.NoError(t, err)
+			require.NoError(t, q.UpdateRun(t.Context(), first, func(current *st.Run) error {
+				current.Status, current.NextAttempt, current.AttemptCount, current.UpdatedAt = tc.status, tc.next, 1, time.Now().UTC()
+				if tc.status.Terminal() {
+					current.FinishedAt = new(time.Now().UTC())
+				}
+				return nil
+			}))
+			second, err := q.Submit(t.Context(), st.Request{JobID: "deliver", Trigger: "manual"})
+			require.NoError(t, err)
+			require.Equal(t, tc.deferred, second.DeferredBy == first.ID)
+			if !tc.deferred {
+				require.Empty(t, second.DeferredBy)
+			}
+		})
+	}
+}

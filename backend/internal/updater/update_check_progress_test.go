@@ -180,3 +180,21 @@ func TestAllHostPlanWithoutHostsIsKnownEmpty(t *testing.T) {
 	require.Empty(t, plans[0].ids)
 	require.True(t, plans[0].known)
 }
+
+func TestContainerCheckSkipsMissingLocalImage(t *testing.T) {
+	f := newPolicyFixture(t)
+	f.p.ports.targets = func(context.Context, string) ([]updateTarget, error) {
+		return []updateTarget{{Kind: "container", ID: "web", Name: "web", Eligible: true}}, nil
+	}
+	f.p.ports.checkContainer = func(context.Context, string, updateTarget) (*projectDTO.UpdateInfo, error) {
+		return &projectDTO.UpdateInfo{Status: "not_pulled", ImageCount: 1, ServiceUpdates: map[string]projectDTO.ServiceUpdateInfo{"web": {ImageRef: "registry.example.com/missing:1.0.0"}}}, nil
+	}
+	var plans []planCall
+	var persisted st.Outcome
+	out, err := f.s.RunUpdateCheckHost(progressContext(t, &plans, &persisted), "0")
+	require.NoError(t, err)
+	require.Len(t, out.Targets, 1)
+	require.Equal(t, st.Skipped, out.Targets[0].Status)
+	require.Equal(t, "update.image-not-pulled", out.Targets[0].Code)
+	require.Equal(t, st.Skipped, out.Status)
+}

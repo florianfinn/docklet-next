@@ -135,14 +135,22 @@ func (q *Coordinator) Submit(ctx context.Context, request st.Request) (st.Run, e
 			return nil
 		}
 		pruneRunsInternal(record, now)
-		// Runs of one job execute in order: an unfinished predecessor is the witness that this run waits.
-		for _, existing := range record.Runs {
-			if existing.Status == st.Running || existing.Status == st.Queued || existing.Status == st.Waiting || existing.Status == st.Retrying {
-				result.DeferredBy = existing.ID
+		record.Runs = append(record.Runs, result)
+		// The witness follows the dispatch rule: a running run, or a run the dispatcher selects
+		// before this one; a backing-off retry that dispatch skips is no predecessor.
+		appended := &record.Runs[len(record.Runs)-1]
+		for _, existing := range record.Runs[:len(record.Runs)-1] {
+			if existing.Status == st.Running {
+				appended.DeferredBy = existing.ID
 				break
 			}
 		}
-		record.Runs = append(record.Runs, result)
+		if appended.DeferredBy == "" {
+			if selected, _ := q.nextRunInternal(record.Runs); selected != nil && selected.ID != appended.ID {
+				appended.DeferredBy = selected.ID
+			}
+		}
+		result = *appended
 		return nil
 	})
 	if err == nil {

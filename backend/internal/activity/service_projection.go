@@ -483,6 +483,8 @@ func (s *ActivityService) SyncJobRun(ctx context.Context, run scheduler.Run, nam
 			}
 		}
 		changed = true
+		// Count-only updates refresh the row and publish it; only a lifecycle change adds a message row.
+		lifecycle := existing.Step != model.Step || existing.MessageCode != model.MessageCode || existing.LatestMessage != model.LatestMessage || existing.Status != model.Status
 		if err := tx.Table("activities").Where("id = ?", run.ActivityID).Updates(map[string]any{
 			"environment_id": model.EnvironmentID,
 			"status":         model.Status, "step": model.Step, "latest_message": model.LatestMessage,
@@ -492,8 +494,10 @@ func (s *ActivityService) SyncJobRun(ctx context.Context, run scheduler.Run, nam
 		}).Error; err != nil {
 			return err
 		}
-		if err := tx.Create(&ActivityMessage{ActivityID: model.ID, Level: activity.MessageLevelInfo, Message: model.LatestMessage, Code: model.MessageCode, Step: model.Step, CreatedAt: run.UpdatedAt}).Error; err != nil {
-			return err
+		if lifecycle {
+			if err := tx.Create(&ActivityMessage{ActivityID: model.ID, Level: activity.MessageLevelInfo, Message: model.LatestMessage, Code: model.MessageCode, Step: model.Step, CreatedAt: run.UpdatedAt}).Error; err != nil {
+				return err
+			}
 		}
 		syncedAt := time.Now().UTC()
 		return tx.Save(&ActivitySyncReceipt{RunID: run.ID, UpdatedAt: run.UpdatedAt, SyncedAt: &syncedAt}).Error
