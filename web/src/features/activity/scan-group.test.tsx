@@ -363,7 +363,7 @@ it("starts the countdown once a held outcome turns out complete, and after a fai
   expect(lifeTrack() !== null).toBe(true);
 });
 
-// Deferred targets only reached the per-run limit; the next scan checks them, so the ordinary lifetime applies.
+// Deferred targets only reached the per-run limit and wait for later scans, so the ordinary lifetime applies.
 it("holds the countdown for a candidate run until its counters arrive and then counts down a deferred-only result", async () => {
   const candidate = { type: "vulnerability.candidate-scan" };
   const f = harness([], { a: { candidateScan: { targets: 5, scanned: 3, cached: 0, deferred: 2, failed: 0 } } });

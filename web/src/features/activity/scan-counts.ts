@@ -20,7 +20,7 @@ export const isScanRun = (run: Pick<ActionRun, "kind" | "sourceOperation">) => r
 /**
  * A failed or partial scan result stays until closed (#611). The durable record can be partial under a succeeded
  * activity: a host run with failed images, or a candidate run with failed targets. Deferred targets only hit the
- * per-run limit and the next scan checks them, so they keep the ordinary lifetime.
+ * per-run limit and wait for later scans, so they keep the ordinary lifetime.
  */
 export const scanPersistent = (run: ActionRun) =>
   isScanRun(run) && (run.status === "failed" || ["partial", "failed", "interrupted"].includes(run.scan?.summary?.status ?? "")

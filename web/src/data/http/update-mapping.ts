@@ -25,7 +25,8 @@ export function mapUpdateInfo(dto: components["schemas"]["ImageUpdateInfo"] | un
   const first = reference.split("/")[0] ?? "";
   const registry = dto.authRegistry || (reference.includes("/") && /[.:]/.test(first) ? first : "docker.io");
   if (dto.state === "current") return { ...metadata, state: "current", current: image, checkedAt, registry };
-  if (dto.state === "rebuild") return { ...metadata, state: "rebuild", current: image, latest: { ...image, ...(dto.latestVersion ? { version: dto.latestVersion } : {}) }, checkedAt, registry };
+  // Without an image version label the producer echoes the tag as latestVersion; that names no build.
+  if (dto.state === "rebuild") return { ...metadata, state: "rebuild", current: image, latest: { ...image, version: dto.latestVersion && dto.latestVersion !== current.tag ? dto.latestVersion : undefined }, checkedAt, registry };
   if (dto.state === "version" && compareVersion(dto.currentVersion, dto.latestVersion) !== undefined) {
     return { ...metadata, state: "version", current: image, latest: { ...image, tag: dto.latestVersion, version: dto.latestVersion }, level: levelFromVersions(dto.currentVersion, dto.latestVersion), checkedAt, registry };
   }

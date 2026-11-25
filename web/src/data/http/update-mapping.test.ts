@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { mapStack, type ProjectRow } from "./inventory-mapping";
 import { mapUpdateInfo } from "./update-mapping";
 import { hasUpdate, summarizeUpdates } from "@/domain/updates";
+import { checkTimes } from "@/shared/components/updates/update-times";
 import type { components } from "@/api/generated/schema";
 import patternTags from "./testdata/pattern-tag-updates.json";
 
@@ -25,6 +26,12 @@ describe("stored update observation", () => {
     expect(mapUpdateInfo({ ...observation("version"), latestVersion: "" }, image, "example:1.0.0").state).toBe("unknown");
     expect(() => mapUpdateInfo({ ...observation("current"), checkedAt: "" }, image, "example:1.0.0")).toThrow();
     expect(() => mapUpdateInfo({ ...observation("current"), authRegistry: 42 } as never, image, "example:1.0.0")).toThrow();
+  });
+  it("treats a rebuild without an image version label as an unnamed new build", () => {
+    const latestTag = { repository: "example", tag: "latest" };
+    const unlabelled = { ...observation("rebuild"), imageRef: "example:latest", currentVersion: "latest", latestVersion: "latest", updateType: "digest" };
+    expect(mapUpdateInfo(unlabelled, latestTag, "example:latest")).toMatchObject({ state: "rebuild", latest: { tag: "latest", version: undefined } });
+    expect(mapUpdateInfo({ ...unlabelled, latestVersion: "1.2.3" }, latestTag, "example:latest")).toMatchObject({ latest: { version: "1.2.3" } });
   });
   it("marks an image missing on the host as not pulled", () => {
     expect(mapUpdateInfo({ ...observation("unknown"), updateType: "not_pulled" }, image, "example:1.0.0")).toMatchObject({ state: "unknown", notPulled: true });
@@ -52,6 +59,17 @@ it("incomplete project counts cannot turn known service observations into all-cu
   expect(() => mapStack({ ...row, updateInfo: { ...row.updateInfo!, imageCount: "two" } as never }, "host", [], { stale: false })).toThrow();
 });
 
+
+it("a missing image marks only its own service, not checked neighbours", () => {
+  const runtimeServices: NonNullable<ProjectRow["runtimeServices"]> = [{ name: "web", image: "example:1.0.0", status: "running" }, { name: "agent", image: "example/agent:2.0.0", status: "running" }];
+  const updateInfo: ProjectRow["updateInfo"] = { status: "not_pulled", hasUpdate: false, imageCount: 2, checkedImageCount: 2, imagesWithUpdates: 0, imagesNotPulled: 1, errorCount: 0, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("current") }, agent: { imageRef: "example/agent:2.0.0", updateInfo: { ...observation("unknown"), imageRef: "example/agent:2.0.0", updateType: "not_pulled" } } } };
+  const row: ProjectRow = { id: "project", name: "Example", tags: [], status: "running", isArchived: false, serviceCount: 2, runningCount: 2, path: "/srv/example", createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z", runtimeServices, updateInfo };
+  const mapped = mapStack(row, "host", [], { stale: false });
+  expect(mapped.services.map((s) => [s.update.incomplete, s.update.notPulled])).toEqual([[false, undefined], [true, true]]);
+  expect(checkTimes(mapped.services.map((s) => s.update))).toMatchObject({ unchecked: 0, notPulled: 1 });
+  // Another gap (an unrecorded image) still marks every service.
+  expect(mapStack({ ...row, updateInfo: { ...updateInfo, imageCount: 3 } }, "host", [], { stale: false }).services.every((s) => s.update.incomplete)).toBe(true);
+});
 
 it("version observations accept release build metadata without changing update level", () => {
   expect(mapUpdateInfo({ ...observation("version"), currentVersion: "v1.0.0+current.7", latestVersion: "1.1.0+candidate.9" }, image, "example:1.0.0")).toMatchObject({ state: "version", level: "minor", latest: { version: "1.1.0+candidate.9" } });
