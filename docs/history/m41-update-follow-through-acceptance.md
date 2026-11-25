@@ -35,8 +35,11 @@ from a registry or tunnel fault.
 | #624, #626 | Acceptance fix: restore points after recovery, monotone count | Passed. |
 | all | Closing integration (#629) | Failed with 2 blockers in the reconnect notice: success while a hub or peer link was still failed, and a replacement registration inheriting the old interruption. Both fixed; the verify passed. |
 
-Every break-map row and blocker fix has a test that fails on an assertion when
-its guard is reverted.
+Assertion-failure red proofs cover the reviewed fixes and the individually
+tested guards. Break-map evidence is still incomplete for a durable-store
+restart, real retry and recovery rediscovery, a host invalidated mid-check,
+decoding of older persisted outcomes, the complete Docker-to-hub producer chain
+and a dedicated invariance test for the new skip; #630 tracks these.
 
 Maintainer decisions: D-1 the disconnect notice turns into the reconnect notice
 in the same toast; K1 a missing local image is a skipped target; K2 a check
@@ -101,5 +104,8 @@ product classifies unknown by design.
   projection budget) and small presentation refinements.
 - Agents at contract 23 (1.6.0, 1.7.0) stay compatible; their own local job
   runs show no counts.
-- Delta run 2's cleanup removed four dormant fixtures from an earlier
-  milestone in the sandbox; their data was kept. No product state was affected.
+- A cleanup error in delta run 2 lost four dormant sandbox fixture container
+  definitions from an earlier milestone and their complete configuration
+  archive. Their bind data was kept, but the fixtures were still not fully
+  restored after the exact-main run. Product and package restoration and the
+  scored acceptance witnesses passed.
