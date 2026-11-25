@@ -6,12 +6,13 @@
 
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { renderStackDetail } from "@/data/message-code";
 import type { ContainerHealthDetails } from "@/domain/health";
-import type { Service } from "@/domain/model";
+import type { Service, StackDetail } from "@/domain/model";
 import type { HistoryRange, RuntimeHistory } from "@/domain/history";
 import { renderRoutes } from "@/test/render";
 import { HealthTab } from "./HealthTab";
@@ -50,20 +51,24 @@ it("renders all service reasons in service order, with no hint for healthy", asy
   expect(screen.getByText('The probe tool "curl" is missing in the image.').textContent).toContain("curl");
   expect(screen.getByText("Waiting for the first probe.").textContent).toBeTruthy();
   expect(screen.getByText("No healthcheck defined.").textContent).toBeTruthy();
-  expect(within(screen.getByRole("region", { name: "healthy" })).queryByText(/probe|healthcheck/i) === null).toBe(true);
+  expect(screen.getByRole("region", { name: "healthy" }).querySelector("[data-health-hint]") === null).toBe(true);
   expect([...container.querySelectorAll("section")].map((r) => r.getAttribute("aria-label"))).toEqual(names);
 });
 
 it("toggles raw data by keyboard and renders probe output as plain text", async () => {
   const user = userEvent.setup();
-  const { container } = await setup(["http"]);
+  const { container } = await setup(["http"], {}, async (id) => {
+    const d = details(id);
+    d.probes = [{ start: "2026-11-01T10:00:30Z", exitCode: 1, output: "older probe" }, ...d.probes];
+    return d;
+  });
   await screen.findByText(/checked path does not exist/);
   const toggle = screen.getByRole("button", { name: "Raw health data" });
   expect(screen.queryByText(check.test[1]!) === null).toBe(true);
   toggle.focus();
   await user.keyboard("{Enter}");
   expect(screen.getByText(check.test[1]!).textContent).toBe(check.test[1]);
-  expect(container.querySelector("pre")?.textContent).toBe(raw);
+  expect([...container.querySelectorAll("pre")].map((pre) => pre.textContent)).toEqual([raw, "older probe"]);
   expect(container.querySelector("pre b") === null).toBe(true);
   expect(screen.getByText("default").textContent).toBe("default");
   await user.keyboard("{Enter}");
@@ -106,4 +111,27 @@ it("focuses and scrolls to the deep-linked service while keeping every row", asy
   expect(document.activeElement === screen.getByRole("region", { name: "b" })).toBe(true);
   expect(screen.getAllByRole("region").length).toBe(2);
   expect(scroll).toHaveBeenCalledWith({ block: "center" });
+});
+
+it("follows a same-name recreate: health reads the new id, history keeps its name key", async () => {
+  const user = userEvent.setup();
+  const demo = createDemoAdapter();
+  const original = renderStackDetail(await demo.getStack("media"), "en-US");
+  const service = { ...original.services[0]!, name: "web", containerId: "old-id", containerName: "stack-web" };
+  const health = vi.fn(async (id: string) => {
+    const d = details(id);
+    if (id === "new-id") d.probes[0]!.output = 'exec: "curl": executable file not found';
+    return d;
+  });
+  const history = vi.fn(async (_ref: unknown, range: HistoryRange) => emptyHistory(range));
+  function Recreating() {
+    const [stack, setStack] = useState<StackDetail>({ ...original, services: [service] });
+    return <><button type="button" onClick={() => setStack({ ...stack, services: [{ ...service, containerId: "new-id" }] })}>recreate</button><HealthTab stack={stack} /></>;
+  }
+  renderRoutes([{ path: "/", element: <Recreating /> }], ["/"], { ...demo, getContainerHealth: health, getContainerHistory: history });
+  await screen.findByText(/checked path does not exist/);
+  await user.click(screen.getByRole("button", { name: "recreate" }));
+  await waitFor(() => expect(health.mock.calls.map(([id]) => id)).toEqual(["old-id", "new-id"]));
+  await screen.findByText('The probe tool "curl" is missing in the image.');
+  expect(history.mock.calls.map(([ref]) => ref)).toEqual([{ hostId: original.hostId, name: "stack-web" }]);
 });
