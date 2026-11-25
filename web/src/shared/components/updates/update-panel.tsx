@@ -279,11 +279,12 @@ export function UpdateChip({ update }: { update: UpdateInfo }) {
   const v = updateVisual(update);
   const Icon = UPDATE_ICON[v];
   const latest = latestOf(update);
-  // Same-tag rebuilds lead with build facts: date, then a changed version, then the short ID.
+  // Same-tag rebuilds read "tag · build date", else "tag · short image ID"; a changed version replaces the tag.
   const rebuilt = v === "rebuild" ? latest : undefined;
-  const title = rebuilt?.published ? t("builtAt", { date: formatDateTime(rebuilt.published) }) : !rebuilt?.version && rebuilt?.buildId ? t("noBuildDate") : undefined;
+  const build = rebuilt?.published ? formatDate(rebuilt.published) : rebuilt?.buildId;
+  const title = rebuilt?.published ? t("builtAt", { date: formatDateTime(rebuilt.published) }) : rebuilt?.buildId ? t("noBuildDate") : undefined;
   const text =
-    v === "current" ? t("chipCurrent") : v === "rebuild" ? ((rebuilt?.published ? formatDate(rebuilt.published) : rebuilt?.version ?? rebuilt?.buildId) ?? t("chipRebuild")) : v === "error" ? t("chipError") : v === "local" ? t("chipLocal") : v === "unknown" ? t("chipUnknown") : v === "unchecked" ? t("chipUnchecked") : (latest?.version ?? "");
+    v === "current" ? t("chipCurrent") : v === "rebuild" ? (build ? `${rebuilt?.version ?? rebuilt?.tag} · ${build}` : rebuilt?.version ?? t("chipRebuild")) : v === "error" ? t("chipError") : v === "local" ? t("chipLocal") : v === "unknown" ? t("chipUnknown") : v === "unchecked" ? t("chipUnchecked") : (latest?.version ?? "");
   return (
     <ToneBadge tone={UPDATE_TONE[v]} className="cursor-pointer" title={title}>
       <Icon aria-hidden />

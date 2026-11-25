@@ -29,6 +29,8 @@ for (const locale of ["de", "en-US"] as const) {
     expect(text.includes(`latest · ${formatDate("2026-11-24T06:00:00Z")}`)).toBe(true);
     expect(text.includes("latest · bbbbbbb")).toBe(true);
     expect(text.includes("latestlatest")).toBe(false);
+    expect(screen.getAllByText(`latest · ${formatDate("2026-11-24T06:00:00Z")}`).length).toBe(2);
+    expect(screen.getAllByText("latest · bbbbbbb").length).toBe(2);
     expect(screen.getAllByTitle(copy.noBuildDate).length).toBe(3);
     expect(screen.getAllByTitle(copy.builtAt.replace("{date}", formatDateTime("2026-11-24T06:00:00Z"))).length).toBe(2);
     view.unmount();
@@ -41,7 +43,7 @@ for (const locale of ["de", "en-US"] as const) {
     const text = document.body.textContent ?? "";
     expect(text.includes(`release-1.0.0 · ${formatDate("2026-11-12T08:00:00Z")}`)).toBe(true);
     expect(text.includes(`1.0.1 · ${formatDate("2026-11-24T06:00:00Z")}`)).toBe(true);
-    expect(screen.getAllByText(formatDate("2026-11-24T06:00:00Z")).length).toBe(1);
+    expect(screen.getAllByText(`1.0.1 · ${formatDate("2026-11-24T06:00:00Z")}`).length).toBe(2);
     view.unmount();
   });
 }

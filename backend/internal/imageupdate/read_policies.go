@@ -112,6 +112,7 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 				containerErr = imageDTO.Failure("update.check-unavailable", 503)
 			}
 		}
+		scopeBuildTimes(&projected, local)
 		if inspectErr != nil || containerErr != nil || inspected.Container.Image != consumers[id] || consumers[id] == "" || consumers[id] != baseline.ID {
 			projected.State = "unknown"
 			projected.HasUpdate = false
@@ -172,3 +173,11 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 }
 
 func checkCodeString(message string) string { return checkCode(errors.New(message)) }
+
+// scopeBuildTimes keeps build times only for the consumer's verified platform;
+// a shared snapshot of another platform names no build of this consumer.
+func scopeBuildTimes(projected *checkDTO.Response, local identity.LocalImage) {
+	if projected.Platform == "" || projected.Platform != local.Platform.String() {
+		projected.CurrentCreated, projected.LatestCreated = nil, nil
+	}
+}

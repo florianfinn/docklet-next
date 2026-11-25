@@ -57,9 +57,9 @@ func (s *ImageUpdateService) saveConsumerObservation(ctx context.Context, consum
 		}
 		if native != nil {
 			record.SetNativeObservation(*native)
+			// Build times belong to the native identity evidence kept here.
+			record.CurrentCreated, record.LatestCreated = result.CurrentCreated, result.LatestCreated
 		}
-		// Build times belong to the identity evidence kept above.
-		record.CurrentCreated, record.LatestCreated = result.CurrentCreated, result.LatestCreated
 	}
 	if result.Error != "" {
 		record.LastError = &result.Error
