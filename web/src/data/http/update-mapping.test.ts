@@ -26,6 +26,10 @@ describe("stored update observation", () => {
     expect(() => mapUpdateInfo({ ...observation("current"), checkedAt: "" }, image, "example:1.0.0")).toThrow();
     expect(() => mapUpdateInfo({ ...observation("current"), authRegistry: 42 } as never, image, "example:1.0.0")).toThrow();
   });
+  it("marks an image missing on the host as not pulled", () => {
+    expect(mapUpdateInfo({ ...observation("unknown"), updateType: "not_pulled" }, image, "example:1.0.0")).toMatchObject({ state: "unknown", notPulled: true });
+    expect(mapUpdateInfo(observation("unknown"), image, "example:1.0.0")).not.toHaveProperty("notPulled");
+  });
   it("does not call a partially checked stack current", () => {
     expect(summarizeUpdates([{ name: "web", update: mapUpdateInfo(observation("current"), image, "example:1.0.0") }, { name: "db", update: { state: "unchecked", current: image } }]).visual).toBe("unchecked");
   });

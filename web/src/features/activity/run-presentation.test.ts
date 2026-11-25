@@ -264,6 +264,11 @@ describe("update times", () => {
     expect([checkTimes(updates), checkTimes([{ state: "unchecked", current: img }])]).toEqual([{ checkedAt: "2026-10-11T08:00:00.000Z", unchecked: 2 }, { checkedAt: undefined, unchecked: 1 }]);
   });
 
+  it("counts an image missing on the host apart from unchecked images", () => {
+    const missing: UpdateInfo = { state: "unknown", current: img, checkedAt: "2026-10-12T08:00:00.000Z", incomplete: true, notPulled: true };
+    expect(checkTimes([missing, ...updates])).toEqual({ checkedAt: "2026-10-12T08:00:00.000Z", unchecked: 2, notPulled: 1 });
+  });
+
   it("uses only successful update runs of the stack, history and live runs together", () => {
     const r = (kind: ActionKind, status: ActionStatus, finishedAt: string, stackId = "home") => ({ kind, status, finishedAt, stackId });
     const runs = [r("update", "succeeded", "2026-10-09T10:00:00.000Z"), r("update", "failed", "2026-10-11T10:00:00.000Z"), r("redeploy", "succeeded", "2026-10-11T11:00:00.000Z"), r("update", "succeeded", "2026-10-11T12:00:00.000Z", "cloud")];

@@ -255,6 +255,7 @@ export const enCommon = {
     lastUpdated: "Last updated",
     neverChecked: "Never checked",
     partlyUnchecked: "{count, plural, one {# image} other {# images}} not checked",
+    notPulled: "{count, plural, one {# image} other {# images}} not on host",
     checkNotPossible: "Local image – no check possible",
     noUpdateRecorded: "No update run recorded",
     noteMajor: "Major version according to the version number: changes that require adjustments are possible. Read the release notes before updating.",

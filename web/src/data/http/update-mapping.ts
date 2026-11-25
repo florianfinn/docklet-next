@@ -16,7 +16,7 @@ export function mapUpdateInfo(dto: components["schemas"]["ImageUpdateInfo"] | un
   if (dto) dto = observation(dto);
   if (!dto || !sameImageReference(dto.imageRef, reference)) return { state: "unchecked", current };
   const checkedAt = dto.checkedAt || undefined;
-  const metadata = { ...(dto.code ? { code: dto.code } : {}), authState: dto.authState, stale };
+  const metadata = { ...(dto.code ? { code: dto.code } : {}), ...(dto.updateType === "not_pulled" ? { notPulled: true } : {}), authState: dto.authState, stale };
   const image = { ...current, ...(dto.currentVersion ? { version: dto.currentVersion } : {}) };
   if (dto.state === "local") return { ...metadata, state: "local", current: image };
   if (dto.state === "unchecked") return { ...metadata, state: "unchecked", current: image };

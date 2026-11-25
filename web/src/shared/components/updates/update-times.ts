@@ -11,22 +11,25 @@ export interface UpdateTimes {
   checkedAt?: string;
   /** Images without a registry check (never checked or local only). */
   unchecked: number;
+  /** Images absent on the host; counted apart from `unchecked` because the reason is known. */
+  notPulled?: number;
   /** End of the last successful update run. */
   updatedAt?: string;
 }
 
-export function checkTimes(updates: UpdateInfo[]): Pick<UpdateTimes, "checkedAt" | "unchecked"> {
+export function checkTimes(updates: UpdateInfo[]): Pick<UpdateTimes, "checkedAt" | "unchecked" | "notPulled"> {
   let checkedAt: string | undefined;
-  let unchecked = 0;
+  let unchecked = 0, notPulled = 0;
   for (const u of updates) {
+    if (u.notPulled) notPulled++;
     if (!("checkedAt" in u) || !u.checkedAt) {
       unchecked++;
       continue;
     }
-    if (u.incomplete) unchecked++;
+    if (u.incomplete && !u.notPulled) unchecked++;
     if (!checkedAt || u.checkedAt > checkedAt) checkedAt = u.checkedAt;
   }
-  return { checkedAt, unchecked };
+  return { checkedAt, unchecked, ...(notPulled ? { notPulled } : {}) };
 }
 
 /** End of the newest successful update run of a stack, live runs included. */
