@@ -163,6 +163,12 @@ working, but their own local job runs show no progress counts until they are
 updated. Update every agent to 1.8.0 afterwards so hub and agents share one
 version.
 
+Upgrading to 1.9.0: migration `008_image_build_dates` adds two nullable build
+time columns to stored update checks; back up the hub first. There is no new
+environment variable and the agent contract stays 24. Stored checks show build
+dates after their next update check; agents on 1.6.0 to 1.8.0 keep working and
+their stacks show a short image ID instead of a date until they are updated.
+
 ## Recover a failed in-app update
 
 The helper keeps a per-operation backup beside the interpolation env file:
