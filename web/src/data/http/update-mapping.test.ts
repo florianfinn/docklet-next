@@ -65,6 +65,21 @@ it("a missing image marks only its own service, not checked neighbours", () => {
   expect(mapStack({ ...row, updateInfo: { ...updateInfo, imageCount: 3 } }, "host", [], { stale: false }).services.every((s) => s.update.incomplete)).toBe(true);
 });
 
+it("counts missing images by reference, also when services share one", () => {
+  const missing = (ref: string) => ({ imageRef: ref, updateInfo: { ...observation("unknown"), imageRef: ref, updateType: "not_pulled" } });
+  const runtimeServices: NonNullable<ProjectRow["runtimeServices"]> = [{ name: "web", image: "example:1.0.0", status: "running" }, { name: "a1", image: "example/a:1", status: "running" }, { name: "a2", image: "example/a:1", status: "running" }];
+  const updateInfo: ProjectRow["updateInfo"] = { status: "not_pulled", hasUpdate: false, imageCount: 3, checkedImageCount: 3, imagesWithUpdates: 0, imagesNotPulled: 2, notPulledImageRefs: ["example/a:1", "example/b:1"], errorCount: 0, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("current") }, a1: missing("example/a:1"), a2: missing("example/a:1") } };
+  const row: ProjectRow = { id: "project", name: "Example", tags: [], status: "running", isArchived: false, serviceCount: 3, runningCount: 3, path: "/srv/example", createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z", runtimeServices, updateInfo };
+  const web = (info: ProjectRow["updateInfo"]) => mapStack({ ...row, updateInfo: info }, "host", [], { stale: false }).services[0]!.update.incomplete;
+  // Missing image b has no shown service: the checked neighbour stays incomplete, with and without the reference list.
+  expect([web(updateInfo), web({ ...updateInfo, notPulledImageRefs: undefined })]).toEqual([true, true]);
+  // Only the shared image a is missing: the neighbour is complete and a counts once.
+  const shared = { ...updateInfo, imageCount: 2, checkedImageCount: 2, imagesNotPulled: 1, notPulledImageRefs: ["example/a:1"] };
+  const mapped = mapStack({ ...row, updateInfo: shared }, "host", [], { stale: false });
+  expect([web(shared), web({ ...shared, notPulledImageRefs: undefined })]).toEqual([false, false]);
+  expect(checkTimes(mapped.services.map((s) => s.update))).toMatchObject({ unchecked: 0, notPulled: 1 });
+});
+
 it("version observations accept release build metadata without changing update level", () => {
   expect(mapUpdateInfo({ ...observation("version"), currentVersion: "v1.0.0+current.7", latestVersion: "1.1.0+candidate.9" }, image, "example:1.0.0")).toMatchObject({ state: "version", level: "minor", latest: { version: "1.1.0+candidate.9" } });
   for (const currentVersion of ["01.0.0+build", "1.0.0-rc.1+build", "9007199254740992.0.0+build"]) expect(mapUpdateInfo({ ...observation("version"), currentVersion }, image, "example:1.0.0").state).toBe("unknown");

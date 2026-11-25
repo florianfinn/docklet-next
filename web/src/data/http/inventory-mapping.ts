@@ -103,7 +103,8 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
     const id = runtime.containerId;
     return !id || !containers.some((item) => item.id === inventoryId(hostId, id) && !!item.stackId && item.stackId !== inventoryId(hostId, row.id));
   });
-  const services: Service[] = (runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
+  const sources = runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }));
+  const services: Service[] = sources.map((runtime) => {
     const container = members.find((item) => item.id === inventoryId(hostId, runtime.containerId || "absent"));
     const common = { name: runtime.name, ...(runtime.status === "not-created" ? { containersRemoved: true } : runtime.containerId ? { containerId: inventoryId(hostId, runtime.containerId) } : {}), state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
       ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0 } as const;
@@ -114,8 +115,14 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
     return { ...common, image,
       update: mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale) };
   });
-  const flagged = services.filter((service) => service.update.notPulled).length;
-  const unflagged = !!row.updateInfo && row.updateInfo.imagesNotPulled > flagged;
+  // The producer counts and lists distinct missing references; one not shown by a flagged service marks every service.
+  const flagged: string[] = [];
+  for (const [i, service] of services.entries()) {
+    const ref = sources[i]?.image;
+    if (service.update.notPulled && ref && !flagged.some((f) => sameImageReference(f, ref))) flagged.push(ref);
+  }
+  const listed = row.updateInfo?.notPulledImageRefs;
+  const unflagged = !!row.updateInfo && (listed ? listed.some((ref) => !flagged.some((f) => sameImageReference(f, ref))) : row.updateInfo.imagesNotPulled > flagged.length);
   for (const service of services) if (!("buildOnly" in service)) service.update = { ...service.update, incomplete: gap || unflagged || !!service.update.notPulled };
   const url = stackAddress(row.urls);
   const role = members.map((item) => systemRole(item.dockerLabels)).find((value) => value !== undefined);

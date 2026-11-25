@@ -19,9 +19,11 @@ export interface UpdateTimes {
 
 export function checkTimes(updates: UpdateInfo[]): Pick<UpdateTimes, "checkedAt" | "unchecked" | "notPulled"> {
   let checkedAt: string | undefined;
-  let unchecked = 0, notPulled = 0;
+  let unchecked = 0;
+  // Services sharing a missing image count it once.
+  const notPulledRefs = new Set<string>();
   for (const u of updates) {
-    if (u.notPulled) notPulled++;
+    if (u.notPulled) notPulledRefs.add(`${u.current.repository}:${u.current.tag}`);
     if (!("checkedAt" in u) || !u.checkedAt) {
       unchecked++;
       continue;
@@ -29,7 +31,7 @@ export function checkTimes(updates: UpdateInfo[]): Pick<UpdateTimes, "checkedAt"
     if (u.incomplete && !u.notPulled) unchecked++;
     if (!checkedAt || u.checkedAt > checkedAt) checkedAt = u.checkedAt;
   }
-  return { checkedAt, unchecked, ...(notPulled ? { notPulled } : {}) };
+  return { checkedAt, unchecked, ...(notPulledRefs.size ? { notPulled: notPulledRefs.size } : {}) };
 }
 
 /** End of the newest successful update run of a stack, live runs included. */
