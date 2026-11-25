@@ -94,6 +94,7 @@ export function firstProbeDue(check: HealthCheckConfig, startedAt: string): numb
   return time(startedAt) + interval + (check.timeoutMs || HEALTH_DEFAULTS.timeoutMs);
 }
 
+const TIMEOUT = /Health check exceeded timeout/;
 const TOOL_EXEC = /exec: "([^"]+)": executable file not found/;
 const TOOL_SHELL = /(?:^|\n)(?:\S*\/)?(?:sh|ash|bash|dash)(?::\s*(?:line\s*)?\d+)?:\s*([^\s:]+):\s*(?:command\s+)?not found/;
 const HTTP_WGET = /server returned error: HTTP\/[\d.]+ (\d{3})/;
@@ -102,7 +103,7 @@ const HTTP_CURL = /returned error: (\d{3})/;
 /** Reads the reason of one failed probe from its printed output; unknown output stays "failing". */
 export function classifyProbe(probe: HealthProbe): HealthDiagnosis {
   const out = probe.output;
-  if (out.includes("Health check exceeded timeout")) return { reason: "timeout", probe };
+  if (TIMEOUT.test(out)) return { reason: "timeout", probe };
   const exec = TOOL_EXEC.exec(out);
   if (exec) return { reason: "tool-missing", tool: exec[1], probe };
   const shell = TOOL_SHELL.exec(out);
