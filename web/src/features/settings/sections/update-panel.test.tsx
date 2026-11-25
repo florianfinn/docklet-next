@@ -23,6 +23,11 @@ const t = createTranslator({ locale: "en-US", messages: catalogs["en-US"] });
 const manual = ["docker compose pull", "docker compose up -d"];
 const answer = (eligibility: Partial<SelfUpdateCheck["eligibility"]>, extra: Partial<SelfUpdateCheck> = {}): SelfUpdateCheck => ({ version: "1.5.0", eligibility: { state: "available", candidate: { version: "1.6.0" }, manual, ...eligibility }, ...extra });
 const cleanups: (() => void)[] = [];
+// Query observers are notified on a later task; wait for the rendered phase, not only the refetch.
+const phase = async (client: QueryClient, available: boolean) => {
+  await act(async () => { await client.refetchQueries(); });
+  await waitFor(() => expect(screen.queryByText(t("common.versionBadge.available", { version: "1.6.0" })) !== null).toBe(available));
+};
 afterEach(() => { cleanup(); cleanups.splice(0).forEach((f) => f()); vi.restoreAllMocks(); });
 function adapterWith(overrides: Partial<DockletAdapter>): DockletAdapter {
   return { ...createDisconnectedAdapter(), kind: "http", getCapability: vi.fn(async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: true })), ...overrides };
@@ -82,15 +87,33 @@ describe("row 7: manual-command disclosure", () => {
     await waitFor(() => expect(trigger() !== null).toBe(true));
     trigger()!.focus(); await userEvent.setup().keyboard("{Enter}");
     expect(screen.queryByText(manual[0]!) !== null).toBe(true);
-    await act(async () => { await f.client.refetchQueries(); });
+    await phase(f.client, true);
     expect(trigger()!.getAttribute("aria-expanded")).toBe("true");
     value = answer({ state: "not-eligible", code: "update.self-custom-image" });
-    await act(async () => { await f.client.refetchQueries(); });
+    await phase(f.client, false);
+    expect(trigger()!.getAttribute("aria-expanded")).toBe("true");
     await userEvent.setup().click(trigger()!);
     expect(trigger()!.getAttribute("aria-expanded")).toBe("false");
     value = answer({});
-    await act(async () => { await f.client.refetchQueries(); });
+    await phase(f.client, true);
     expect(trigger()!.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("row 7: disclosure reset across class changes (S3-R1-B1)", () => {
+  const trigger = () => screen.queryByRole("button", { name: t("settings.updates.selfUpdate.manualCommands", { count: 2 }) });
+  it.each([
+    ["a closed not-eligible panel reopens after an available phase", answer({ state: "not-eligible", code: "update.self-custom-image" }), answer({}), "true"],
+    ["an opened available panel closes again after a not-eligible phase", answer({}), answer({ state: "not-eligible", code: "update.self-custom-image" }), "false"],
+  ] as const)("%s", async (_, start, middle, expected) => {
+    let value: SelfUpdateCheck = start;
+    const f = mount(<LiveUpdatesSelfUpdate hostId="b" name="Beta" />, adapterWith({ getSelfUpdate: vi.fn(async () => value) }));
+    await waitFor(() => expect(trigger() !== null).toBe(true));
+    await userEvent.setup().click(trigger()!);
+    const startAvailable = start.eligibility.state === "available";
+    value = middle; await phase(f.client, !startAvailable);
+    value = start; await phase(f.client, startAvailable);
+    expect(trigger()!.getAttribute("aria-expanded")).toBe(expected);
   });
 });
 

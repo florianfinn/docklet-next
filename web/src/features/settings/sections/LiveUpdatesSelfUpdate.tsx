@@ -32,7 +32,7 @@ export function LiveUpdatesSelfUpdate({ hostId, name, host }: { hostId: string; 
   const format = useFormatter(), { query, recheck: fetchFresh } = useSelfUpdateCheck(hostId, { host, enabled: cap.available });
   const [confirm, setConfirm] = useState<string>(), [started, setStarted] = useState<string>();
   const [rechecking, setRechecking] = useState(false), [checkedAt, setCheckedAt] = useState<Date>();
-  const [toggled, setToggled] = useState<{ auto: boolean; open: boolean }>();
+  const [toggled, setToggled] = useState<boolean>(), [toggleClass, setToggleClass] = useState<boolean>();
   const recheck = async () => {
     setRechecking(true);
     try {
@@ -60,7 +60,9 @@ export function LiveUpdatesSelfUpdate({ hostId, name, host }: { hostId: string; 
   const shownState = query.isError ? "unavailable" : state.state, stateLine = shownState !== "current" && shownState !== "available";
   // Commands open by default only when the automatic update is not possible; a failed read carries none.
   const autoOpen = !query.isError && (state.state === "not-eligible" || state.state === "unavailable") && state.code !== "host.busy" && !running;
-  const commandsOpen = toggled?.auto === autoOpen ? toggled.open : autoOpen;
+  // A user toggle lasts until the default-open class changes; returning to the old class does not restore it.
+  if (toggleClass !== autoOpen) { setToggleClass(autoOpen); setToggled(undefined); }
+  const commandsOpen = toggleClass === autoOpen ? toggled ?? autoOpen : autoOpen;
   return <section id={hostUpdateAnchor(hostId)} className="flex scroll-mt-24 flex-col gap-3" aria-label={title}>
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <h4 ref={heading} tabIndex={-1} className="font-semibold">{name ?? title}</h4>
@@ -76,7 +78,7 @@ export function LiveUpdatesSelfUpdate({ hostId, name, host }: { hostId: string; 
         <Button type="button" variant="outline" disabled={query.isFetching || rechecking} aria-label={name ? t("checkFor", { name }) : undefined} onClick={() => { void recheck(); }}>{rechecking && <Spinner data-icon="inline-start" />}{t("check")}</Button>
         {runId && <Button type="button" variant="ghost" onClick={() => openActivity(runId)}>{t("viewRun")}</Button>}
       </div>
-      {state.manual.length > 0 && <Collapsible open={commandsOpen} onOpenChange={(open) => setToggled({ auto: autoOpen, open })} className="flex flex-col gap-2">
+      {state.manual.length > 0 && <Collapsible open={commandsOpen} onOpenChange={setToggled} className="flex flex-col gap-2">
         <CollapsibleTrigger asChild><Button type="button" variant="ghost" size="sm" className="w-fit gap-1 px-1 text-muted-foreground"><ChevronRight aria-hidden className={commandsOpen ? "rotate-90 transition-transform" : "transition-transform"} />{t("manualCommands", { count: state.manual.length })}</Button></CollapsibleTrigger>
         <CollapsibleContent className="flex flex-col gap-2">{state.manual.map((command, index) => <CodeBlock key={`${index}:${command}`} code={command} label={t("manual", { number: index + 1 })} />)}</CollapsibleContent>
       </Collapsible>}
