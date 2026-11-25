@@ -35,6 +35,7 @@ import { Separator } from "@/shared/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/shared/ui/sidebar";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { useSidebarOpen } from "@/shared/preferences/sidebar-store";
+import { GuidedTour } from "@/shared/tour/GuidedTour";
 
 import { PAGE_MAX_WIDTH, pageWidth } from "./page-width";
 import { NAV, type NavGroup } from "./nav-items";
@@ -161,6 +162,7 @@ function AdministratorShell({ navigation }: { navigation: NavGroup[] }) {
       <ActionDialog />
       <BulkResultController /><AppToaster />
       <ServiceRestartDialog />
+      <GuidedTour />
       <DesignLabPanel />
     </SidebarProvider>
   );

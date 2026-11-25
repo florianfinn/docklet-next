@@ -531,6 +531,9 @@ export const deSettings: typeof enSettings = {
     previewTopic: "So erscheint die Erklärung zur internen Hub-Adresse:",
     previewOff: "Info-Symbole sind ausgeblendet.",
     trigger: "Hover nach kurzer Verzögerung, Tastaturfokus oder Tippen öffnet die Erklärung; Escape schließt sie.",
+    tour: "Geführte Tour",
+    tourStart: "Tour starten",
+    tourHint: "Ein kurzer Rundgang durch die wichtigsten Seiten. Er ändert nichts.",
   },
   activity: {
     events: "Höchstens Ereignisse",

@@ -3,12 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_HELP, helpStore, mergeHelp } from "@/shared/preferences/help-store";
+import { tourStore } from "@/shared/tour/tour-store";
 import { renderWithApp } from "@/test/render";
 
 import { HelpSection } from "./sections/HelpSection";
 
 afterEach(() => {
   helpStore.reset();
+  tourStore.reset();
   localStorage.clear();
 });
 
@@ -40,5 +42,12 @@ describe("explanation settings", () => {
     // A reload reads the stored value back.
     const stored = JSON.parse(localStorage.getItem(KEY) ?? "null") as { v: number; data: unknown };
     expect(stored.v === 1 && mergeHelp(stored.data, DEFAULT_HELP).mode === "off").toBe(true);
+  });
+
+  it("starts the guided tour without touching the draft", async () => {
+    renderWithApp(<HelpSection />);
+    await userEvent.click(screen.getByRole("button", { name: "Tour starten" }));
+    expect(tourStore.get()).toEqual({ status: "running", index: 0 });
+    expect(screen.getByRole("status").textContent).toBe("Alles gespeichert");
   });
 });
