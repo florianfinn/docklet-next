@@ -229,7 +229,7 @@ function CompactDesign(props: DesignProps) {
       <div className="px-3 pb-2" data-slot="toast-track">
         <StepTrack steps={run.outcomeState === "unknown" ? [] : runPhase(run).phases} status={run.status} thin />
       </div>
-      {facts.progress && run.status === "failed" && <p className="px-3 pb-2 text-xs text-muted-foreground" data-slot="toast-scan-counts">{facts.progress}</p>}
+      {facts.progress && run.status === "failed" && facts.progress !== facts.line && <p className="px-3 pb-2 text-xs text-muted-foreground" data-slot="toast-scan-counts">{facts.progress}</p>}
       {!props.holdLife && <LifeBar run={run} onEnd={onClose} />}
     </div>
   );

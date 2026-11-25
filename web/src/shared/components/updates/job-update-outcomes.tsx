@@ -48,7 +48,8 @@ export function JobUpdateOutcomes({ run }: { run: ActionRun }) {
 
 /** Snapshots stay readable; links resolve only against a fresh current inventory. */
 function targetHref(target: UpdateJobTarget, stacks: Stack[] | undefined, containers: ContainerInfo[] | undefined): string | undefined {
-  if (!target.environmentId || !target.targetId) return undefined;
+  // A malformed snapshot renders an unlinked row instead of failing the whole list.
+  if (!target.environmentId || !target.targetId || target.environmentId.includes("~") || target.targetId.includes("~")) return undefined;
   const ref = inventoryId(target.environmentId, target.targetId);
   if (target.targetKind === "stack") {
     const stack = stacks?.find((row) => row.id === ref && row.hostId === target.environmentId);

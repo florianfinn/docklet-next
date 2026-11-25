@@ -21,9 +21,9 @@ import { JobUpdateOutcomes } from "./job-update-outcomes";
 
 const at = "2026-11-25T12:00:00Z";
 const targets = [
-  { id: "direct:stack:project", environmentId: "direct", targetKind: "stack" as const, targetId: "project", name: "Example stack", status: "succeeded" as const, updateAvailable: true },
-  { id: "direct:container:app", environmentId: "direct", targetKind: "container" as const, targetId: "app", name: "Example container", status: "failed" as const, code: "update.check-unavailable" },
-  { id: "direct:stack:removed", environmentId: "direct", targetKind: "stack" as const, targetId: "removed", name: "Removed stack", status: "skipped" as const, code: "update.image-not-pulled" },
+  { id: "direct~stack~project", environmentId: "direct", targetKind: "stack" as const, targetId: "project", name: "Example stack", status: "succeeded" as const, updateAvailable: true },
+  { id: "direct~container~app", environmentId: "direct", targetKind: "container" as const, targetId: "app", name: "Example container", status: "failed" as const, code: "update.check-unavailable" },
+  { id: "direct~stack~removed", environmentId: "direct", targetKind: "stack" as const, targetId: "removed", name: "Removed stack", status: "skipped" as const, code: "update.image-not-pulled" },
 ];
 const run = renderRun(mapActivityDetail({ activity: { id: "example", environmentId: "0", type: "job_run", status: "failed", startedAt: at, createdAt: at, metadata: { jobId: "update-check-host", runId: "example-run" } }, stepTrace: [], messages: [], output: [], outputTruncated: false }), "en-US");
 async function fixture(stale = false, containerName = "app", containerHost = "direct", containerId = "replacement") {
@@ -53,9 +53,9 @@ it("navigates a present stack by a real click and shows names, status tones and 
   await waitFor(() => expect(screen.getByTestId("inventory-ready").textContent).toBe("true"));
   expect(view.container.textContent).toContain("Example stack");
   expect(screen.queryByRole("link", { name: "Example stack" }) !== null).toBe(true);
-  expect(view.container.querySelector('[data-job-target="direct:stack:project"] [data-tone="ok"]') !== null).toBe(true);
-  expect(view.container.querySelector('[data-job-target="direct:container:app"] [data-tone="err"]') !== null).toBe(true);
-  expect(view.container.querySelector('[data-job-target="direct:stack:removed"] [data-tone="warn"]') !== null).toBe(true);
+  expect(view.container.querySelector('[data-job-target="direct~stack~project"] [data-tone="ok"]') !== null).toBe(true);
+  expect(view.container.querySelector('[data-job-target="direct~container~app"] [data-tone="err"]') !== null).toBe(true);
+  expect(view.container.querySelector('[data-job-target="direct~stack~removed"] [data-tone="warn"]') !== null).toBe(true);
   expect(screen.getByText("Update available").getAttribute("data-tone")).toBe("info");
   expect(screen.getByText("Removed stack").closest("a") === null).toBe(true);
   expect(view.container.textContent).toContain(catalogs["en-US"].images.errors["update_image-not-pulled"]);
@@ -100,4 +100,14 @@ it("removes a retained stack link when its inventory reread becomes unavailable"
   await screen.findByRole("link", { name: "Example stack" });
   await userEvent.click(screen.getByRole("button", { name: "Refresh inventory" }));
   await waitFor(() => expect(screen.getByText("Example stack").closest("a") === null).toBe(true));
+});
+
+it("renders a malformed target snapshot as an unlinked row instead of failing the list", async () => {
+  setAppLocale("en-US"); const adapter = await fixture();
+  adapter.getUpdateJobTargets = async () => [{ ...targets[0]!, targetId: "project~extra", name: "Malformed stack" }, targets[1]!];
+  renderWithApp(<><InventoryReady /><JobUpdateOutcomes run={run} /></>, adapter);
+  await screen.findByText("Malformed stack");
+  await waitFor(() => expect(screen.getByTestId("inventory-ready").textContent).toBe("true"));
+  expect(screen.getByText("Malformed stack").closest("a") === null).toBe(true);
+  expect(screen.queryByText("Example container") !== null).toBe(true);
 });
