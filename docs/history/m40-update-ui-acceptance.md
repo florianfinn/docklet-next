@@ -34,8 +34,8 @@ PRs. CI ran on every pushed head.
 Every blocker fix and break-map row has a test that fails on an assertion when
 its guard is reverted.
 
-Main-thread decisions AUTO-1 to AUTO-6 were posted on #617.
-- AUTO-1: the main thread implemented every step itself.
+AUTO-1, a planning decision, had the main thread implement every step itself.
+Main-thread decisions AUTO-2 to AUTO-6 were posted on #617.
 - AUTO-2: for the empty orphan-list check, the hub's historical orphaned restore
   points were removed through the product and then restored from a backup.
 - AUTO-3: a sandbox preference section stays at its default.
