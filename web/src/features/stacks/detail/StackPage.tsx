@@ -2,11 +2,11 @@
 // Revision: d6c87ce35acb0a517963f61e62852640a9dce5d99a34d2a2575077660b53bae0
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Guard rejected host queries before mounting the stack editor; preserves the historical L4 import and existing UI catalogue values. See web/PROVENANCE.md. #82 host inventory observations, localized stale notices and read-only controls. #27 production text, source errors and capability boundaries. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service.
+// Deviations: Guard rejected host queries before mounting the stack editor; preserves the historical L4 import and existing UI catalogue values. See web/PROVENANCE.md. #82 host inventory observations, localized stale notices and read-only controls. #27 production text, source errors and capability boundaries. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M42 #636: stack Health tab.
 
 import { isHostAvailable } from "@/domain/hosts";
 import { InventoryNotice } from "../InventoryNotice";
-import { ArrowLeft, FileCode2, FileText, History, LayoutGrid, Layers, Waypoints } from "lucide-react";
+import { ArrowLeft, FileCode2, FileText, History, HeartPulse, LayoutGrid, Layers, Waypoints } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
@@ -29,17 +29,19 @@ import { useComposeDraft } from "../editor/use-compose-draft";
 import { StackLogs } from "../logs/StackLogs";
 import { allLabels } from "../overview/stack-filters";
 import { DeploymentsTab } from "./DeploymentsTab";
+import { HealthTab } from "./HealthTab";
 import { OverviewTab } from "./OverviewTab";
 import { StackHeader } from "./StackHeader";
 import { StackPageSkeleton } from "./StackPageSkeleton";
 
 const ProxyContext = import.meta.env.DEV ? lazy(() => import("@/features/design-lab/proxy/ProxyContext")) : null;
 
-type Tab = "overview" | "editor" | "logs" | "deployments";
+type Tab = "overview" | "editor" | "logs" | "deployments" | "health";
 const TABS: { id: Tab; icon: typeof LayoutGrid }[] = [
   { id: "overview", icon: LayoutGrid },
   { id: "editor", icon: FileCode2 },
   { id: "logs", icon: FileText },
+  { id: "health", icon: HeartPulse },
   { id: "deployments", icon: History },
 ];
 
@@ -110,6 +112,9 @@ function ExistingStack({ stack, onRetry }: { stack: StackDetail; onRetry: () => 
         </TabsContent>
         <TabsContent value="logs">
           <StackLogs stack={stack} />
+        </TabsContent>
+        <TabsContent value="health">
+          <HealthTab stack={stack} host={host} />
         </TabsContent>
         <TabsContent value="deployments">
           <DeploymentsTab stack={stack} />

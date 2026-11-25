@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original availability and resource sections for issues #335 and #336. M19: total contract-code catalogue maps.
+// Deviations: Original availability and resource sections for issues #335 and #336. M19: total contract-code catalogue maps. M42 #636: stack Health tab.
 
 import { HISTORY_STATE_KEYS } from "@/data/wire-catalogue-states";
 import { scopedKey } from "@/data/wire-catalogue";
@@ -89,7 +89,7 @@ function span(b: HistoryBucket, range: HistoryRange): string {
   return range === "24h" ? `${formatTime(b.start)}–${formatTime(b.end)}` : `${formatDateTime(b.start)} – ${formatDateTime(b.end)}`;
 }
 
-function StatusStrip({ buckets, range }: { buckets: HistoryBucket[]; range: HistoryRange }) {
+export function StatusStrip({ buckets, range }: { buckets: HistoryBucket[]; range: HistoryRange }) {
   const t = useTranslations("history");
   return (
     <div role="list" aria-label={t("stripLabel")} className="group/strip flex h-8 items-stretch gap-px">
