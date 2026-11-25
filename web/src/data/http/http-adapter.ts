@@ -564,7 +564,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     // A new connection's initial event frame, not its open, refreshes the Dashboard's recent events.
     if (!reopen) dashboardEvents.missed();
     refreshRuns(reopen);
-    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology", "security"]));
+    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology", "security", "registration"]));
   }
 
   function handleStream(data: string, eventId: string): void {
@@ -626,7 +626,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const changed = next === undefined || next !== environmentState;
       environmentState = next;
       if (changed) { backups.invalidate(); refreshRuns(); }
-      changeListeners.forEach((listener) => listener(changed ? ["hosts", ...inventoryTopics] : ["hosts"]));
+      changeListeners.forEach((listener) => listener(changed ? ["hosts", ...inventoryTopics, "registration"] : ["hosts"]));
       return;
     }
     refreshSubscribed();
@@ -858,7 +858,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...resourceReads,
     ...createVulnerabilityCandidates({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, writeSignal: () => ownedWrites.signal, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...createVulnerabilityAdvisories({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, hosts: listHosts, changed: securityChanged }),
-    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}, "background", () => identityGeneration), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
+    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, registration: () => environmentState, capability: getCapability, hosts: listHosts, images: createObservedHostImageReader(baseUrl, fetcher, () => {}, "background", () => identityGeneration), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...inventoryOwner.wrap((observe, fetch, hosts, require) => createNavInventory(baseUrl, fetch, hosts, require, observe, () => identityGeneration, navState.totals, navState.registration)),
     ...volumeReads,
     ...backups.api,

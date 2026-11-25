@@ -307,7 +307,7 @@ export interface ActionRun {
   progress: number;
   /** Live vulnerability run counters; absent when the run read is unavailable. */
   scanProgress?: number;
-  scan?: { targets: number; done: number; failed: number };
+  scan?: { targets: number; done: number; failed: number; summary?: import("./security").ScanRunSummary };
   candidateScan?: { targets: number; scanned: number; cached: number; deferred: number; failed: number };
   startedAt: string;
   finishedAt?: string;

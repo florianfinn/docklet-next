@@ -2,7 +2,7 @@
 // Revision: d849ad059a641143623c20eb945b185a0055c8616f38e032b5cab15c74e5271b
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Connected first-run identity flow for #69. See web/PROVENANCE.md. M17 #335 #336 runtime history sections. M17 runtime history transport wiring. M17 hub service widgets replace the simulated widget configuration. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #435: bounded Dashboard events window and timeline slots. M23 #435: Dashboard security from active counts (AUTO-6). M26 #462: bounded shell counts and raw inventory ownership.
+// Deviations: Connected first-run identity flow for #69. See web/PROVENANCE.md. M17 #335 #336 runtime history sections. M17 runtime history transport wiring. M17 hub service widgets replace the simulated widget configuration. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #435: bounded Dashboard events window and timeline slots. M23 #435: Dashboard security from active counts (AUTO-6). M26 #462: bounded shell counts and raw inventory ownership. M39 #612: host scan run summaries query.
 
 export const queryKeys = {
   authMode: ["auth-mode"],
@@ -27,6 +27,9 @@ export const queryKeys = {
   security: ["security"],
   // Under the security prefix: scans, ignores and settings changes refresh it with the overview.
   activeSecurity: ["security", "active"],
+  // Under the security prefix: a settled scan and a host registration change (security topic) refresh it.
+  scanRunsRoot: ["security", "scan-runs"],
+  scanRuns: (hostId: string) => ["security", "scan-runs", hostId],
   topology: ["topology"],
   networks: ["network-summaries"],
   events: ["events"],

@@ -68,7 +68,12 @@ export const deRunMessages = {
     "manual": "Images: {done} von {targets} gescannt · {pct} %",
     "candidate": "{scanned} gescannt, {cached} aus dem Cache bei {targets} Zielen",
     "failed": "{failed} fehlgeschlagen",
-    "deferred": "{deferred} zurückgestellt"
+    "deferred": "{deferred} zurückgestellt",
+    "result": "{scanned, plural, one {# Image} other {# Images}} gescannt · {critical} kritisch · {high} hoch",
+    "empty": "Keine Images zu scannen",
+    "partial": "Teilergebnis",
+    "seconds": "{seconds} s",
+    "minutes": "{minutes} min"
   },
 
   selfUpdate: {

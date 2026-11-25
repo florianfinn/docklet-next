@@ -37,6 +37,7 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   settings: [queryKeys.hostDetails, ["module-states"], ["module-management"], queryKeys.settings, queryKeys.connectedSettings, ["backup-targets"], ["backup-repository"], ["backup-overviews"], ["backup-overview"]],
   images: [queryKeys.images],
   registries: [["registries"]],
+  registration: [],
 };
 
 /** Invalidates cached reads when the adapter reports changes (SSE-like). */
@@ -60,6 +61,8 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
         const capability = topics.some((topic) => topic === "containers" || topic === "stacks" || topic === "hosts") ? [["capability"]] : [];
         // Host details read before this change (old settings, previous connection) are fenced before the refresh starts new reads, then read again (use-host-details).
         if (topics.some((topic) => topic === "hosts" || topic === "settings")) noteHostDetailsChange();
+        // Run summaries belong to a host registration: drop them before the refresh reads the new one.
+        if (topics.includes("registration")) void client.resetQueries({ queryKey: queryKeys.scanRunsRoot });
         refresh(client, [...capability, ...[...new Set(topics)].flatMap((topic) => TOPIC_KEYS[topic])]);
       });
       return () => { offDemand(); offRecent(); offChanges(); offStacks?.(); };

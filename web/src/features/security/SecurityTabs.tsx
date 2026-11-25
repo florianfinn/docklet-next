@@ -1,10 +1,13 @@
 import { advisoryKey, decodeAdvisoryKey } from "@/data/vulnerability-advisory";
 import { SCAN_STATUS_KEYS } from "@/data/wire-catalogue-states";
 import { scopedKey } from "@/data/wire-catalogue";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
+import { useAdapter } from "@/data/use-adapter";
+import { useCapability } from "@/data/use-capability";
 import { formatRelative } from "@/domain/format";
 import { COLLATOR } from "@/domain/hosts";
 import type { ContainerInfo, Finding, Host, ScannedImage, ScanRun, Severity, Stack } from "@/domain/model";
@@ -35,10 +38,15 @@ const short = (ref: string) => ref.split("/").pop() ?? ref;
 
 export function OverviewTab({ images: allImages, findings, history, stacks, hosts, animate, onFocus }: Data & { animate: boolean; onFocus: (id: string) => void }) {
   const t = useTranslations("security");
+  const adapter = useAdapter();
+  const read = useCapability("getScanSettings");
+  const settings = useQuery({ queryKey: ["settings", "scans"], queryFn: () => adapter.getScanSettings!(), enabled: read.available && !!adapter.getScanSettings });
+  const ignoreUnfixed = read.available && adapter.getScanSettings && settings.isSuccess ? settings.data.ignoreUnfixed : undefined;
+  const fixable = findings.filter((f) => f.fixedIn).length;
   const images = allImages.filter((i) => !i.unavailable && i.scannedAt);
   const top = useMemo(() => [...findings].sort((a, b) => (b.risk ?? b.cvss) - (a.risk ?? a.cvss)).slice(0, 6), [findings]);
   const totals = SEVERITIES.map((s) => ({ key: s.key, label: t(`severities.${s.key}`), color: s.color, n: images.reduce((n, i) => n + (i.counts[s.key] ?? 0), 0) }));
-  const usage = (u: ScannedImage["usage"]) => images.filter((i) => i.usage === u).reduce((n, i) => n + totalOf(i), 0);
+  const usage = (u: ScannedImage["usage"]) => images.filter((i) => i.usage === u && totalOf(i) > 0).length;
   const max = Math.max(1, ...images.map(totalOf));
   const stackName = (id?: string) => stacks.find((s) => s.id === id)?.name;
   if (allImages.length && !images.length) return <p role="status">{t(allImages.some((i) => i.unavailable) ? "scanUnavailable" : "notScanned")}</p>;
@@ -78,8 +86,10 @@ export function OverviewTab({ images: allImages, findings, history, stacks, host
         items={[
           { label: t("strip.critical"), value: totals[0]?.n ?? 0, tone: "err" },
           { label: t("strip.high"), value: totals[1]?.n ?? 0, tone: "orange" },
-          { label: t("strip.fixable"), value: findings.filter((f) => f.fixedIn).length, sub: t("strip.fixableSub", { total: findings.length }) },
-          { label: t("strip.images"), value: images.length, sub: images[0] ? formatRelative(images[0].scannedAt) : undefined },
+          { label: t(ignoreUnfixed === true ? "strip.reported" : "strip.fixable"), value: ignoreUnfixed === true ? findings.length : fixable, sub: ignoreUnfixed === true
+            ? <>{t("strip.onlyFixable")} <Link to="/settings/security" className="underline underline-offset-2">{t("strip.scanSettings")}</Link></>
+            : ignoreUnfixed === false ? t("strip.fixableSub", { total: findings.length }) : undefined },
+          { label: t("strip.images"), value: t("strip.imagesValue", { count: images.length, total: allImages.filter((i) => !i.unavailable).length }), sub: images[0] ? formatRelative(images[0].scannedAt) : undefined },
         ]}
       />
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">

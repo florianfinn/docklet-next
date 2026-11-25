@@ -68,7 +68,12 @@ export const enRunMessages = {
     "manual": "Images: {done} of {targets} scanned · {pct} %",
     "candidate": "{scanned} scanned, {cached} from cache of {targets} targets",
     "failed": "{failed} failed",
-    "deferred": "{deferred} deferred"
+    "deferred": "{deferred} deferred",
+    "result": "{scanned, plural, one {# image} other {# images}} scanned · {critical} critical · {high} high",
+    "empty": "No images to scan",
+    "partial": "partial result",
+    "seconds": "{seconds} s",
+    "minutes": "{minutes} min"
   },
 
   selfUpdate: {
