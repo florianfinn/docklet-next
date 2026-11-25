@@ -39,5 +39,6 @@ export function observation(value: unknown): Observation {
   if (typeof o.responseTimeMs !== "number" || !Number.isFinite(o.responseTimeMs)) throw invalidUpdate();
   if (o.platform !== undefined) text(o.platform);
   if (o.authRegistry !== undefined) text(o.authRegistry);
+  optionalDate(o.currentCreated); optionalDate(o.latestCreated);
   return { ...o, code: reason(o.code), error: "" } as unknown as Observation;
 }

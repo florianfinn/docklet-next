@@ -104,7 +104,16 @@ function TimesList({ times, local, showUpdated }: { times: UpdateTimes; local?: 
   );
 }
 
-function VersionRow({ label, image, tone, latest }: { label: string; image: ImageVersion; tone?: string; latest?: boolean }) {
+/** Same-tag builds differ by build date; without one a short image ID tells them apart. */
+function BuildLabel({ image, empty }: { image: ImageVersion; empty?: string }) {
+  const t = useTranslations("common.updates");
+  const name = image.version && image.version !== image.tag ? image.version : image.tag;
+  if (image.published) return <span title={t("builtAt", { date: formatDateTime(image.published) })}>{name} · {formatDate(image.published)}</span>;
+  if (image.buildId) return <span title={t("noBuildDate")}>{name} · {image.buildId}</span>;
+  return <>{empty ?? name}</>;
+}
+
+function VersionRow({ label, image, tone, latest, build }: { label: string; image: ImageVersion; tone?: string; latest?: boolean; build?: boolean }) {
   const t = useTranslations("common.updates");
   return (
     <div className="flex items-center justify-between gap-3">
@@ -113,12 +122,12 @@ function VersionRow({ label, image, tone, latest }: { label: string; image: Imag
         {label}
       </span>
       <span className="flex min-w-0 items-center gap-1.5">
-        {image.version && image.version !== image.tag && <span className="truncate font-mono text-[11px] text-muted-foreground">{image.tag}</span>}
+        {!build && image.version && image.version !== image.tag && <span className="truncate font-mono text-[11px] text-muted-foreground">{image.tag}</span>}
         <span
           data-tone={tone ?? "gray"}
           className={cn("rounded-md px-2 py-0.5 font-mono text-sm font-semibold", tone ? "bg-(--tone)/14 text-(--tone)" : "bg-muted text-foreground")}
         >
-          {image.version ?? (latest ? t("versionUnknown") : image.tag)}
+          {build ? <BuildLabel image={image} empty={latest ? t("chipRebuild") : undefined} /> : image.version ?? (latest ? t("versionUnknown") : image.tag)}
         </span>
       </span>
     </div>
@@ -188,10 +197,10 @@ export function UpdatePanel({ update, actions = {}, updatedAt }: { update: Updat
         ) : (
           <>
             <div className="flex flex-col gap-2">
-              <VersionRow label={t("current")} image={update.current} />
-              {latest && <VersionRow label={t("latest")} image={latest} tone={tone} latest />}
+              <VersionRow label={t("current")} image={update.current} build={update.state === "rebuild"} />
+              {latest && <VersionRow label={t("latest")} image={latest} tone={tone} latest build={update.state === "rebuild"} />}
             </div>
-            {latest?.published && <div className="text-right text-[11px] text-muted-foreground">{t("published", { date: formatDate(latest.published) })}</div>}
+            {latest?.published && update.state !== "rebuild" && <div className="text-right text-[11px] text-muted-foreground">{t("published", { date: formatDate(latest.published) })}</div>}
             {copy.note && (
               <div data-tone={tone} className="rounded-lg bg-(--tone)/10 p-3 text-center leading-relaxed font-medium text-(--tone)">
                 {copy.note}
@@ -241,12 +250,12 @@ export function StackUpdatePanel({ services, actions = {}, times }: { services: 
               <RowIcon data-tone={rowTone} className="size-3.5 shrink-0 text-(--tone)" aria-hidden />
               <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
               <span className="flex min-w-0 shrink-0 items-center gap-1.5 font-mono text-[13px] font-semibold" data-slot="update-versions">
-                <span className={cn("rounded-md px-1.5 py-0.5", latest ? "text-muted-foreground" : "bg-muted text-foreground")}>{s.update.current.version ?? s.update.current.tag}</span>
+                <span className={cn("rounded-md px-1.5 py-0.5", latest ? "text-muted-foreground" : "bg-muted text-foreground")}>{v === "rebuild" ? <BuildLabel image={s.update.current} /> : s.update.current.version ?? s.update.current.tag}</span>
                 {latest && (
                   <>
                     <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
                     <span data-tone={rowTone} className="rounded-md bg-(--tone)/14 px-1.5 py-0.5 text-(--tone)">
-                      {latest.version ?? t("chipRebuild")}
+                      {v === "rebuild" ? <BuildLabel image={latest} empty={t("chipRebuild")} /> : latest.version ?? t("chipRebuild")}
                     </span>
                   </>
                 )}
@@ -270,10 +279,12 @@ export function UpdateChip({ update }: { update: UpdateInfo }) {
   const v = updateVisual(update);
   const Icon = UPDATE_ICON[v];
   const latest = latestOf(update);
+  const rebuilt = v === "rebuild" && !latest?.version ? latest : undefined;
+  const title = rebuilt?.published ? t("builtAt", { date: formatDateTime(rebuilt.published) }) : rebuilt?.buildId ? t("noBuildDate") : undefined;
   const text =
-    v === "current" ? t("chipCurrent") : v === "rebuild" ? (latest?.version ?? t("chipRebuild")) : v === "error" ? t("chipError") : v === "local" ? t("chipLocal") : v === "unknown" ? t("chipUnknown") : v === "unchecked" ? t("chipUnchecked") : (latest?.version ?? "");
+    v === "current" ? t("chipCurrent") : v === "rebuild" ? (latest?.version ?? (rebuilt?.published ? formatDate(rebuilt.published) : rebuilt?.buildId) ?? t("chipRebuild")) : v === "error" ? t("chipError") : v === "local" ? t("chipLocal") : v === "unknown" ? t("chipUnknown") : v === "unchecked" ? t("chipUnchecked") : (latest?.version ?? "");
   return (
-    <ToneBadge tone={UPDATE_TONE[v]} className="cursor-pointer">
+    <ToneBadge tone={UPDATE_TONE[v]} className="cursor-pointer" title={title}>
       <Icon aria-hidden />
       {text}
     </ToneBadge>

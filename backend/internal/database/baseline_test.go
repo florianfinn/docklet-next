@@ -2,7 +2,7 @@
 // Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: M21 #438 includes candidate schema; M24 derives the synthetic forward version from the current production chain. Original release startup, refusal, restart and source-boundary proofs. M27 proxy contract foundation (#473/#474). #573 adds migration 7.
+// Deviations: M21 #438 includes candidate schema; M24 derives the synthetic forward version from the current production chain. Original release startup, refusal, restart and source-boundary proofs. M27 proxy contract foundation (#473/#474). #573 adds migration 7. #634 adds migration 8.
 
 package database
 
@@ -61,7 +61,7 @@ func TestReleaseFreshStartHistoryIdentityAndSQLSeeds(t *testing.T) {
 			defer db.Close()
 			var versions []int64
 			require.NoError(t, db.Raw("SELECT version_id FROM goose_db_version ORDER BY id").Scan(&versions).Error)
-			require.Equal(t, []int64{0, 1, 2, 3, 4, 5, 6, 7}, versions)
+			require.Equal(t, []int64{0, 1, 2, 3, 4, 5, 6, 7, 8}, versions)
 			var owner string
 			require.NoError(t, db.Raw("SELECT identity FROM docklet_database_metadata").Scan(&owner).Error)
 			require.Equal(t, "docklet-next:sqlite:2", owner)
@@ -153,7 +153,7 @@ func TestInitialMigrationFailureIsRestartable(t *testing.T) {
 	require.True(t, db.Migrator().HasTable("settings"))
 	var version int64
 	require.NoError(t, db.Raw("SELECT max(version_id) FROM goose_db_version").Scan(&version).Error)
-	require.EqualValues(t, 7, version)
+	require.EqualValues(t, 8, version)
 }
 
 func TestMigrationSourceSurvivesReopenAndMigrate(t *testing.T) {

@@ -9,6 +9,7 @@ package image
 import (
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ProjectUpdate compares store-native keys at one verified platform: config
@@ -126,4 +127,23 @@ func CompareRelease(a, b string) (int, bool) {
 		}
 	}
 	return 0, true
+}
+
+// BuildTime keeps a plausible image config build time; reproducible builds
+// often stamp the epoch, which names no build.
+func BuildTime(t time.Time) *time.Time {
+	if t.Year() < 2000 {
+		return nil
+	}
+	u := t.UTC()
+	return &u
+}
+
+// BuildTimeText reads a Docker inspect Created value through BuildTime.
+func BuildTimeText(s string) *time.Time {
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return nil
+	}
+	return BuildTime(t)
 }

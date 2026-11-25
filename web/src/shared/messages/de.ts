@@ -216,6 +216,8 @@ export const deCommon: typeof enCommon = {
     chipCurrent: "Aktuell",
     chipPending: "{count, plural, one {# Update} other {# Updates}}",
     chipRebuild: "Neuer Stand",
+    builtAt: "Gebaut {date}",
+    noBuildDate: "Kein Build-Datum verfügbar; angezeigt wird die kurze Image-ID.",
     chipError: "Prüfung fehlgeschlagen",
     chipLocal: "Lokal",
     chipUnknown: "Unbekannt",

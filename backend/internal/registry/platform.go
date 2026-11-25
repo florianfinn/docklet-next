@@ -19,9 +19,14 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 )
 
-type PlatformObservation struct{ Digest, ConfigDigest, Version, AuthState string }
+type PlatformObservation struct {
+	Digest, ConfigDigest, Version, AuthState string
+	// Created is the candidate's image config build time; zero when absent.
+	Created time.Time
+}
 
 // PlatformImage resolves candidate refs at their native platform-manifest
 // level. A changed index on another platform is not an update.
@@ -73,6 +78,7 @@ func (s *ContainerRegistryService) PlatformImage(ctx context.Context, raw string
 	out.Digest = digest.String()
 	out.ConfigDigest = configDigest.String()
 	out.Version = strings.TrimSpace(cfg.Config.Labels["org.opencontainers.image.version"])
+	out.Created = cfg.Created.Time
 	platformObservations.put(platformCacheKeyInternal(parsed, desc.Digest.String(), platform), out)
 	return out, nil
 }

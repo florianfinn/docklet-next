@@ -2,7 +2,7 @@
 // Revision: 0c8a014eda72706e48d60c22e86526e7dfd15964
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Replicas of one image merge to one coherent projected observation.
+// Deviations: Replicas of one image merge to one coherent projected observation; #634 build times.
 
 package details
 
@@ -33,11 +33,13 @@ func TestReplicaMergeKeepsOneCoherentObservation(t *testing.T) {
 	})
 	t.Run("conflicting candidates", func(t *testing.T) {
 		scoped := map[string]*imagetypes.UpdateInfo{"one": projectedObservation(a, b, early), "two": projectedObservation(a, c, late)}
+		scoped["one"].LatestCreated, scoped["two"].LatestCreated = &early, &late
 		merged := MergeProjectContainerUpdateInfo(nil, services, scoped)["alpine:3.22"]
 		require.NotNil(t, merged)
 		require.True(t, merged.HasUpdate)
 		require.Equal(t, "rebuild", merged.State)
 		require.Empty(t, merged.LatestDigest, "replicas that disagree choose no candidate")
+		require.Nil(t, merged.LatestCreated, "nor a candidate build time")
 		require.Equal(t, late, merged.CheckTime)
 		require.Equal(t, merged.CheckTime, merged.CheckedAt)
 	})

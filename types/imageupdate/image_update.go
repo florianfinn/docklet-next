@@ -53,6 +53,10 @@ type Response struct {
 	// Required: false
 	LatestVersion string `json:"latestVersion,omitempty"`
 
+	// CurrentCreated and LatestCreated are the image config build times; absent when unknown.
+	CurrentCreated *time.Time `json:"currentCreated,omitempty"`
+	LatestCreated  *time.Time `json:"latestCreated,omitempty"`
+
 	// CurrentDigest is the digest (hash) of the current image.
 	//
 	// Required: false
@@ -145,7 +149,7 @@ type CheckAllImagesRequest struct {
 type BatchResponse map[string]*Response
 
 func FromInfo(i *imageDTO.UpdateInfo) *Response {
-	return &Response{State: i.State, CheckedAt: i.CheckedAt, ImageRef: i.ImageRef, Platform: i.Platform, AuthState: i.AuthState, Code: i.Code, CheckTime: i.CheckTime, HasUpdate: i.HasUpdate, UpdateType: i.UpdateType, CurrentVersion: i.CurrentVersion, LatestVersion: i.LatestVersion, CurrentDigest: i.CurrentDigest, LatestDigest: i.LatestDigest, Error: i.Error, AuthMethod: i.AuthMethod, UsedCredential: i.UsedCredential}
+	return &Response{State: i.State, CheckedAt: i.CheckedAt, ImageRef: i.ImageRef, Platform: i.Platform, AuthState: i.AuthState, Code: i.Code, CheckTime: i.CheckTime, HasUpdate: i.HasUpdate, UpdateType: i.UpdateType, CurrentVersion: i.CurrentVersion, LatestVersion: i.LatestVersion, CurrentCreated: i.CurrentCreated, LatestCreated: i.LatestCreated, CurrentDigest: i.CurrentDigest, LatestDigest: i.LatestDigest, Error: i.Error, AuthMethod: i.AuthMethod, UsedCredential: i.UsedCredential}
 }
 
 func (p *BatchImageUpdateRequest) UnmarshalJSON(data []byte) error {

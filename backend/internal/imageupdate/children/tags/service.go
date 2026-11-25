@@ -331,6 +331,7 @@ func AttachContainerUpdates(results, containerUpdates map[string]*imageupdate.Re
 				result.UpdateType = update.UpdateType
 				result.CurrentVersion = update.CurrentVersion
 				result.LatestVersion = update.LatestVersion
+				result.CurrentCreated, result.LatestCreated = update.CurrentCreated, update.LatestCreated
 			}
 			result.HasUpdate = true
 		}

@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 217de0c5363d97c033b83a392e8c6512a18e8dc1970f96fa03693689987b0304
+// Revision: 1af05ffbb0f5dcd28a29d9023f0979cdace9f142f52b5f3eaf0b90a48912e308
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11140,11 +11140,15 @@ export interface components {
             /** Format: date-time */
             checkedAt: string;
             code?: string;
+            /** Format: date-time */
+            currentCreated?: string;
             currentDigest: string;
             currentVersion: string;
             error: string;
             hasUpdate: boolean;
             imageRef: string;
+            /** Format: date-time */
+            latestCreated?: string;
             latestDigest: string;
             latestVersion: string;
             platform?: string;
@@ -11268,12 +11272,16 @@ export interface components {
             containerUpdates?: {
                 [key: string]: components["schemas"]["ImageupdateResponse"];
             };
+            /** Format: date-time */
+            currentCreated?: string;
             currentDigest?: string;
             currentVersion: string;
             error?: string;
             hasUpdate: boolean;
             imageRef?: string;
             imageUpdate?: components["schemas"]["ImageupdateResponse"];
+            /** Format: date-time */
+            latestCreated?: string;
             latestDigest?: string;
             latestVersion?: string;
             platform?: string;

@@ -61,7 +61,7 @@ func (s *ImageUpdateService) MarkImageRefUpToDateAfterPull(ctx context.Context, 
 		for _, ack := range ready {
 			record := ack.record
 			// A later check may replace this preview while Docker reads are in flight.
-			if err := tx.Model(&ImageUpdateRecord{}).Where(map[string]any{"id": record.ID, "check_time": record.CheckTime, "policy_key": record.PolicyKey, "latest_digest": record.LatestDigest, "latest_version": record.LatestVersion, "current_digest": record.CurrentDigest, "last_error": record.LastError, "has_update": record.HasUpdate}).Updates(map[string]any{"has_update": false, "platform": ack.platform, "current_digest": ack.current, "latest_digest": ack.latest, "current_version": tag, "latest_version": tag, "check_time": time.Now().UTC()}).Error; err != nil {
+			if err := tx.Model(&ImageUpdateRecord{}).Where(map[string]any{"id": record.ID, "check_time": record.CheckTime, "policy_key": record.PolicyKey, "latest_digest": record.LatestDigest, "latest_version": record.LatestVersion, "current_digest": record.CurrentDigest, "last_error": record.LastError, "has_update": record.HasUpdate}).Updates(map[string]any{"has_update": false, "platform": ack.platform, "current_digest": ack.current, "latest_digest": ack.latest, "current_version": tag, "latest_version": tag, "current_created": record.LatestCreated, "check_time": time.Now().UTC()}).Error; err != nil {
 				return err
 			}
 		}

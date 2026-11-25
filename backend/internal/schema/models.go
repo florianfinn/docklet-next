@@ -55,6 +55,9 @@ func Models() []any {
 		if _, frozen := model.(*baselineRuntimeReceipt); frozen {
 			models[i] = &activity.RuntimeReceipt{}
 		}
+		if _, frozen := model.(*baselineImageUpdateRecord); frozen {
+			models[i] = &imageupdate.ImageUpdateRecord{}
+		}
 	}
 	return append(append(append(models, candidates.Models()...), proxy.Models()...), &activity.RuntimeObservedRun{}, &updatepolicies.FailedCandidate{})
 }
@@ -72,7 +75,7 @@ func BaselineModels() []any {
 		&runtimeintent.Row{},
 		&apikey.ApiKey{}, &backup.SystemBackupRecoveryConfig{},
 		&baselineEnvironment{}, &environment.AgentRestartRequest{}, &container.RecreateJournal{}, &container.PreviousImage{}, &container.OriginOverride{}, &event.Event{},
-		&patch.ImagePatchRecord{}, &imageupdate.ImageUpdateRecord{},
+		&patch.ImagePatchRecord{}, &baselineImageUpdateRecord{},
 		&kv.KVEntry{}, &notification.NotificationSettings{},
 		&notificationoutbox.Row{}, &notificationoutbox.Availability{}, &autoheal.Restart{},
 		&project.Project{}, &project.ProjectTag{}, &lifecycle.Baseline{}, &lifecycle.Point{}, &lifecycle.Run{},

@@ -32,6 +32,7 @@ func (s *UpdaterService) enrichPolicyObservation(ctx context.Context, ref, targe
 		fail()
 		return
 	}
-	record.SetNativeObservation(observed)
+	record.SetNativeObservation(observed.Observation)
+	record.CurrentCreated, record.LatestCreated = observed.CurrentCreated, observed.LatestCreated
 	record.HasUpdate = record.UpdateInfo().HasUpdate
 }

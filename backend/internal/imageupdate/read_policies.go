@@ -141,7 +141,7 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 							}
 						}
 					}
-					info := &imageDTO.UpdateInfo{ImageRef: discovered.ImageRef, CheckTime: snapshot.CheckTime, Platform: local.Platform.String(), CurrentDigest: local.Key.String(), LatestDigest: latest, CurrentVersion: discovered.CurrentVersion, LatestVersion: candidateVersion, AuthState: candidate.AuthState}
+					info := &imageDTO.UpdateInfo{ImageRef: discovered.ImageRef, CheckTime: snapshot.CheckTime, Platform: local.Platform.String(), CurrentDigest: local.Key.String(), LatestDigest: latest, CurrentVersion: discovered.CurrentVersion, LatestVersion: candidateVersion, AuthState: candidate.AuthState, CurrentCreated: imageDTO.BuildTimeText(baseline.Created), LatestCreated: imageDTO.BuildTime(candidate.Created)}
 					if lookupErr != nil {
 						problem := imageDTO.Neutral(lookupErr, "update.check-unavailable", 503)
 						info.Error = problem.Error()

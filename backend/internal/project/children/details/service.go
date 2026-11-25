@@ -353,7 +353,7 @@ func mergeReplicaObservation(candidate, previous *imagetypes.UpdateInfo) imagety
 		merged = *candidate
 	}
 	if candidate.HasUpdate && (candidate.LatestVersion != previous.LatestVersion || candidate.LatestDigest != previous.LatestDigest || candidate.UpdateType != previous.UpdateType) {
-		merged.LatestVersion, merged.LatestDigest, merged.UpdateType = "", "", ""
+		merged.LatestVersion, merged.LatestDigest, merged.UpdateType, merged.LatestCreated = "", "", "", nil
 	}
 	if merged.Error == "" {
 		merged.Error = cmp.Or(candidate.Error, previous.Error)

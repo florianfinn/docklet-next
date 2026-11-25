@@ -215,6 +215,8 @@ export const enCommon = {
     chipCurrent: "Up to date",
     chipPending: "{count, plural, one {# update} other {# updates}}",
     chipRebuild: "New build",
+    builtAt: "Built {date}",
+    noBuildDate: "No build date available; short image ID shown.",
     chipError: "Check failed",
     chipLocal: "Local",
     chipUnknown: "Unknown",

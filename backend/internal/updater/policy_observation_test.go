@@ -31,6 +31,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPolicyConfiguredObservationHasComparableCandidateWithoutEffects(t *testing.T) {
@@ -63,7 +64,8 @@ func testPolicyNativeObservation(t *testing.T, store string, sameConfig bool, op
 	t.Cleanup(registry.Close)
 	repository := strings.TrimPrefix(registry.URL, "http://") + "/example/app"
 	makeImage := func(marker string) v1.Image {
-		img, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: arch, Variant: variant, Config: v1.Config{Labels: map[string]string{"org.opencontainers.image.version": "1.0.0", "example.marker": marker}}})
+		built := map[string]time.Time{"old": time.Date(2026, 11, 12, 8, 0, 0, 0, time.UTC), "next": time.Date(2026, 11, 24, 6, 0, 0, 0, time.UTC)}[marker]
+		img, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: arch, Variant: variant, Created: v1.Time{Time: built}, Config: v1.Config{Labels: map[string]string{"org.opencontainers.image.version": "1.0.0", "example.marker": marker}}})
 		require.NoError(t, err)
 		return img
 	}
@@ -145,7 +147,7 @@ func testPolicyNativeObservation(t *testing.T, store string, sameConfig bool, op
 					localID = oldDigest.String()
 				}
 			}
-			row := map[string]any{"Id": localID, "Os": "linux", "Architecture": arch, "Variant": variant, "RepoDigests": []string{repository + "@" + oldDigest.String()}, "Config": map[string]any{"Labels": map[string]string{"org.opencontainers.image.version": "1.0.0"}}}
+			row := map[string]any{"Id": localID, "Created": "2026-11-12T08:00:00Z", "Os": "linux", "Architecture": arch, "Variant": variant, "RepoDigests": []string{repository + "@" + oldDigest.String()}, "Config": map[string]any{"Labels": map[string]string{"org.opencontainers.image.version": "1.0.0"}}}
 			if store == "containerd" {
 				mediaType := "application/vnd.oci.image.index.v1+json"
 				if r.URL.Query().Get("platform") != "" {
@@ -207,6 +209,15 @@ func testPolicyNativeObservation(t *testing.T, store string, sameConfig bool, op
 	}
 	require.Equal(t, want, record.UpdateInfo().State)
 	require.Equal(t, want != "current", record.HasUpdate)
+	// The configured stack check stores both image config build times.
+	wantLatest := "2026-11-24T06:00:00Z"
+	if sameConfig {
+		wantLatest = "2026-11-12T08:00:00Z"
+	}
+	require.NotNil(t, record.CurrentCreated)
+	require.NotNil(t, record.LatestCreated)
+	require.Equal(t, "2026-11-12T08:00:00Z", record.CurrentCreated.Format(time.RFC3339))
+	require.Equal(t, wantLatest, record.LatestCreated.Format(time.RFC3339))
 	require.Zero(t, effects)
 }
 

@@ -110,7 +110,7 @@ export interface Host {
 export type ContainerState = "running" | "stopped" | "restarting" | "unknown";
 export type Health = "healthy" | "unhealthy" | "starting" | "none";
 
-/** A human-readable image reference; digests never reach normal UI. */
+/** A human-readable image reference; full digests never reach normal UI. */
 export interface ImageVersion {
   repository: string;
   tag: string;
@@ -118,6 +118,8 @@ export interface ImageVersion {
   version?: string;
   /** Build or publication date of this image state (ISO). */
   published?: string;
+  /** Short image ID that tells same-tag builds apart when no build date is known. */
+  buildId?: string;
 }
 
 export type UpdateLevel = "major" | "minor" | "patch";

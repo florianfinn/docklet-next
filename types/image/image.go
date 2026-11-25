@@ -104,6 +104,11 @@ type UpdateInfo struct {
 	//
 	// Required: false
 	UsedCredential bool `json:"usedCredential,omitempty"`
+
+	// CurrentCreated and LatestCreated are the image config build times of the
+	// running image and the registry candidate; absent when unknown or implausible.
+	CurrentCreated *time.Time `json:"currentCreated,omitempty"`
+	LatestCreated  *time.Time `json:"latestCreated,omitempty"`
 }
 
 type UsedBy struct {

@@ -44,7 +44,7 @@ func (s *ImageUpdateService) saveConsumerObservation(ctx context.Context, consum
 	if err != nil || current.Container.ID != consumer.ID || current.Container.Image != consumer.ImageID || current.Container.Config == nil || imageref.UpdatePolicyKey(current.Container.Config.Image, current.Container.Config.Labels) != key {
 		result.State, result.HasUpdate, result.Code = "unknown", false, "update.check-unavailable"
 	}
-	record := ImageUpdateRecord{ID: "container::" + consumer.ID, ContainerID: consumer.ID, ImageID: consumer.ImageID, PolicyKey: key, Repository: reference.TrimNamed(named).String(), Tag: tagged.Tag(), CheckTime: result.CheckTime, CurrentVersion: result.CurrentVersion, LatestVersion: &result.LatestVersion, UpdateType: result.UpdateType, HasUpdate: result.HasUpdate, AuthMethod: &result.AuthState}
+	record := ImageUpdateRecord{ID: "container::" + consumer.ID, ContainerID: consumer.ID, ImageID: consumer.ImageID, PolicyKey: key, Repository: reference.TrimNamed(named).String(), Tag: tagged.Tag(), CheckTime: result.CheckTime, CurrentVersion: result.CurrentVersion, LatestVersion: &result.LatestVersion, UpdateType: result.UpdateType, HasUpdate: result.HasUpdate, AuthMethod: &result.AuthState, CurrentCreated: result.CurrentCreated, LatestCreated: result.LatestCreated}
 	if result.State != "unknown" && result.State != "error" && result.Error == "" && local.ID.String() == consumer.ImageID {
 		if native == nil {
 			// The same-tag observation was already resolved for this consumer's store.

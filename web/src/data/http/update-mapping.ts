@@ -17,7 +17,9 @@ export function mapUpdateInfo(dto: components["schemas"]["ImageUpdateInfo"] | un
   if (!dto || !sameImageReference(dto.imageRef, reference)) return { state: "unchecked", current };
   const checkedAt = dto.checkedAt || undefined;
   const metadata = { ...(dto.code ? { code: dto.code } : {}), authState: dto.authState, stale };
-  const image = { ...current, ...(dto.currentVersion ? { version: dto.currentVersion } : {}) };
+  const image = { ...current, ...(dto.currentVersion ? { version: dto.currentVersion } : {}), ...build(dto.currentCreated, dto.currentDigest) };
+  // Candidate facts never inherit the running image's build date or ID.
+  const candidate = { repository: current.repository, tag: current.tag, ...build(dto.latestCreated, dto.latestDigest) };
   if (dto.state === "local") return { ...metadata, state: "local", current: image };
   if (dto.state === "unchecked") return { ...metadata, state: "unchecked", current: image };
   if (dto.state === "unknown" || !checkedAt) return { ...metadata, state: "unknown", current: image, checkedAt };
@@ -25,9 +27,17 @@ export function mapUpdateInfo(dto: components["schemas"]["ImageUpdateInfo"] | un
   const first = reference.split("/")[0] ?? "";
   const registry = dto.authRegistry || (reference.includes("/") && /[.:]/.test(first) ? first : "docker.io");
   if (dto.state === "current") return { ...metadata, state: "current", current: image, checkedAt, registry };
-  if (dto.state === "rebuild") return { ...metadata, state: "rebuild", current: image, latest: { ...image, ...(dto.latestVersion ? { version: dto.latestVersion } : {}) }, checkedAt, registry };
+  // Without an image version label the producer echoes the tag as latestVersion; that names no build.
+  if (dto.state === "rebuild") return { ...metadata, state: "rebuild", current: image, latest: { ...candidate, ...(dto.latestVersion && dto.latestVersion !== current.tag ? { version: dto.latestVersion } : {}) }, checkedAt, registry };
   if (dto.state === "version" && compareVersion(dto.currentVersion, dto.latestVersion) !== undefined) {
-    return { ...metadata, state: "version", current: image, latest: { ...image, tag: dto.latestVersion, version: dto.latestVersion }, level: levelFromVersions(dto.currentVersion, dto.latestVersion), checkedAt, registry };
+    return { ...metadata, state: "version", current: image, latest: { ...candidate, tag: dto.latestVersion, version: dto.latestVersion }, level: levelFromVersions(dto.currentVersion, dto.latestVersion), checkedAt, registry };
   }
   return { ...metadata, state: "unknown", current: image, checkedAt };
+}
+
+/** A plausible build date, else a short image ID; full digests stay out of the UI. */
+function build(created: string | undefined, digest: string | undefined): Pick<ImageVersion, "published" | "buildId"> {
+  if (created) return { published: created };
+  const id = /^sha256:([0-9a-f]{64})$/.exec(digest ?? "")?.[1];
+  return id ? { buildId: id.slice(0, 7) } : {};
 }

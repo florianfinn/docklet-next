@@ -45,6 +45,9 @@ type ImageUpdateRecord struct {
 	UsedCredential   bool      `json:"usedCredential,omitempty" gorm:"column:used_credential"`
 	NotificationSent bool      `json:"notificationSent" gorm:"column:notification_sent;default:false"`
 	Platform         *string   `json:"platform,omitempty"`
+	// Image config build times of the running image and the candidate.
+	CurrentCreated *time.Time `json:"currentCreated,omitempty" gorm:"column:current_created"`
+	LatestCreated  *time.Time `json:"latestCreated,omitempty" gorm:"column:latest_created"`
 }
 
 func (i *ImageUpdateRecord) TableName() string {
@@ -96,6 +99,8 @@ func (i *ImageUpdateRecord) UpdateInfo() *image.UpdateInfo {
 		AuthUsername:   mo.PointerToOption(i.AuthUsername).OrEmpty(),
 		AuthRegistry:   mo.PointerToOption(i.AuthRegistry).OrEmpty(),
 		UsedCredential: i.UsedCredential,
+		CurrentCreated: i.CurrentCreated,
+		LatestCreated:  i.LatestCreated,
 	}
 	if n, err := identity.DecodeObservation(out.Platform, out.CurrentDigest, out.LatestDigest); err == nil {
 		out.Platform = n.Platform()
