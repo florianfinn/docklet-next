@@ -61,6 +61,29 @@ describe("row 6: agent anchors", () => {
   });
 });
 
+describe("row 6b: the anchor target stays in view while content above loads (candidate H2, R1)", () => {
+  class FakeResizeObserver { static all: FakeResizeObserver[] = []; cb: () => void; constructor(cb: () => void) { this.cb = cb; FakeResizeObserver.all.push(this); } observe() {} disconnect() { FakeResizeObserver.all = FakeResizeObserver.all.filter((o) => o !== this); } }
+  const shift = () => act(() => { FakeResizeObserver.all.forEach((o) => o.cb()); });
+  it.each([
+    ["agent", "b", "#agent-update-b", () => screen.findByRole("button", { name: t("settings.updates.selfUpdate.agentOn", { name: "Beta" }) })],
+    ["hub", "0", "#hub-update", () => screen.findByRole("button", { name: t("settings.updates.selfUpdate.hub") })],
+  ] as const)("%s: a later layout shift scrolls the focused target back until the user acts", async (_, hostId, hash, find) => {
+    FakeResizeObserver.all = []; vi.stubGlobal("ResizeObserver", FakeResizeObserver); cleanups.push(() => vi.unstubAllGlobals());
+    const scrolled: Element[] = [];
+    vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(function (this: HTMLElement) { scrolled.push(this); });
+    mount(<LiveUpdatesSelfUpdate hostId={hostId} name="Beta" />, adapterWith({ getSelfUpdate: vi.fn(async () => answer({})) }), `/settings/updates${hash}`);
+    const target = await find();
+    await waitFor(() => expect(document.activeElement === target).toBe(true));
+    const before = scrolled.filter((e) => e === target).length;
+    let top = 100; vi.spyOn(target, "getBoundingClientRect").mockImplementation(() => ({ top } as DOMRect));
+    top = 900; shift();
+    expect(scrolled.filter((e) => e === target).length).toBe(before + 1);
+    window.dispatchEvent(new Event("wheel"));
+    top = 1500; shift();
+    expect(scrolled.filter((e) => e === target).length).toBe(before + 1);
+  });
+});
+
 describe("row 7: manual-command disclosure", () => {
   const trigger = () => screen.queryByRole("button", { name: t("settings.updates.selfUpdate.manualCommands", { count: 2 }) });
   it.each([

@@ -21,13 +21,14 @@ import { CodeBlock } from "@/shared/components/code-block";
 import { VersionBadges } from "@/shared/components/updates/version-badges";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/shared/ui/collapsible";
 import { ChevronRight } from "lucide-react";
+import { keepInView } from "@/shared/lib/keep-in-view";
 import { Button } from "@/shared/ui/button";
 import { Spinner } from "@/shared/ui/spinner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/shared/ui/dialog";
 
 export function LiveUpdatesSelfUpdate({ hostId, name, host }: { hostId: string; name?: string; host?: Pick<Host, "identity" | "agentVersion"> }) {
   const adapter = useAdapter(), all = useTranslations(), t = useTranslations("settings.updates.selfUpdate"), errorText = useImageError();
-  const location = useLocation(), heading = useRef<HTMLHeadingElement>(null), button = useRef<HTMLButtonElement>(null), focusedFor = useRef<string>(undefined);
+  const location = useLocation(), heading = useRef<HTMLHeadingElement>(null), button = useRef<HTMLButtonElement>(null), focusedFor = useRef<string>(undefined), release = useRef<() => void>(undefined);
   const cap = useCapability("selfUpdate", selfUpdateRef(hostId));
   const format = useFormatter(), { query, recheck: fetchFresh } = useSelfUpdateCheck(hostId, { host, enabled: cap.available });
   const [confirm, setConfirm] = useState<string>(), [started, setStarted] = useState<string>();
@@ -51,7 +52,10 @@ export function LiveUpdatesSelfUpdate({ hostId, name, host }: { hostId: string; 
     focusedFor.current = location.key;
     const target = button.current && !button.current.disabled ? button.current : heading.current;
     target?.scrollIntoView?.({ block: "center" }); target?.focus();
+    // Policies and other hosts above may still load and push this panel down.
+    release.current?.(); release.current = target ? keepInView(target) : undefined;
   }, [hostId, location.hash, location.key, query.isPending, enabled, cap.pending, cap.available]);
+  useEffect(() => () => release.current?.(), []);
   const codeKey = selfUpdateCodeKey(state.code), opCodeKey = selfUpdateCodeKey(op?.code);
   const runId = started ?? op?.runId;
   const title = hostId === "0" ? t("hub") : name ? t("agentOn", { name }) : t("agent");
