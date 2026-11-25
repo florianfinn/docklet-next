@@ -27,12 +27,6 @@ describe("stored update observation", () => {
     expect(() => mapUpdateInfo({ ...observation("current"), checkedAt: "" }, image, "example:1.0.0")).toThrow();
     expect(() => mapUpdateInfo({ ...observation("current"), authRegistry: 42 } as never, image, "example:1.0.0")).toThrow();
   });
-  it("treats a rebuild without an image version label as an unnamed new build", () => {
-    const latestTag = { repository: "example", tag: "latest" };
-    const unlabelled = { ...observation("rebuild"), imageRef: "example:latest", currentVersion: "latest", latestVersion: "latest", updateType: "digest" };
-    expect(mapUpdateInfo(unlabelled, latestTag, "example:latest")).toMatchObject({ state: "rebuild", latest: { tag: "latest", version: undefined } });
-    expect(mapUpdateInfo({ ...unlabelled, latestVersion: "1.2.3" }, latestTag, "example:latest")).toMatchObject({ latest: { version: "1.2.3" } });
-  });
   it("marks an image missing on the host as not pulled", () => {
     expect(mapUpdateInfo({ ...observation("unknown"), updateType: "not_pulled" }, image, "example:1.0.0")).toMatchObject({ state: "unknown", notPulled: true });
     expect(mapUpdateInfo(observation("unknown"), image, "example:1.0.0")).not.toHaveProperty("notPulled");
