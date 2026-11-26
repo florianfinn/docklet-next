@@ -35,13 +35,13 @@ const services = { v: 1, services: [
   { name: "worker", pull: { layersDone: 2, layersTotal: 2 }, create: "done", start: "error" },
 ] };
 const row = (status: Activity["status"] = "running", step = "pull", deployServices: unknown = services): Activity => ({ ...activity("good"), status, step, metadata: { deployServices } });
-const states = (r: DeployServiceRow, status: "running" | "succeeded" | "failed", prepared = false) => serviceSegments(r, { status }, prepared).map((s) => s.state).join(" ");
+const states = (r: DeployServiceRow, status: "running" | "succeeded" | "failed" | "cancelled", prepared = false) => serviceSegments(r, { status }, prepared).map((s) => s.state).join(" ");
 
 describe("parseDeployServices", () => {
   it("copies valid rows and hides the whole projection for any invalid row", () => {
     expect(parseDeployServices(services)?.rows.map((r) => r.name)).toEqual(["app", "db", "web", "worker"]);
     expect(parseDeployServices({ ...services, truncated: true })?.truncated).toBe(true);
-    for (const invalid of [undefined, null, [], { ...services, v: 2 }, { ...services, truncated: false }, { v: 1, services: [] },
+    for (const invalid of [undefined, null, [], { ...services, v: 2 }, { ...services, truncated: false }, { ...services, prepared: false }, { v: 1, services: [] },
       { v: 1, services: Array.from({ length: 65 }, (_, i) => ({ name: `svc-${i}` })) },
       { v: 1, services: [{ name: "" }] }, { v: 1, services: [{ name: "x".repeat(257) }] }, { v: 1, services: [{ name: "a", check: "yes" }] },
       { v: 1, services: [{ name: "a", start: "skipped" }] }, { v: 1, services: [{ name: "a", pull: { layersDone: 3, layersTotal: 2 } }] },
@@ -58,6 +58,9 @@ describe("parseDeployServices", () => {
     expect(view({ ...row(), type: "container_start" })).toBeUndefined();
     const settled = renderRun(mapActivitySummary(row("success", "deploy")), "en-US");
     expect(deployServicesOf(settled)?.prepared).toBe(true);
+    const running = renderRun(mapActivitySummary(row()), "en-US");
+    expect(deployServicesOf(running)?.prepared).toBe(false);
+    expect(deployServicesOf(renderRun(mapActivitySummary(row("running", "pull", { ...services, prepared: true })), "en-US"))?.prepared).toBe(true);
     expect(deployServicesOf({ ...settled, outcomeState: "unknown" })).toBeUndefined();
     expect((mapActivitySummary({ ...row(), metadata: undefined }) as { deployServices?: unknown }).deployServices).toBeUndefined();
   });
@@ -69,7 +72,12 @@ describe("serviceSegments", () => {
     expect(states({ name: "a" }, "running", true)).toBe("skipped skipped pending pending pending");
     expect(states({ name: "a", start: "running" }, "running")).toBe("skipped skipped skipped running pending");
     expect(states({ name: "a", pull: { layersDone: 1, layersTotal: 2 } }, "running")).toBe("running pending pending pending pending");
-    expect(states({ name: "a", pull: { layersDone: 1, layersTotal: 2 } }, "failed")).toBe("error pending pending pending pending");
+    expect(states({ name: "a", pull: { layersDone: 1, layersTotal: 2 } }, "cancelled")).toBe("interrupted pending pending pending pending");
+    expect(states({ name: "a", pull: { layersDone: 1, layersTotal: 2 } }, "running", true)).toBe("interrupted skipped pending pending pending");
+    expect(states({ name: "a", pull: { layersDone: 1, layersTotal: 2 }, start: "done", health: "done" }, "failed")).toBe("interrupted skipped skipped done done");
+    expect(states({ name: "a", start: "running" }, "failed")).toBe("skipped skipped skipped interrupted pending");
+    expect(states({ name: "a", start: "done", health: "running" }, "failed")).toBe("skipped skipped skipped done interrupted");
+    expect(states({ name: "a", create: "done", start: "error" }, "failed")).toBe("skipped skipped done error pending");
     expect(states({ name: "a", check: false, start: "done", health: "done" }, "running")).toBe("skipped skipped skipped done skipped");
     expect(states({ name: "a", start: "done" }, "succeeded")).toBe("skipped skipped skipped done skipped");
     expect(serviceSegments({ name: "a", pull: { layersDone: 1, layersTotal: 4, bytesDone: 30, bytesTotal: 120 } }, { status: "running" }, false)[0]?.fraction).toBe(0.25);
@@ -83,6 +91,10 @@ describe("serviceSegments", () => {
     expect(summary({ name: "a", start: "done", health: "running" })).toBe("waiting");
     expect(summary({ name: "a", create: "error" })).toBe("failed");
     expect(summary({ name: "a" }, "failed")).toBe("notReached");
+    // A partial preliminary pull never turns a service that reached ready into a failure.
+    expect(summary({ name: "a", pull: { layersDone: 1, layersTotal: 2 }, start: "done", health: "done" }, "failed")).toBe("ready");
+    expect(summary({ name: "a", start: "done", health: "running" }, "failed")).toBe("interrupted");
+    expect(summary({ name: "a", start: "running" }, "failed")).toBe("interrupted");
   });
 });
 
@@ -104,6 +116,9 @@ it.each(["en-US", "de"] as const)("%s focus shows one row per service and the co
     expect(list?.querySelector('[data-service="db"] [data-stage="health"]')?.getAttribute("data-state")).toBe("skipped");
     expect(list?.querySelector('[data-service="web"]')?.getAttribute("data-summary")).toBe("building");
     expect(list?.querySelector('[data-service="worker"]')?.getAttribute("data-summary")).toBe("failed");
+    expect(list?.querySelector('[data-service="db"] [data-slot="service-stages-text"]')?.textContent).toBe(locale === "de"
+      ? "Download: übersprungen, Build: übersprungen, Erstellen: erledigt, Start: erledigt, Health: übersprungen"
+      : "Download: skipped, Build: skipped, Create: done, Start: done, Health: skipped");
     const facts = view.container.querySelector('[data-slot="dialog-facts"]');
     expect(facts?.hasAttribute("data-compact")).toBe(true);
     expect(facts?.textContent).toBe("61 s · Example good");
@@ -136,5 +151,8 @@ it.each(["timeline", "console"] as const)("%s dialog design renders the service 
   try {
     const dialog = await screen.findByRole("dialog");
     expect(dialog.querySelectorAll('[data-slot="service-progress"] [data-service]')).toHaveLength(4);
+    const facts = dialog.querySelector('[data-slot="dialog-facts"]');
+    expect(facts?.hasAttribute("data-compact")).toBe(true);
+    expect(facts?.textContent).toMatch(/^\d+ s · Example /);
   } finally { view.unmount(); queryClient.clear(); f.helper.reset(); }
 });

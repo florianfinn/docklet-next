@@ -34,5 +34,5 @@ export function demoDeployServices(names: string[], step: DeployStepKey, fractio
     }
     return row;
   });
-  return { rows, truncated: names.length > 64 };
+  return { rows, truncated: names.length > 64, prepared: reached > 0 };
 }

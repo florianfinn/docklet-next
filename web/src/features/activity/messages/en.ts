@@ -43,8 +43,10 @@ export const enActivity = {
   serviceStages: {
     heading: "Services",
     stage: { pull: "Download", build: "Build", create: "Create", start: "Start", health: "Health" },
-    summary: { failed: "Failed", pulling: "Download {percent}%", building: "Building", creating: "Creating", starting: "Starting", waiting: "Waiting for health", healthy: "Healthy", ready: "Ready", running: "Running", pending: "Waiting", notReached: "Not reached" },
+    summary: { failed: "Failed", pulling: "Download {percent}%", building: "Building", creating: "Creating", starting: "Starting", waiting: "Waiting for health", healthy: "Healthy", ready: "Ready", running: "Running", pending: "Waiting", notReached: "Not reached", interrupted: "Interrupted" },
     layers: "{done}/{total} layers", bytes: "{done} / {total}",
+    state: { pending: "pending", running: "running", done: "done", error: "failed", skipped: "skipped", interrupted: "interrupted" },
+    stageState: "{stage}: {state}",
     truncated: "More services are not shown.",
   },
   bulk: {

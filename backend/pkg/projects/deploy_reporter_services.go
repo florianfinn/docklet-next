@@ -8,6 +8,8 @@ package projects
 
 import (
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/docker/compose/v5/pkg/api"
 )
@@ -65,10 +67,32 @@ func (r *DeployReporter) Build(service, state string) {
 	r.flushLocked(false)
 }
 
+// stageService resolves container events and Compose's structured create
+// errors ("service:<name>:<replica>") to a configured service, or "".
+func (r *DeployReporter) stageService(id string) string {
+	if len(id) > 256 {
+		return ""
+	}
+	if rest, ok := strings.CutPrefix(id, "service:"); ok {
+		name, replica, found := strings.Cut(rest, ":")
+		number, err := strconv.Atoi(replica)
+		if found && err == nil && number > 0 && slices.ContainsFunc(r.services, func(s deployService) bool { return s.name == name }) {
+			return name
+		}
+		return ""
+	}
+	if len(id) < 11 || id[:10] != "Container " {
+		return ""
+	}
+	return r.resourceService(id)
+}
+
 // observeStage maps one Compose container event onto that container's stages.
 // Unchanged containers report Running, which means they are already started.
+// A start that fails without an event stays running; consumers show it as
+// interrupted once the run settles.
 func (r *DeployReporter) observeStage(event api.Resource) {
-	if len(event.ID) > 256 || len(event.ID) < 11 || event.ID[:10] != "Container " || r.resourceService(event.ID) == "" {
+	if r.stageService(event.ID) == "" {
 		return
 	}
 	stages := r.containers[event.ID]
@@ -123,7 +147,7 @@ func mergeStage(current, next string) string {
 func (r *DeployReporter) servicesLocked() map[string]any {
 	merged := make(map[string]*deployStages, len(r.services))
 	for id, stages := range r.containers {
-		name := r.resourceService(id)
+		name := r.stageService(id)
 		row := merged[name]
 		if row == nil {
 			row = &deployStages{}
@@ -177,6 +201,10 @@ func (r *DeployReporter) servicesLocked() map[string]any {
 		rows = append(rows, row)
 	}
 	result := map[string]any{"v": 1, "services": rows}
+	// Image preparation is over once deploy began; unobserved pulls and builds were not needed.
+	if r.phase == "deploy" {
+		result["prepared"] = true
+	}
 	if len(services) > deployServiceRowLimit {
 		result["truncated"] = true
 	}

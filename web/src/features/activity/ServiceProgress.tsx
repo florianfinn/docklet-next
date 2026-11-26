@@ -16,7 +16,7 @@ import { stepTone } from "./run-phase";
 
 const SUMMARY_TONE: Record<ServiceSummary["kind"], string> = {
   failed: "err", pulling: "run", building: "run", creating: "run", starting: "run", waiting: "run",
-  healthy: "ok", ready: "ok", running: "ok", pending: "gray", notReached: "gray",
+  healthy: "ok", ready: "ok", running: "ok", interrupted: "gray", pending: "gray", notReached: "gray",
 };
 
 function ServiceLine({ row, run, prepared }: { row: DeployServiceRow; run: ActionRun; prepared: boolean }) {
@@ -34,20 +34,24 @@ function ServiceLine({ row, run, prepared }: { row: DeployServiceRow; run: Actio
         <span className="min-w-0 flex-1 truncate font-medium" title={row.name}>{row.name}</span>
         <span data-tone={SUMMARY_TONE[summary.kind]} className="shrink-0 text-(--tone) tabular-nums">{text}</span>
       </div>
+      {/* The track is visual only; this names every stage and its state for assistive technology. */}
+      <span className="sr-only" data-slot="service-stages-text">{segments.map((s) => t("stageState", { stage: t(`stage.${s.stage}`), state: t(`state.${s.state}`) })).join(", ")}</span>
       <ol className="grid grid-cols-5 gap-1" aria-hidden>
         {segments.map((s) => (
           <li
             key={s.stage}
             data-stage={s.stage}
             data-state={s.state}
-            data-tone={stepTone(s.state, run.status)}
+            data-tone={s.state === "interrupted" ? "gray" : stepTone(s.state, run.status)}
             className={cn(
               "relative block h-1.5 overflow-hidden rounded-full bg-muted",
               (s.state === "done" || s.state === "error") && "bg-(--tone)",
               s.state === "running" && "bg-(--tone)/22",
               s.state === "skipped" && "border border-dashed border-muted-foreground/35 bg-transparent",
+              s.state === "interrupted" && "bg-muted-foreground/20",
             )}
           >
+            {s.state === "interrupted" && s.fraction !== undefined && <span data-slot="service-fill" className="absolute inset-y-0 left-0 bg-muted-foreground/55" style={{ width: `${Math.round(s.fraction * 100)}%` }} />}
             {s.state === "running" && (s.fraction === undefined
               ? <span data-slot="step-motion" data-variant={motion} className="absolute inset-0" />
               : <span data-slot="service-fill" className="absolute inset-y-0 left-0 bg-(--tone) transition-[width]" style={{ width: `${Math.round(s.fraction * 100)}%` }} />)}

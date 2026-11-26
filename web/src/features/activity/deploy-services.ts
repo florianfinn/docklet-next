@@ -5,7 +5,6 @@
 // Deviations: Original per-service deploy stage projection and behavioural coverage.
 
 import type { ActionRun, StepState } from "@/domain/model";
-import type { DeployProgressView } from "./deploy-progress";
 
 export type DeployStageState = "running" | "done" | "error";
 export interface DeployServicePull { layersDone: number; layersTotal: number; bytesDone?: number; bytesTotal?: number }
@@ -19,7 +18,8 @@ export interface DeployServiceRow {
   start?: DeployStageState;
   health?: DeployStageState;
 }
-export interface DeployServices { rows: DeployServiceRow[]; truncated: boolean }
+/** `prepared`: the producer reached deploy, so pulls and builds not observed were not needed. */
+export interface DeployServices { rows: DeployServiceRow[]; truncated: boolean; prepared: boolean }
 export type DeployServicesView<T> = T & { deployServices?: DeployServices };
 
 export const DEPLOY_STAGES = ["pull", "build", "create", "start", "health"] as const;
@@ -32,7 +32,7 @@ const stage = (value: unknown): value is DeployStageState | undefined => value =
 /** Validates the producer's `deployServices` metadata; any invalid row hides the whole projection. */
 export function parseDeployServices(metadata: unknown): DeployServices | undefined {
   const root = object(metadata);
-  if (root?.v !== 1 || !Array.isArray(root.services) || root.services.length > 64 || (root.truncated !== undefined && root.truncated !== true)) return undefined;
+  if (root?.v !== 1 || !Array.isArray(root.services) || root.services.length > 64 || (root.truncated !== undefined && root.truncated !== true) || (root.prepared !== undefined && root.prepared !== true)) return undefined;
   const rows: DeployServiceRow[] = [];
   for (const item of root.services) {
     const row = object(item);
@@ -55,13 +55,15 @@ export function parseDeployServices(metadata: unknown): DeployServices | undefin
     }
     rows.push(parsed);
   }
-  return rows.length ? { rows, truncated: root.truncated === true } : undefined;
+  return rows.length ? { rows, truncated: root.truncated === true, prepared: root.prepared === true } : undefined;
 }
 
-export interface ServiceSegment { stage: DeployStage; state: StepState; fraction?: number }
+/** "interrupted": the stage was running when the run settled, so its outcome is unknown. */
+export type SegmentState = StepState | "interrupted";
+export interface ServiceSegment { stage: DeployStage; state: SegmentState; fraction?: number }
 export type ServiceSummary =
   | { kind: "failed" } | { kind: "pulling"; fraction: number } | { kind: "building" | "creating" | "starting" | "waiting" }
-  | { kind: "healthy" | "ready" | "running" | "pending" | "notReached" };
+  | { kind: "healthy" | "ready" | "running" | "interrupted" | "pending" | "notReached" };
 
 /** Share of the pull already transferred: bytes when every layer total is known, layers otherwise. */
 export function pullFraction(pull: DeployServicePull): number {
@@ -72,22 +74,26 @@ export function pullFraction(pull: DeployServicePull): number {
 /**
  * Turns observed stages into five segments. An unobserved stage is skipped
  * when a later stage was observed, when preparation is over (pull and build)
- * or when the run succeeded; otherwise it is still pending.
+ * or when the run succeeded; otherwise it is still pending. Work still
+ * running when the run settled, and a pull that ended partway, is interrupted;
+ * confirmed completion and failure are kept.
  */
 export function serviceSegments(row: DeployServiceRow, run: Pick<ActionRun, "status">, prepared: boolean): ServiceSegment[] {
-  const observed: Record<DeployStage, StepState | undefined> = {
-    pull: row.pull ? row.pull.layersDone === row.pull.layersTotal ? "done" : run.status === "running" && !prepared ? "running" : run.status === "failed" && !row.create && !row.build ? "error" : "done" : undefined,
-    build: row.build, create: row.create, start: row.start,
-    health: row.check === false ? "skipped" : row.health,
+  const active = run.status === "running" || run.status === "queued";
+  const settle = (state?: DeployStageState): SegmentState | undefined => state === "running" && !active ? "interrupted" : state;
+  const observed: Record<DeployStage, SegmentState | undefined> = {
+    pull: row.pull ? row.pull.layersDone === row.pull.layersTotal ? "done" : active && !prepared ? "running" : "interrupted" : undefined,
+    build: settle(row.build), create: settle(row.create), start: settle(row.start),
+    health: row.check === false ? "skipped" : settle(row.health),
   };
   return DEPLOY_STAGES.map((key, index) => {
     const later = DEPLOY_STAGES.slice(index + 1).some((next) => observed[next] && observed[next] !== "skipped");
     const state = observed[key] ?? (later || run.status === "succeeded" || (prepared && (key === "pull" || key === "build")) ? "skipped" : "pending");
-    return { stage: key, state, ...(key === "pull" && row.pull && state === "running" ? { fraction: pullFraction(row.pull) } : {}) };
+    return { stage: key, state, ...(key === "pull" && row.pull && (state === "running" || state === "interrupted") ? { fraction: pullFraction(row.pull) } : {}) };
   });
 }
 
-/** The row's short status: an error, the running stage, or the reached end state. */
+/** The row's short status: an error, the running stage, the reached end state, or an interruption. */
 export function serviceSummary(row: DeployServiceRow, segments: ServiceSegment[], run: Pick<ActionRun, "status">): ServiceSummary {
   if (segments.some((s) => s.state === "error")) return { kind: "failed" };
   const running = segments.find((s) => s.state === "running");
@@ -97,13 +103,14 @@ export function serviceSummary(row: DeployServiceRow, segments: ServiceSegment[]
   }
   const health = segments[4]!, start = segments[3]!;
   if (health.state === "done") return { kind: row.check === true ? "healthy" : "ready" };
-  if (start.state === "done") return { kind: "running" };
+  if (start.state === "done" && health.state !== "interrupted") return { kind: "running" };
+  if (segments.some((s) => s.state === "interrupted")) return { kind: "interrupted" };
   return { kind: run.status === "running" || run.status === "queued" ? "pending" : "notReached" };
 }
 
-/** The mapper supplies rows for deploy runs; preparation is over once the deploy phase was reached. */
+/** The mapper supplies rows for deploy and update runs; the producer marks the end of preparation. */
 export function deployServicesOf(run: ActionRun): { services: DeployServices; prepared: boolean } | undefined {
   const services = (run as DeployServicesView<ActionRun>).deployServices;
   if (!services || run.outcomeState === "unknown") return undefined;
-  return { services, prepared: run.status !== "running" || (run as DeployProgressView<ActionRun>).deployProgress?.phase === "deploy" };
+  return { services, prepared: services.prepared || (run.status !== "running" && run.status !== "queued") };
 }

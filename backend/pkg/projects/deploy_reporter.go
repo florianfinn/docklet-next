@@ -9,8 +9,10 @@ package projects
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +37,7 @@ type DeployReporter struct {
 	activity     map[string]any
 	activitySeen bool
 	builds       map[string]string
+	pullSent     bool
 	bindings     map[string]string
 	containers   map[string]*deployStages
 	dirty        bool
@@ -79,7 +82,9 @@ func (r *DeployReporter) ConfigureProject(project *composetypes.Project) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.services = r.services[:0]
-	for name, service := range project.Services {
+	// Sorted before the cap so repeated binding keeps the same services.
+	for _, name := range slices.Sorted(maps.Keys(project.Services)) {
+		service := project.Services[name]
 		if len(r.services) >= 512 {
 			break
 		}
@@ -330,12 +335,15 @@ func (r *DeployReporter) Flush(final bool) {
 }
 
 func (r *DeployReporter) flushLocked(final bool) {
-	if !r.dirty || (!final && !r.lastPatch.IsZero() && r.now().Sub(r.lastPatch) < time.Second) {
+	// The first pull counts bypass the throttle, even after earlier row-only patches.
+	firstPull := r.layers > 0 && !r.pullSent
+	if !r.dirty || (!final && !firstPull && !r.lastPatch.IsZero() && r.now().Sub(r.lastPatch) < time.Second) {
 		return
 	}
 	patch := map[string]any{}
 	if r.layers > 0 {
 		patch["deployPull"] = r.pullLocked()
+		r.pullSent = true
 	}
 	if r.activitySeen {
 		patch["deployActivity"] = r.activity

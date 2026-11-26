@@ -151,3 +151,55 @@ func TestDeployServiceBindingKeepsFirstPullUnthrottled(t *testing.T) {
 	require.NotNil(t, patches[0]["deployPull"])
 	require.Contains(t, patches[0], "deployServices")
 }
+
+// Compose 5.6 reports a failed create under its structured replica ID, not the container name.
+func TestDeployServiceRowsCreateErrorAndPreparedBoundary(t *testing.T) {
+	var patch map[string]any
+	r := NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patch = p }, time.Now)
+	r.ConfigureProject(stageProject())
+	r.Flush(true)
+	require.NotContains(t, patch["deployServices"], "prepared", "preparation is still open")
+	r.Phase("deploy")
+	r.On(
+		api.Resource{ID: "Container example-app-1", Text: api.StatusCreating, Status: api.Working},
+		api.Resource{ID: "service:app:1", Text: "create failed", Status: api.Error},
+		api.Resource{ID: "service:unknown:1", Text: "ignored", Status: api.Error},
+		api.Resource{ID: "service:worker:x", Text: "ignored", Status: api.Error},
+	)
+	r.Flush(true)
+	require.Equal(t, true, patch["deployServices"].(map[string]any)["prepared"])
+	rows := serviceRows(t, patch)
+	require.Equal(t, deployStageError, rows["app"]["create"], "the structured create error reaches its service")
+	require.NotContains(t, rows["worker"], "create")
+	require.Len(t, rows, 3, "unknown services gain no rows")
+}
+
+func TestDeployServiceFirstPullSurvivesEarlierRowTick(t *testing.T) {
+	now := time.Unix(100, 0)
+	var patches []map[string]any
+	r := NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patches = append(patches, p) }, func() time.Time { return now })
+	r.ConfigureProject(stageProject())
+	r.Flush(false)
+	require.Len(t, patches, 1, "the periodic tick publishes the bound rows")
+	now = now.Add(100 * time.Millisecond)
+	r.ObservePull("example/app:1", deployFrame("abcdef012345", "Downloading", `{"current":1,"total":2}`))
+	require.Len(t, patches, 2, "the first pull frame is not throttled by the row tick")
+	require.NotNil(t, patches[1]["deployPull"])
+	r.ObservePull("example/app:1", deployFrame("abcdef012345", "Downloading", `{"current":2,"total":2}`))
+	require.Len(t, patches, 2, "later frames keep the throttle")
+}
+
+func TestDeployServiceBindingCapIsStable(t *testing.T) {
+	services := composetypes.Services{}
+	for i := range 600 {
+		name := fmt.Sprintf("svc-%03d", i)
+		services[name] = composetypes.ServiceConfig{Name: name}
+	}
+	r := NewDeployReporter(func(string, bool) {}, func(map[string]any) {}, time.Now)
+	for range 5 {
+		r.ConfigureProject(&composetypes.Project{Name: "example", Services: services})
+		require.Len(t, r.services, 512)
+		require.Equal(t, "svc-000", r.services[0].name)
+		require.Equal(t, "svc-511", r.services[511].name, "the cap keeps the first services by name")
+	}
+}
