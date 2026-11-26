@@ -4,7 +4,8 @@
 
 | Version | Supported |
 | --- | --- |
-| 1.8.x | Yes |
+| 1.9.x | Yes |
+| 1.8.x | No |
 | 1.7.x | No |
 | 1.6.x | No |
 | 1.5.x | No |
@@ -15,7 +16,7 @@
 | 1.0.x | No |
 | Earlier builds, release candidates and development images | No |
 
-Fixes ship in a new patch release; upgrade to the latest 1.8.x release before
+Fixes ship in a new patch release; upgrade to the latest 1.9.x release before
 reporting. Custom and source-built images are supported only as far as the
 reported defect reproduces with an official release image.
 
