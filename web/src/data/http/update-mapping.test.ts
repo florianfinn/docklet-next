@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { mapStack, type ProjectRow } from "./inventory-mapping";
 import { mapUpdateInfo } from "./update-mapping";
 import { hasUpdate, summarizeUpdates } from "@/domain/updates";
+import { checkTimes } from "@/shared/components/updates/update-times";
 import type { components } from "@/api/generated/schema";
 import patternTags from "./testdata/pattern-tag-updates.json";
 
@@ -48,6 +49,24 @@ it("incomplete project counts cannot turn known service observations into all-cu
   expect(() => mapStack({ ...row, updateInfo: { ...row.updateInfo!, imageCount: "two" } as never }, "host", [], { stale: false })).toThrow();
 });
 
+
+// The hover names missing images from producer counts; only when they are the sole gap do they replace "not checked".
+it("names missing images from producer counts without hiding other gaps", () => {
+  const missing = (ref: string) => ({ imageRef: ref, updateInfo: { ...observation("unknown"), imageRef: ref, updateType: "not_pulled" } });
+  const runtimeServices: NonNullable<ProjectRow["runtimeServices"]> = [{ name: "web", image: "example:1.0.0", status: "running" }, { name: "a1", image: "example/a:1", status: "running" }, { name: "a2", image: "example/a:1", status: "running" }];
+  const updateInfo: ProjectRow["updateInfo"] = { status: "not_pulled", hasUpdate: false, imageCount: 2, checkedImageCount: 2, imagesWithUpdates: 0, imagesNotPulled: 1, notPulledImageRefs: ["example/a:1"], errorCount: 0, serviceUpdates: { web: { imageRef: "example:1.0.0", updateInfo: observation("current") }, a1: missing("example/a:1"), a2: missing("example/a:1") } };
+  const row: ProjectRow = { id: "project", name: "Example", tags: [], status: "running", isArchived: false, serviceCount: 3, runningCount: 3, path: "/srv/example", createdAt: "2026-10-26T00:00:00Z", updatedAt: "2026-10-26T00:00:00Z", runtimeServices, updateInfo };
+  const times = (info: ProjectRow["updateInfo"], services = runtimeServices) => { const m = mapStack({ ...row, runtimeServices: services, updateInfo: info }, "host", [], { stale: false }); return checkTimes(m.services.map((s) => s.update), m.updateGaps); };
+  // Shared missing image a is the only gap: checked neighbours stay checked and a counts once.
+  expect(times(updateInfo)).toMatchObject({ unchecked: 0, notPulled: 1 });
+  // An unattributed missing image b counts too.
+  expect(times({ ...updateInfo, imagesNotPulled: 2, notPulledImageRefs: ["example/a:1", "example/b:1"] })).toMatchObject({ unchecked: 0, notPulled: 2 });
+  // Unrecorded or failed images keep the unchecked count beside the missing one.
+  expect(times({ ...updateInfo, imageCount: 3 })).toMatchObject({ unchecked: 3, notPulled: 1 });
+  expect(times({ ...updateInfo, errorCount: 1 })).toMatchObject({ unchecked: 3, notPulled: 1 });
+  // A service without its own observation stays unchecked although its reference counts as checked.
+  expect(times(updateInfo, [...runtimeServices, { name: "web2", image: "example:2.0.0", status: "running" }])).toMatchObject({ unchecked: 1, notPulled: 1 });
+});
 
 it("version observations accept release build metadata without changing update level", () => {
   expect(mapUpdateInfo({ ...observation("version"), currentVersion: "v1.0.0+current.7", latestVersion: "1.1.0+candidate.9" }, image, "example:1.0.0")).toMatchObject({ state: "version", level: "minor", latest: { version: "1.1.0+candidate.9" } });

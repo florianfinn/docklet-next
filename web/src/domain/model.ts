@@ -169,6 +169,8 @@ export interface Service {
   condition?: RuntimeCondition;
   containersRemoved?: boolean;
   containerId?: string;
+  /** Docker container name; the hub keys runtime history by it. */
+  containerName?: string;
   name: string;
   /** Empty for a service that is only built locally and was never created (`build:` without `image:`, `buildOnly`). */
   image: ImageVersion;
@@ -188,6 +190,8 @@ export type AutoUpdateMode = "check" | "scheduled";
 
 /** Only check, or install updates on a typed schedule in the hub time zone. */
 export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule: Schedule };
+
+export interface UpdateGaps { missing: number; notPulled: number }
 
 export interface Stack {
   definitionHint?: "definition-invalid";
@@ -209,6 +213,8 @@ export interface Stack {
   description?: string;
   labels: string[];
   url?: string;
+  /** Producer image counts: `missing` images without a usable check (unrecorded or failed), `notPulled` distinct references absent on the host. */
+  updateGaps?: UpdateGaps;
   services: Service[];
   autoUpdate: AutoUpdatePolicy;
   lastDeployAt?: string;

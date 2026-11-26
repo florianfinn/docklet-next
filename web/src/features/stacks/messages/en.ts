@@ -80,7 +80,7 @@ export const enStacks = {
     unknownDeploy: "Unknown",
     never: "never",
     hostOffline: "{host} is not connected – values are outdated, actions fail.",
-    tabs: { overview: "Overview", editor: "Editor", logs: "Logs", deployments: "Deployments" },
+    tabs: { overview: "Overview", editor: "Editor", logs: "Logs", health: "Health", deployments: "Deployments" },
     tabsLabel: "Stack sections",
     redeployMenu: "More deploy options",
     actions: { checkingSupport: "Checking update support…", updateUnsupported: "Update not offered. See the image binding reason below.", start: "Start", stop: "Stop", restart: "Restart", redeploy: "Pull & redeploy", failDemo: (import.meta.env.DEV ? "Redeploy with error (demo)" : ""), check: "Check for updates" },

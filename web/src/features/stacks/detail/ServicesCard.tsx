@@ -2,8 +2,9 @@
 // Revision: f8eda509ac4ee01f09962b84a53fabbcfd8954381a94036c10f10ce141f3b6ad
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M24 S6: optional observed service update.
+// Deviations: Modified L4 snapshot. See web/PROVENANCE.md. #27 production text, source errors and capability boundaries. M10 #231: production stack updates and lifecycle UI. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M24 S6: optional observed service update. M42 #637: lazy admin health badge hint and link.
 
+import { ServiceHealthBadge } from "@/shared/health/ServiceHealthHint";
 import { useIsUser } from "@/data/use-principal";
 import { useCapability } from "@/data/use-capability";
 import { Boxes, FileText, RotateCw } from "lucide-react";
@@ -48,7 +49,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
           </span>
         </TableCell>
         <TableCell>
-          <ToneBadge tone={tone}>{ts(rt)}</ToneBadge>
+          {!user && svc.health === "unhealthy" ? <ServiceHealthBadge service={svc} stackId={stack.id} tone={tone} label={ts(rt)} /> : <ToneBadge tone={tone}>{ts(rt)}</ToneBadge>}
           {svc.containersRemoved && <p className="mt-1 text-xs text-muted-foreground">{stopText("containersRemoved")}</p>}
         </TableCell>
         <TableCell className="max-w-56">

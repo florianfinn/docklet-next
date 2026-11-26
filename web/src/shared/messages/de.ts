@@ -256,6 +256,7 @@ export const deCommon: typeof enCommon = {
     lastUpdated: "Zuletzt aktualisiert",
     neverChecked: "Noch nie geprüft",
     partlyUnchecked: "{count, plural, one {# Image} other {# Images}} ohne Prüfung",
+    notPulled: "{count, plural, one {# Image} other {# Images}} nicht auf dem Host",
     checkNotPossible: "Lokales Image – keine Prüfung möglich",
     noUpdateRecorded: "Kein Update-Lauf erfasst",
     noteMajor: "Hauptversion laut Versionsnummer: Änderungen mit Anpassungsbedarf sind möglich. Versionshinweise vor dem Update lesen.",

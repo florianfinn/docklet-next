@@ -40,6 +40,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     updateMyLocale: unavailable,
     getHubBackupAccess: unavailable,
     getContainerHistory: unavailable,
+    getContainerHealth: unavailable,
     getStackHistory: unavailable,
     getCapacity: unavailable,
     getUiPreferences: unavailable,

@@ -16,7 +16,8 @@ import { QueryError } from "@/shared/components/page";
 
 /**
  * Only a mounted detail body owns history. Summary updates cannot erase it. `pending` replaces `fallback` while
- * the first detail loads; `children` learns whether the shown copy comes from a failed refresh (`failed`).
+ * the first detail loads; `children` learns whether the shown copy comes from a failed refresh (`failed`). A background
+ * refresh keeps the shown copy without a loading line, so periodic re-reads cause no layout shift.
  */
 export function ActionDetail({ run, children, fallback, pending }: { run: ActionRun; children: (run: ActionRun, failed: boolean) => ReactNode; fallback?: ReactNode; pending?: ReactNode }) {
   const adapter = useAdapter();
@@ -36,7 +37,7 @@ export function ActionDetail({ run, children, fallback, pending }: { run: Action
   if (!adapter.observeActionDetail) return children(run, false);
   const state = view?.key === key ? view.state : undefined;
   const full = state?.status === "ready" || state?.status === "error" ? state.run : undefined;
-  if (full) return <>{children(renderRun(full, locale), state?.status === "error")}<RecreateResultLink run={renderRun(full, locale)} />{state?.status === "error" ? <QueryError compact error={state.error} /> : state?.status === "ready" && state.refreshing ? <p role="status" className="text-sm text-muted-foreground">{t("detailLoading")}</p> : null}</>;
+  if (full) return <>{children(renderRun(full, locale), state?.status === "error")}<RecreateResultLink run={renderRun(full, locale)} />{state?.status === "error" ? <QueryError compact error={state.error} /> : null}</>;
   if (state?.status === "error") return fallback ?? <QueryError compact error={state.error} />;
   return pending ?? fallback ?? <p role="status" className="p-3 text-sm text-muted-foreground">{t("detailLoading")}</p>;
 }

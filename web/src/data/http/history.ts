@@ -2,13 +2,15 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original runtime history and profile preference transport for issues #335, #336, #337 and #339.
+// Deviations: Original runtime history and profile preference transport for issues #335, #336, #337 and #339. M42 #635: container health read.
 
 import type { components } from "@/api/generated/schema";
+import type { ContainerHealthApi } from "@/domain/health";
 import { HISTORY_BUCKETS, HISTORY_RANGES, type HistoryApi, type HistoryBucket, type HistoryRange, type HostCapacity, type RuntimeHistory } from "@/domain/history";
 import { isUiSection, type UiPreferencesApi, type UiPreferencesDocument } from "@/domain/ui-preferences";
 import { AdapterOutcomeError } from "../capability";
 import type { CsrfClient } from "./csrf-client";
+import { mapContainerHealth, type WireDetails } from "./container-health";
 import { splitInventoryId } from "./inventory-mapping";
 
 type WireHistory = components["schemas"]["HistoryResponse"];
@@ -106,11 +108,19 @@ async function request<T>(client: CsrfClient, url: string, init: RequestInit = {
   return envelope.data as T;
 }
 
-export function createHttpHistory(baseUrl: string, client: CsrfClient): HistoryApi {
+/** History and current health share the hub's enveloped container reads. */
+export function createHttpHistory(baseUrl: string, client: CsrfClient): HistoryApi & ContainerHealthApi {
   const host = (id: string) => `${baseUrl}/environments/${encodeURIComponent(id)}`;
   return {
     async getContainerHistory({ hostId, name }, range) {
       return mapHistory(await request<WireHistory>(client, `${host(hostId)}/containers/${encodeURIComponent(name)}/history?range=${range}`), range);
+    },
+    async getContainerHealth(containerId) {
+      const [hostId, raw] = splitInventoryId(containerId);
+      const details = await request<WireDetails>(client, `${host(hostId)}/containers/${encodeURIComponent(raw)}`);
+      // A recreated container answers under a new id; its health belongs to another container.
+      if (details.id !== raw) throw new AdapterOutcomeError({ kind: "error", code: "update.target-changed" });
+      return mapContainerHealth(containerId, details);
     },
     async getStackHistory(stackId, range) {
       const [hostId, projectId] = splitInventoryId(stackId);
