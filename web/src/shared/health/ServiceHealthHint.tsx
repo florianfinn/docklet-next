@@ -22,7 +22,7 @@ export function ServiceHealthHint({ containerId, stackId, serviceName, open }: {
   const health = useContainerHealth(containerId, open);
   const hint = useHealthHint()(health.data ? diagnoseHealth(health.data, health.dataUpdatedAt) : undefined);
   return <div className="grid gap-2 text-xs">
-    {health.isError ? <p role="alert">{t("unavailable")}</p> : hint ? <p>{hint}</p> : health.isPending ? <p>{t("loading")}</p> : null}
+    {!containerId ? <p>{t("noContainer")}</p> : health.isError ? <p role="alert">{t("unavailable")}</p> : hint ? <p>{hint}</p> : health.isPending ? <p>{t("loading")}</p> : null}
     <Link className="text-primary-text underline-offset-4 hover:underline" to={`/stacks/${encodeURIComponent(stackId)}?tab=health&service=${encodeURIComponent(serviceName)}`}>{t("showHealth")}</Link>
   </div>;
 }

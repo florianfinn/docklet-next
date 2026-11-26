@@ -57,6 +57,13 @@ it("keeps the lazy-read guard disabled until open, including across container id
   await waitFor(() => expect(health.mock.calls.map(([id]) => id)).toEqual(["old", "new"]));
 });
 
+it("says there is no container instead of loading forever when the service has none", async () => {
+  const { adapter, health } = await setup();
+  renderWithApp(<ServiceHealthHint containerId={undefined} stackId="media" serviceName="web app" open />, adapter);
+  expect([screen.queryByText("No container") !== null, screen.queryByText("Loading health details…") === null]).toEqual([true, true]);
+  expect(health).not.toHaveBeenCalled();
+});
+
 it("reads only the unhealthy service after opening the overview hover and links to its Health tab", async () => {
   const { adapter, health, stack } = await setup();
   renderWithApp(<ServicesHover stackId={stack.id} services={stack.services} host={undefined} name={stack.name} />, adapter);
