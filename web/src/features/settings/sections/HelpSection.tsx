@@ -1,10 +1,14 @@
+import { Compass } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
+import { useIsUser } from "@/data/use-principal";
 import { HELP_MODES, helpStore, type HelpPrefs } from "@/shared/preferences/help-store";
 import { HelpBody, HelpLabel } from "@/shared/help/help-tooltip";
 import { useStore } from "@/shared/lib/store";
-import { Field, FieldDescription } from "@/shared/ui/field";
+import { startTour } from "@/shared/tour/tour-store";
+import { Button } from "@/shared/ui/button";
+import { Field, FieldDescription, FieldLabel } from "@/shared/ui/field";
 
 import { SettingsForm } from "../SettingsForm";
 import { useSectionDraft } from "../use-section-draft";
@@ -19,6 +23,7 @@ export function HelpSection() {
   const th = useTranslations("settings.help");
   const saved = useStore(helpStore, (s) => s);
   const section = useSectionDraft<HelpPrefs>(saved);
+  const user = useIsUser();
   const d = section.draft;
   if (!d) return null;
   return (
@@ -56,6 +61,19 @@ export function HelpSection() {
         )}
         <p className="text-xs text-muted-foreground">{th("trigger")}</p>
       </section>
+      {!user && (
+        <Field>
+          <FieldLabel>{th("tour")}</FieldLabel>
+          {/* Wrapped: Field stretches its direct children to full width. */}
+          <div>
+            <Button type="button" variant="outline" onClick={startTour}>
+              <Compass data-icon="inline-start" />
+              {th("tourStart")}
+            </Button>
+          </div>
+          <FieldDescription>{th("tourHint")}</FieldDescription>
+        </Field>
+      )}
     </SettingsForm>
   );
 }

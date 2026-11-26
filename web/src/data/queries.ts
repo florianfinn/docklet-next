@@ -180,6 +180,12 @@ export function useContainerHistory(ref: ContainerHistoryRef | undefined, range:
   return useQuery({ queryKey: queryKeys.containerHistory(ref?.hostId ?? "", ref?.name ?? "", range), enabled: !!ref?.name, queryFn: () => adapter.getContainerHistory(ref!, range), refetchInterval: 60_000, placeholderData: keepPreviousData });
 }
 
+/** Current probe results; `enabled` lets a hover read only while it is open. A recreated container has a new id and key. */
+export function useContainerHealth(containerId: string | undefined, enabled = true) {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.containerHealth(containerId ?? ""), enabled: enabled && !!containerId, queryFn: () => adapter.getContainerHealth(containerId!), refetchInterval: 30_000 });
+}
+
 export function useStackHistory(stackId: string | undefined, range: HistoryRange) {
   const adapter = useAdapter();
   return useQuery({ queryKey: queryKeys.stackHistory(stackId ?? "", range), enabled: !!stackId, queryFn: () => adapter.getStackHistory(stackId!, range), refetchInterval: 60_000, placeholderData: keepPreviousData });

@@ -23,6 +23,7 @@ import { HostDefaultsFields } from "@/features/settings/sections/SimpleSections"
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Spinner } from "@/shared/ui/spinner";
+import { offerTour } from "@/shared/tour/tour-store";
 
 import { HubAddressDiscovery } from "./HubAddressDiscovery";
 import { SetupCompletion } from "./SetupCompletion";
@@ -134,6 +135,7 @@ export default function SetupPage() {
     return <SetupCompletion onDone={() => {
       if (connected) queryClient.setQueryData(queryKeys.setupStatus, true);
       void navigate("/dashboard", { replace: true });
+      offerTour();
     }} />;
   }
 

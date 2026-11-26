@@ -20,6 +20,7 @@ export const queryKeys = {
   historyRoot: ["history"],
   containerHistory: (hostId: string, name: string, range: string) => ["history", "container", hostId, name, range],
   stackHistory: (id: string, range: string) => ["history", "stack", id, range],
+  containerHealth: (containerId: string) => ["container-health", containerId],
   capacity: ["history", "capacity"],
   serviceWidgets: ["service-widgets"],
   serviceWidget: (kind: string) => ["service-widgets", "data", kind],

@@ -23,9 +23,11 @@ import { enSecurity } from "@/features/security/messages/en";
 import { enEditor } from "@/features/stacks/editor/messages/en";
 import { enStacks } from "@/features/stacks/messages/en";
 import { enHelp } from "@/shared/help/messages/en";
+import { enHealth } from "@/shared/health/messages/en";
 import { enHistory } from "@/shared/history/messages/en";
 import { enCommon } from "@/shared/messages/en";
 import { enTheme } from "@/shared/theme/messages/en";
+import { enTour } from "@/shared/tour/messages/en";
 import { enWorkspace } from "@/shared/workspace/messages/en";
 
 import { enComingSoon } from "../coming-soon/messages/en";
@@ -35,6 +37,7 @@ import { enLocale } from "./messages/en";
 export const enMessages = {
   common: enCommon,
   help: enHelp,
+  tour: enTour,
   workspace: enWorkspace,
   theme: enTheme,
   shell: enShell,
@@ -53,6 +56,7 @@ export const enMessages = {
   stacks: enStacks,
   editor: enEditor,
   containers: enContainers,
+  health: enHealth,
   history: enHistory,
   security: enSecurity,
   networks: {

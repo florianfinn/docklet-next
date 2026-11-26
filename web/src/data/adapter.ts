@@ -30,6 +30,7 @@ import type { CodedActionRun, CodedEvent, CodedStackDetail } from "./message-cod
 import type { CapabilityDescriptor, ResourceRef } from "./capability";
 import type { RegistriesApi } from "@/domain/registries";
 import type { HubBackupApi } from "@/domain/hub-backup";
+import type { ContainerHealthApi } from "@/domain/health";
 import type { HistoryApi } from "@/domain/history";
 import type { UiPreferencesApi } from "@/domain/ui-preferences";
 import type { ServiceWidgetsApi } from "@/domain/service-widgets";
@@ -120,7 +121,7 @@ export interface RuntimeReleaseInput {
 /**
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
-export interface DockletAdapter extends VulnerabilityCandidatesApi, VulnerabilityAdvisoryApi, UpdatesApi, AuthApi, UsersApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi, HistoryApi, UiPreferencesApi, ServiceWidgetsApi {
+export interface DockletAdapter extends VulnerabilityCandidatesApi, VulnerabilityAdvisoryApi, UpdatesApi, AuthApi, UsersApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi, HistoryApi, ContainerHealthApi, UiPreferencesApi, ServiceWidgetsApi {
   readonly tailnet?: import("@/domain/tailnet").TailnetApi;
   readonly kind: "demo" | "http" | "disconnected";
   readonly hubUpdateSession?: import("./http/hub-update-session").HubUpdateSession;

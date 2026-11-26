@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { ServiceHealthHint } from "@/shared/health/ServiceHealthHint";
 import { Boxes } from "lucide-react";
 import { useTranslations } from "use-intl";
 
@@ -10,12 +12,14 @@ import { InteractiveHoverCard } from "./interactive-hover-card";
 import { ToneDot } from "./tone";
 
 /** Service count with a hover list of service states and versions. */
-export function ServicesHover({ services, host, name, className }: { services: Service[]; host: Host | undefined; name: string; className?: string }) {
+export function ServicesHover({ services, host, name, stackId, className }: { stackId?: string; services: Service[]; host: Host | undefined; name: string; className?: string }) {
+  const [open, setOpen] = useState(false);
   const t = useTranslations("common");
   const running = services.filter((s) => s.state === "running").length;
   const problem = services.some((s) => s.health === "unhealthy");
   return (
     <InteractiveHoverCard
+      onOpenChange={setOpen}
       label={`${name}: ${t("services.label", { running, total: services.length })}`}
       contentClassName="w-72"
       content={
@@ -25,10 +29,13 @@ export function ServicesHover({ services, host, name, className }: { services: S
             {services.map((s) => {
               const rt = serviceRuntime(s, host);
               return (
-                <li key={s.name} className="flex items-center gap-2">
-                  <ToneDot tone={RUNTIME_TONE[rt]} pulse={rt === "unhealthy"} />
-                  <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-                  <span className="font-mono text-[11px] text-muted-foreground">{s.buildOnly ? t("services.buildOnly") : versionLabel(s.image)}</span>
+                <li key={s.name} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <ToneDot tone={RUNTIME_TONE[rt]} pulse={rt === "unhealthy"} />
+                    <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
+                    <span className="font-mono text-[11px] text-muted-foreground">{s.buildOnly ? t("services.buildOnly") : versionLabel(s.image)}</span>
+                  </div>
+                  {stackId && s.health === "unhealthy" && <ServiceHealthHint containerId={s.containerId} stackId={stackId} serviceName={s.name} open={open} />}
                 </li>
               );
             })}

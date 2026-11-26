@@ -1,5 +1,5 @@
 import { useActionRuns } from "@/data/live";
-import type { ActionRun, StackDetail, UpdateInfo } from "@/domain/model";
+import type { ActionRun, StackDetail, UpdateGaps, UpdateInfo } from "@/domain/model";
 
 /**
  * Times an update panel shows. Every value comes from recorded data: registry
@@ -11,22 +11,29 @@ export interface UpdateTimes {
   checkedAt?: string;
   /** Images without a registry check (never checked or local only). */
   unchecked: number;
+  /** Producer count of image references absent on the host. */
+  notPulled?: number;
   /** End of the last successful update run. */
   updatedAt?: string;
 }
 
-export function checkTimes(updates: UpdateInfo[]): Pick<UpdateTimes, "checkedAt" | "unchecked"> {
+/**
+ * Producer `gaps` (stacks) name images absent on the host. When they are the stack's only gap, the stack-wide
+ * incomplete flag stands for them and no longer counts services as unchecked.
+ */
+export function checkTimes(updates: UpdateInfo[], gaps?: UpdateGaps): Pick<UpdateTimes, "checkedAt" | "unchecked" | "notPulled"> {
   let checkedAt: string | undefined;
   let unchecked = 0;
+  const onlyNotPulled = !!gaps && gaps.missing === 0 && gaps.notPulled > 0;
   for (const u of updates) {
     if (!("checkedAt" in u) || !u.checkedAt) {
       unchecked++;
       continue;
     }
-    if (u.incomplete) unchecked++;
+    if (u.incomplete && !onlyNotPulled) unchecked++;
     if (!checkedAt || u.checkedAt > checkedAt) checkedAt = u.checkedAt;
   }
-  return { checkedAt, unchecked };
+  return { checkedAt, unchecked, ...(gaps?.notPulled ? { notPulled: gaps.notPulled } : {}) };
 }
 
 /** End of the newest successful update run of a stack, live runs included. */
@@ -39,10 +46,10 @@ export function lastUpdateAt(runs: Pick<ActionRun, "kind" | "status" | "finished
   return last;
 }
 
-export function stackUpdateTimes(stack: Pick<StackDetail, "id" | "services" | "deployments">, live: Pick<ActionRun, "kind" | "status" | "finishedAt" | "stackId">[]): UpdateTimes {
-  return { ...checkTimes(stack.services.map((s) => s.update)), updatedAt: lastUpdateAt([...stack.deployments, ...live], stack.id) };
+export function stackUpdateTimes(stack: Pick<StackDetail, "id" | "services" | "deployments" | "updateGaps">, live: Pick<ActionRun, "kind" | "status" | "finishedAt" | "stackId">[]): UpdateTimes {
+  return { ...checkTimes(stack.services.map((s) => s.update), stack.updateGaps), updatedAt: lastUpdateAt([...stack.deployments, ...live], stack.id) };
 }
 
-export function useStackUpdateTimes(stack: Pick<StackDetail, "id" | "services" | "deployments">): UpdateTimes {
+export function useStackUpdateTimes(stack: Pick<StackDetail, "id" | "services" | "deployments" | "updateGaps">): UpdateTimes {
   return stackUpdateTimes(stack, useActionRuns());
 }

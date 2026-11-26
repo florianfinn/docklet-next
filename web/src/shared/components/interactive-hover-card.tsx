@@ -17,6 +17,7 @@ interface InteractiveHoverCardProps {
   align?: "start" | "center" | "end";
   openDelay?: number;
   closeDelay?: number;
+  onOpenChange?: (open: boolean) => void;
   triggerClassName?: string;
   contentClassName?: string;
 }
@@ -37,6 +38,7 @@ export function InteractiveHoverCard({
   closeDelay = 160,
   triggerClassName,
   contentClassName,
+  onOpenChange,
 }: InteractiveHoverCardProps) {
   const mode = useRef<OpenMode>("hover");
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -56,6 +58,7 @@ export function InteractiveHoverCard({
   });
 
   useEffect(() => clearTimers, [clearTimers]);
+  useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
 
   const show = useCallback(
     (next: OpenMode, delay = 0) => {

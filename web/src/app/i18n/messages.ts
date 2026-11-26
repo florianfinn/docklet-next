@@ -23,9 +23,11 @@ import { deSecurity } from "@/features/security/messages/de";
 import { deEditor } from "@/features/stacks/editor/messages/de";
 import { deStacks } from "@/features/stacks/messages/de";
 import { deHelp } from "@/shared/help/messages/de";
+import { deHealth } from "@/shared/health/messages/de";
 import { deHistory } from "@/shared/history/messages/de";
 import { deCommon } from "@/shared/messages/de";
 import { deTheme } from "@/shared/theme/messages/de";
+import { deTour } from "@/shared/tour/messages/de";
 import { deWorkspace } from "@/shared/workspace/messages/de";
 
 import { deComingSoon } from "../coming-soon/messages/de";
@@ -37,6 +39,7 @@ import type { enMessages } from "./messages-en";
 export const messages: typeof enMessages = {
   common: deCommon,
   help: deHelp,
+  tour: deTour,
   workspace: deWorkspace,
   theme: deTheme,
   shell: deShell,
@@ -55,6 +58,7 @@ export const messages: typeof enMessages = {
   stacks: deStacks,
   editor: deEditor,
   containers: deContainers,
+  health: deHealth,
   history: deHistory,
   security: deSecurity,
   networks: {

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
+import { tourStore } from "@/shared/tour/tour-store";
 import { renderRoutes } from "@/test/render";
 
 import { restartSetup } from "./setup-draft";
@@ -15,6 +16,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  tourStore.reset();
   simulationStore.reset();
   localStorage.clear();
 });
@@ -64,6 +66,8 @@ describe("first-run setup", () => {
     // Finish shows the Docklet loading animation and then opens the dashboard; there is no Done step.
     expect(await screen.findByText("Docklet wird vorbereitet …") !== null).toBe(true);
     await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"), { timeout: 4000 });
+    // The dashboard then offers the guided tour once.
+    expect(tourStore.get().status).toBe("offer");
     const saved = await adapter.getSettings();
     expect(await adapter.getModuleStates!()).toEqual({ proxy: true });
     expect([saved.setupCompleted, saved.general.hubAddress, saved.general.domainUrl, saved.auth.mode, saved.auth.local.passwordSet]).toEqual([true, "192.0.2.10:8080", "", "local", true]);

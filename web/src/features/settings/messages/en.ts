@@ -530,6 +530,9 @@ export const enSettings = {
     previewTopic: "This is how the explanation of the internal hub address appears:",
     previewOff: "Info icons are hidden.",
     trigger: "Hovering after a short delay, keyboard focus or tapping opens the explanation; Escape closes it.",
+    tour: "Guided tour",
+    tourStart: "Start tour",
+    tourHint: "A short walk through the most important pages. It changes nothing.",
   },
   activity: {
     events: "Maximum events",

@@ -102,9 +102,9 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
     const id = runtime.containerId;
     return !id || !containers.some((item) => item.id === inventoryId(hostId, id) && !!item.stackId && item.stackId !== inventoryId(hostId, row.id));
   });
-  const services: Service[] = (runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
+  const services: Service[] = (runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1], containerName: c.name }))).map((runtime) => {
     const container = members.find((item) => item.id === inventoryId(hostId, runtime.containerId || "absent"));
-    const common = { name: runtime.name, ...(runtime.status === "not-created" ? { containersRemoved: true } : runtime.containerId ? { containerId: inventoryId(hostId, runtime.containerId) } : {}), state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
+    const common = { name: runtime.name, ...(runtime.status === "not-created" ? { containersRemoved: true } : runtime.containerId ? { containerId: inventoryId(hostId, runtime.containerId), ...((runtime.containerName || container?.name) ? { containerName: runtime.containerName || container!.name } : {}) } : {}), state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
       ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0 } as const;
     // A service with `build:` and no `image:` that was never created has no image and no container: the project list
     // reports it "not-created", the project detail "stopped" (#600).
@@ -115,7 +115,7 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
   });
   const url = stackAddress(row.urls);
   const role = members.map((item) => systemRole(item.dockerLabels)).find((value) => value !== undefined);
-  return { id: inventoryId(hostId, row.id), hostId, name: row.name, ...(url ? { url } : {}), path: row.path, definitionHint: row.definitionHint, definitionReason: row.definitionReason, definitionFile: safeRuntimeFile(row.definitionFile) ? row.definitionFile : undefined, definitionVariable: safeVariable(row.definitionVariable), composeNamePeers: safePeers(row.composeNamePeers), reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
+  return { id: inventoryId(hostId, row.id), hostId, name: row.name, ...(url ? { url } : {}), path: row.path, definitionHint: row.definitionHint, definitionReason: row.definitionReason, definitionFile: safeRuntimeFile(row.definitionFile) ? row.definitionFile : undefined, definitionVariable: safeVariable(row.definitionVariable), composeNamePeers: safePeers(row.composeNamePeers), reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, ...(row.updateInfo ? { updateGaps: { missing: Math.max(0, row.updateInfo.imageCount - row.updateInfo.checkedImageCount) + row.updateInfo.errorCount, notPulled: row.updateInfo.imagesNotPulled } } : {}), autoUpdate: { mode: "check" }, inventory,
     ...(role ? { dockerLabels: { [SYSTEM_LABEL]: role } } : {}) };
 }
 

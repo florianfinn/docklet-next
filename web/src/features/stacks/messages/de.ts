@@ -81,7 +81,7 @@ export const deStacks: typeof enStacks = {
     unknownDeploy: "Unbekannt",
     never: "noch nie",
     hostOffline: "{host} ist nicht verbunden – Werte sind veraltet, Aktionen schlagen fehl.",
-    tabs: { overview: "Übersicht", editor: "Editor", logs: "Logs", deployments: "Deployments" },
+    tabs: { overview: "Übersicht", editor: "Editor", logs: "Logs", health: "Health", deployments: "Deployments" },
     tabsLabel: "Bereiche des Stacks",
     redeployMenu: "Weitere Deploy-Optionen",
     actions: { checkingSupport: "Update-Unterstützung wird geprüft…", updateUnsupported: "Update nicht angeboten. Der Grund zur Image-Zuordnung steht unten.", start: "Starten", stop: "Stoppen", restart: "Neustart", redeploy: "Pull & Redeploy", failDemo: (import.meta.env.DEV ? "Redeploy mit Fehler (Demo)" : ""), check: "Updates prüfen" },
