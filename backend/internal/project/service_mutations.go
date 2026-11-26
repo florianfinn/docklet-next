@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Observe actual redeploy pulls and nonfatal warnings;  SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs.
+// Deviations: Observe actual redeploy pulls and nonfatal warnings;  SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs. #634: pinned-platform scope of lent reference observations.
 
 package project
 
@@ -749,7 +749,7 @@ func BuildConfiguredUpdateInfo(
 		if record != nil && record.PolicyKey == imageref.UpdatePolicyKey(imageRef, service.Labels) {
 			info = record.UpdateInfo()
 		} else if policyErr == nil && policy.Strategy == "digest" && !imageref.IsUpdateCheckDisabled(service.Labels) {
-			info = projectdetails.UpdateInfoForRef(byRef, imageRef)
+			info = imageupdate.ScopeServiceObservation(projectdetails.UpdateInfoForRef(byRef, imageRef), service.Platform)
 		}
 
 		if len(runtimeUpdates) > 0 && runtimeUpdates[0][service.Name] != nil {

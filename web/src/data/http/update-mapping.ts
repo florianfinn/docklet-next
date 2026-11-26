@@ -17,9 +17,9 @@ export function mapUpdateInfo(dto: components["schemas"]["ImageUpdateInfo"] | un
   if (!dto || !sameImageReference(dto.imageRef, reference)) return { state: "unchecked", current };
   const checkedAt = dto.checkedAt || undefined;
   const metadata = { ...(dto.code ? { code: dto.code } : {}), authState: dto.authState, stale };
-  const image = { ...current, ...(dto.currentVersion ? { version: dto.currentVersion } : {}), ...build(dto.currentCreated, dto.currentDigest) };
+  const image = { ...current, ...(dto.currentVersion ? { version: dto.currentVersion } : {}), ...build(dto.currentCreated, dto.currentDigest, dto.platform) };
   // Candidate facts never inherit the running image's build date or ID.
-  const candidate = { repository: current.repository, tag: current.tag, ...build(dto.latestCreated, dto.latestDigest) };
+  const candidate = { repository: current.repository, tag: current.tag, ...build(dto.latestCreated, dto.latestDigest, dto.platform) };
   if (dto.state === "local") return { ...metadata, state: "local", current: image };
   if (dto.state === "unchecked") return { ...metadata, state: "unchecked", current: image };
   if (dto.state === "unknown" || !checkedAt) return { ...metadata, state: "unknown", current: image, checkedAt };
@@ -37,8 +37,10 @@ export function mapUpdateInfo(dto: components["schemas"]["ImageUpdateInfo"] | un
   return { ...metadata, state: "unknown", current: image, checkedAt };
 }
 
-/** A plausible build date, else a short image ID; full digests stay out of the UI. */
-function build(created: string | undefined, digest: string | undefined): Pick<ImageVersion, "published" | "buildId"> {
+/** A plausible build date, else a short image ID; full digests stay out of the UI.
+ *  Only an observation naming its verified platform identifies a build. */
+function build(created: string | undefined, digest: string | undefined, platform: string | undefined): Pick<ImageVersion, "published" | "buildId"> {
+  if (!platform) return {};
   if (created) return { published: created };
   const id = /^sha256:([0-9a-f]{64})$/.exec(digest ?? "")?.[1];
   return id ? { buildId: id.slice(0, 7) } : {};

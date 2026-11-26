@@ -30,7 +30,7 @@ describe("stored update observation", () => {
   it("labels same-tag rebuilds by build date, else by short image ID, never by an echoed tag", () => {
     const latestTag = { repository: "example", tag: "latest" };
     const digest = (c: string) => `sha256:${c.repeat(64)}`;
-    const unlabelled = { ...observation("rebuild"), imageRef: "example:latest", currentVersion: "latest", latestVersion: "latest", currentDigest: digest("a"), latestDigest: digest("b"), updateType: "digest" };
+    const unlabelled = { ...observation("rebuild"), imageRef: "example:latest", currentVersion: "latest", latestVersion: "latest", currentDigest: digest("a"), latestDigest: digest("b"), updateType: "digest", platform: "linux/amd64" };
     const dated = mapUpdateInfo({ ...unlabelled, currentCreated: "2026-11-12T08:00:00Z", latestCreated: "2026-11-24T06:00:00Z" }, latestTag, "example:latest");
     expect(dated).toMatchObject({ state: "rebuild", current: { published: "2026-11-12T08:00:00Z" }, latest: { tag: "latest", published: "2026-11-24T06:00:00Z" } });
     expect(dated.state === "rebuild" && dated.latest.version).toBe(undefined);
@@ -38,10 +38,14 @@ describe("stored update observation", () => {
     expect(undated.state === "rebuild" && undated.latest).toEqual({ repository: "example", tag: "latest", buildId: "bbbbbbb" });
     expect(mapUpdateInfo({ ...unlabelled, latestVersion: "1.2.3" }, latestTag, "example:latest")).toMatchObject({ latest: { version: "1.2.3" } });
     expect(() => mapUpdateInfo({ ...unlabelled, latestCreated: "yesterday" }, latestTag, "example:latest")).toThrow();
+    // An observation lent from another platform's index names no build of this one.
+    const unproven = mapUpdateInfo({ ...unlabelled, platform: undefined, latestCreated: "2026-11-24T06:00:00Z" }, latestTag, "example:latest");
+    expect(unproven.state === "rebuild" && unproven.latest).toEqual({ repository: "example", tag: "latest" });
+    expect(unproven.current.published ?? unproven.current.buildId).toBe(undefined);
   });
   it("ignores a rebuild version that only repeats the running one", () => {
     const patterned = { repository: "example", tag: "release-1.0.0" };
-    const echoed = { ...observation("rebuild"), imageRef: "example:release-1.0.0", currentVersion: "1.0.0", latestVersion: "1.0.0", latestCreated: "2026-11-24T06:00:00Z", updateType: "digest" };
+    const echoed = { ...observation("rebuild"), imageRef: "example:release-1.0.0", currentVersion: "1.0.0", latestVersion: "1.0.0", latestCreated: "2026-11-24T06:00:00Z", updateType: "digest", platform: "linux/amd64" };
     const tagPolicy = mapUpdateInfo(echoed, patterned, "example:release-1.0.0");
     expect(tagPolicy.state === "rebuild" && tagPolicy.latest).toEqual({ ...patterned, published: "2026-11-24T06:00:00Z" });
     const droppedLabel = mapUpdateInfo({ ...echoed, imageRef: "example:stable", currentVersion: "1.2.3", latestVersion: "1.2.3" }, { repository: "example", tag: "stable" }, "example:stable");

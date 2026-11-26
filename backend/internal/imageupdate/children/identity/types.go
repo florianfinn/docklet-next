@@ -158,3 +158,10 @@ func (n NativeObservation) Platform() string { return n.platform.String() }
 func (l LocalImage) CurrentObservation() NativeObservation {
 	return NativeObservation{l.Platform, l.Key, l.Key, l.containerd}
 }
+
+// SharedIndex reports a containerd observation, whose local image ID names an
+// index shared by every platform rather than one platform's build.
+func (n NativeObservation) SharedIndex() bool { return n.containerd }
+
+// DescriptorPlatform is a container manifest descriptor's platform.
+func DescriptorPlatform(d *ocispec.Descriptor) (Platform, error) { return descriptorPlatform(d) }

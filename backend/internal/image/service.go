@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split inventory reads; bind scoped digest observations to live container identity and policy.
+// Deviations: Local module namespace; split inventory reads; bind scoped digest observations to live container identity and policy; #634 platform scope of lent image observations.
 
 package image
 
@@ -611,16 +611,15 @@ func (s *ImageService) GetUpdateInfoByContainers(ctx context.Context, containers
 			result[cnt.ID] = record.UpdateInfo()
 		}
 	}
-	byImage, err := s.GetUpdateInfoByImageIDs(ctx, imageIDs)
+	byImage, err := imageupdate.ImageRecords(s.db.WithContext(ctx), imageIDs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch update records: %w", err)
 	}
 	for id := range digest {
 		cnt := live[id]
 		if result[id] == nil {
-			if info := byImage[cnt.ImageID]; info != nil && imageupdate.SameUpdateReference(info.ImageRef, cnt.Image) {
-				owned := *info
-				result[id] = &owned
+			if record := byImage[cnt.ImageID]; record != nil && imageupdate.SameUpdateReference(record.Repository+":"+record.Tag, cnt.Image) {
+				result[id] = imageupdate.ScopeSharedObservation(record, cnt.ImageManifestDescriptor)
 			}
 		}
 	}
