@@ -79,6 +79,7 @@ func TestDigestConsumerOnOtherPlatformIsUnknown(t *testing.T) {
 	got := result.ContainerUpdates["consumer"]
 	require.NotNil(t, got)
 	require.Equal(t, "unknown", got.State)
+	require.Equal(t, "unknown", got.AuthState, "the contract enum has no empty auth state")
 	require.False(t, got.HasUpdate)
 	require.Empty(t, got.CurrentDigest, "no foreign digest becomes a short build ID or update target")
 	require.Empty(t, got.LatestDigest)
