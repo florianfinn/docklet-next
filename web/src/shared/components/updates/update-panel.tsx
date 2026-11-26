@@ -129,7 +129,7 @@ function latestStamp(update: UpdateInfo): Stamp | undefined {
 function BuildLabel({ image, stamp, other, empty, plain }: { image: ImageVersion; stamp?: Stamp; other?: Stamp; empty?: string; plain?: boolean }) {
   const t = useTranslations("common.updates");
   const name = !plain && image.version && image.version !== image.tag ? image.version : image.tag;
-  if (stamp) return <span title={t(stamp.key, { date: formatInstant(stamp.at) })}>{name} · {formatDistinctDate(stamp.at, other?.at)}</span>;
+  if (stamp) return <span title={t(stamp.key, { date: formatInstant(stamp.at) })}>{name} · <span className="text-[0.85em]">{formatDistinctDate(stamp.at, other?.at)}</span></span>;
   return <>{empty ?? name}</>;
 }
 
