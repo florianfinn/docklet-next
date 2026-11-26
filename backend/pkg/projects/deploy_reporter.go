@@ -35,6 +35,7 @@ type DeployReporter struct {
 	activity     map[string]any
 	activitySeen bool
 	builds       map[string]string
+	bindings     map[string]string
 	containers   map[string]*deployStages
 	dirty        bool
 	lastPatch    time.Time
@@ -56,7 +57,7 @@ type deployLayer struct {
 }
 
 func NewDeployReporter(phase func(string, bool), patch func(map[string]any), now func() time.Time) *DeployReporter {
-	return &DeployReporter{images: make(map[string]map[string]*deployLayer), resources: make(map[string]deployResource), builds: make(map[string]string), containers: make(map[string]*deployStages), appendPhase: phase, patch: patch, now: now}
+	return &DeployReporter{images: make(map[string]map[string]*deployLayer), resources: make(map[string]deployResource), builds: make(map[string]string), bindings: make(map[string]string), containers: make(map[string]*deployStages), appendPhase: phase, patch: patch, now: now}
 }
 
 func WithDeployReporter(ctx context.Context, reporter *DeployReporter) context.Context {
@@ -89,8 +90,8 @@ func (r *DeployReporter) ConfigureProject(project *composetypes.Project) {
 		}
 		r.services = append(r.services, deployService{name: name, prefix: project.Name + "-" + name + "-", custom: service.ContainerName, image: service.Image, check: check})
 	}
+	// Rows wait for the next observation or tick, so the first pull frame keeps its unthrottled patch.
 	r.dirty = true
-	r.flushLocked(false)
 }
 
 func (r *DeployReporter) resourceService(id string) string {
@@ -339,7 +340,7 @@ func (r *DeployReporter) flushLocked(final bool) {
 	if r.activitySeen {
 		patch["deployActivity"] = r.activity
 	}
-	if len(r.services) > 0 {
+	if len(r.services) > 0 || len(r.bindings) > 0 {
 		patch["deployServices"] = r.servicesLocked()
 	}
 	r.patch(patch)

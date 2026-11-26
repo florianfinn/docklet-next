@@ -121,3 +121,33 @@ func TestDeployServiceRowsBoundsAndRebinding(t *testing.T) {
 	r.Flush(true)
 	require.Equal(t, deployStageDone, serviceRows(t, patch)["app"]["start"], "an unchanged running container counts as started")
 }
+
+// Update runs pull digest pins whose references differ from the Compose image.
+func TestDeployServiceRowsFollowBoundPins(t *testing.T) {
+	var patch map[string]any
+	r := NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patch = p }, time.Now)
+	pin := "registry.example.com/app@sha256:" + fmt.Sprintf("%064d", 1)
+	r.BindImage("app", pin)
+	r.ObservePull(pin, deployFrame("abcdef012345", "Downloading", `{"current":5,"total":10}`))
+	r.Flush(true)
+	require.Equal(t, map[string]any{"layersDone": 0, "layersTotal": 1, "bytesDone": int64(5), "bytesTotal": int64(10)}, serviceRows(t, patch)["app"]["pull"], "a bound pin yields a row before the Compose model is known")
+
+	project := stageProject()
+	r.ConfigureProject(project)
+	r.Flush(true)
+	rows := serviceRows(t, patch)
+	require.Len(t, rows, 3)
+	require.Equal(t, 1, rows["app"]["pull"].(map[string]any)["layersTotal"], "the binding survives rebinding to the Compose image")
+}
+
+func TestDeployServiceBindingKeepsFirstPullUnthrottled(t *testing.T) {
+	now := time.Unix(100, 0)
+	var patches []map[string]any
+	r := NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patches = append(patches, p) }, func() time.Time { return now })
+	r.ConfigureProject(stageProject())
+	r.BindImage("app", "example/app:1")
+	r.ObservePull("example/app:1", deployFrame("abcdef012345", "Downloading", `{"current":1,"total":2}`))
+	require.Len(t, patches, 1, "binding must not consume the first patch")
+	require.NotNil(t, patches[0]["deployPull"])
+	require.Contains(t, patches[0], "deployServices")
+}

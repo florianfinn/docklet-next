@@ -2,7 +2,7 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original bounded JSON observer and unchanged renderer evidence.
+// Deviations: Original bounded JSON observer and unchanged renderer evidence. #655: reporter-scoped pull observer.
 
 package image
 
@@ -35,4 +35,16 @@ func TestComposePullObservationPreservesRawRendering(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, large, string(actual))
 	require.LessOrEqual(t, cap(source.pending), 65536)
+}
+
+func TestObservePullWrapsOnlyReporterRuns(t *testing.T) {
+	source := strings.NewReader("{}\n")
+	require.Same(t, source, ObservePull(t.Context(), "image", source), "runs without a reporter read the source unchanged")
+	var patch map[string]any
+	reporter := projects.NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patch = p }, time.Now)
+	ctx := projects.WithDeployReporter(t.Context(), reporter)
+	_, err := io.ReadAll(ObservePull(ctx, "image", strings.NewReader(`{"id":"abcdef012345","status":"Pull complete"}`+"\n")))
+	require.NoError(t, err)
+	reporter.Flush(true)
+	require.Equal(t, 1, patch["deployPull"].(map[string]any)["layersDone"])
 }

@@ -9,7 +9,6 @@ package image
 import (
 	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
-	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"go.getarcane.app/docker"
@@ -41,11 +40,7 @@ func (s *ImageService) PullComposeImage(ctx context.Context, ref string, writer 
 	}
 	defer reader.Close()
 	lines := docker.NewLogLineWriter(writer)
-	var observed io.Reader = reader
-	if reporter := projects.DeployReporterFromContext(ctx); reporter != nil {
-		observed = &composePullReader{source: reader, reporter: reporter, image: ref}
-	}
-	err = docker.RenderJSONMessageStream(observed, lines)
+	err = docker.RenderJSONMessageStream(ObservePull(ctx, ref, reader), lines)
 	_ = lines.Close()
 	if err != nil {
 		return err

@@ -2,16 +2,25 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original executor-owned deploy progress observation and behavioural coverage.
+// Deviations: Original executor-owned deploy progress observation and behavioural coverage. #655: observe lifecycle pin pulls.
 
 package image
 
 import (
 	"bytes"
+	"context"
 	"io"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 )
+
+// ObservePull returns source wrapped by the run's deploy reporter, or source unchanged without one.
+func ObservePull(ctx context.Context, ref string, source io.Reader) io.Reader {
+	if reporter := projects.DeployReporterFromContext(ctx); reporter != nil {
+		return &composePullReader{source: source, reporter: reporter, image: ref}
+	}
+	return source
+}
 
 // composePullReader observes bounded daemon JSON lines before the renderer reads
 // them. It returns exactly the source bytes and errors to preserve raw output.

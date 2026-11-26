@@ -294,7 +294,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     ...(run.bulk ? { bulk: { ...run.bulk } } : {}),
     deployProgress: deployProgress(run),
     // Rows outlive the run so the settled state of every service stays readable.
-    deployServices: (run.type === "project_deploy" || run.type === "project_redeploy") && run.outcomeState !== "unknown" ? parseDeployServices(run.metadata?.deployServices) : undefined,
+    deployServices: (run.type === "project_deploy" || run.type === "project_redeploy" || run.type === "project_update") && run.outcomeState !== "unknown" ? parseDeployServices(run.metadata?.deployServices) : undefined,
     ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
     ...(updateRecovery ? { updateRecovery } : {}),
     ...(job && run.metadata?.jobStatus === "partial" ? { partial: true } : {}),

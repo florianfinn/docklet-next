@@ -54,6 +54,7 @@ describe("parseDeployServices", () => {
   it("keeps rows after settlement but never for unknown outcomes or other run types", () => {
     const view = (activityRow: Activity) => (mapActivityDetail({ ...detail("good"), activity: activityRow }) as { deployServices?: unknown }).deployServices;
     expect(view(row("success", "deploy"))).toBeDefined();
+    expect(view({ ...row(), type: "project_update" })).toBeDefined();
     expect(view({ ...row(), type: "container_start" })).toBeUndefined();
     const settled = renderRun(mapActivitySummary(row("success", "deploy")), "en-US");
     expect(deployServicesOf(settled)?.prepared).toBe(true);

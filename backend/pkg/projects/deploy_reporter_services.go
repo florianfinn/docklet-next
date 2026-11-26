@@ -35,6 +35,21 @@ func healthcheckDeclared(check *bool) any {
 	return *check
 }
 
+// BindImage ties an image pull to a service when the pulled reference differs
+// from the Compose image, as for digest pins. Bindings survive rebinding.
+func (r *DeployReporter) BindImage(service, ref string) {
+	if r == nil || service == "" || ref == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.bindings[service]; !exists && len(r.bindings) >= 512 {
+		return
+	}
+	r.bindings[service] = ref
+	r.dirty = true
+}
+
 // Build records a deploy-time image build of one service.
 func (r *DeployReporter) Build(service, state string) {
 	if r == nil || (state != deployStageRunning && state != deployStageDone && state != deployStageError) {
@@ -116,7 +131,13 @@ func (r *DeployReporter) servicesLocked() map[string]any {
 		}
 		row.create, row.start, row.health = mergeStage(row.create, stages.create), mergeStage(row.start, stages.start), mergeStage(row.health, stages.health)
 	}
-	services := slices.SortedFunc(slices.Values(r.services), func(a, b deployService) int {
+	all := slices.Clone(r.services)
+	for name := range r.bindings {
+		if !slices.ContainsFunc(all, func(s deployService) bool { return s.name == name }) {
+			all = append(all, deployService{name: name})
+		}
+	}
+	services := slices.SortedFunc(slices.Values(all), func(a, b deployService) int {
 		if a.name < b.name {
 			return -1
 		}
@@ -131,7 +152,11 @@ func (r *DeployReporter) servicesLocked() map[string]any {
 		if check := healthcheckDeclared(service.check); check != nil {
 			row["check"] = check
 		}
-		if layers, ok := r.images[service.image]; ok && service.image != "" && len(layers) > 0 {
+		image := service.image
+		if bound, ok := r.bindings[service.name]; ok {
+			image = bound
+		}
+		if layers, ok := r.images[image]; ok && image != "" && len(layers) > 0 {
 			done, current, total, known := deployLayerSum(layers)
 			pull := map[string]any{"layersDone": done, "layersTotal": len(layers)}
 			if known && !r.incomplete {

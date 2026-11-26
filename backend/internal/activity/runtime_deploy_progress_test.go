@@ -2,7 +2,7 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original executor-owned deploy progress observation and behavioural coverage.
+// Deviations: Original executor-owned deploy progress observation and behavioural coverage. #655: service rows across Direct and Edge.
 
 package activity_test
 
@@ -32,6 +32,22 @@ const deployProgressCompose = "name: example_stack\nservices:\n  app:\n    image
 
 func deployProgressLabels() map[string]string {
 	return map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-hash"}
+}
+
+// deployServiceRow decodes one row of the persisted deployServices metadata.
+func deployServiceRow(t *testing.T, metadata map[string]any, name string) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(metadata["deployServices"])
+	require.NoError(t, err)
+	var services struct{ Services []map[string]any }
+	require.NoError(t, json.Unmarshal(raw, &services))
+	for _, row := range services.Services {
+		if row["name"] == name {
+			return row
+		}
+	}
+	t.Fatalf("service row %s missing in %s", name, raw)
+	return nil
 }
 
 func TestRuntimeDeployProgressDirectEdge(t *testing.T) {
@@ -123,6 +139,7 @@ func TestRuntimeDeployProgressDirectEdge(t *testing.T) {
 				require.EqualValues(t, 100, counts["bytesTotal"])
 				require.EqualValues(t, 1, counts["layersTotal"])
 				require.Equal(t, "pull", detail.StepTrace[0].Name)
+				require.Equal(t, map[string]any{"layersDone": float64(0), "layersTotal": float64(1), "bytesDone": float64(40), "bytesTotal": float64(100)}, deployServiceRow(t, detail.Activity.Metadata, "app")["pull"], "pulls land on their service row before deploy")
 				unblock()
 				select {
 				case <-startEntered:
@@ -164,6 +181,7 @@ func TestRuntimeDeployProgressDirectEdge(t *testing.T) {
 					output = append(output, line.Text)
 				}
 				require.Contains(t, strings.Join(output, "\n"), "Pull complete", "raw output stays available")
+				require.Equal(t, "done", deployServiceRow(t, detail.Activity.Metadata, "app")["start"], "settled service rows reach the hub")
 			})
 		}
 	}
