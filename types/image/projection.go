@@ -2,7 +2,7 @@
 // Revision: 361c54cb8d087b7d531ff8bb4dd1acae82f5f534
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original PR1 image and registry safety implementation for issue #229.
+// Deviations: Original PR1 image and registry safety implementation for issue #229; #634 build times and lent observations.
 
 package image
 
@@ -147,4 +147,15 @@ func BuildTimeText(s string) *time.Time {
 		return nil
 	}
 	return BuildTime(t)
+}
+
+// Lend copies an observation for a consumer it was not made for. Build facts
+// and the platform that vouches for them stay with the observing consumer.
+func Lend(info *UpdateInfo) *UpdateInfo {
+	if info == nil {
+		return nil
+	}
+	out := *info
+	out.Platform, out.CurrentCreated, out.LatestCreated = "", nil, nil
+	return &out
 }

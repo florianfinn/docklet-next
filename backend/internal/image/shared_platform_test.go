@@ -2,7 +2,7 @@
 // Revision: 35f39e8729df29cabccc10a4adc42b4b68220a7c
 // Retrieved: 2026-11-26
 // License: Apache-2.0
-// Deviations: Original platform scope of image-level observations lent to digest consumers.
+// Deviations: Original platform scope of image-level observations lent to digest consumers and reference lookups.
 
 package image
 
@@ -47,24 +47,21 @@ func TestSharedIndexObservationKeepsBuildFactsOnItsPlatform(t *testing.T) {
 				require.NoError(t, err)
 				got := updates[live.ID]
 				require.NotNil(t, got)
-				switch {
-				case store == "classic" || running == "linux/amd64":
-					require.Equal(t, "rebuild", got.State)
+				require.Equal(t, "rebuild", got.State, "build facts never change the lent state")
+				if store == "classic" || running == "linux/amd64" {
 					require.Equal(t, "linux/amd64", got.Platform)
 					require.NotNil(t, got.LatestCreated)
-				case running == "linux/arm64":
-					require.Equal(t, "unknown", got.State, "another platform's index result is no state of this container")
-					require.Empty(t, got.Platform)
-					require.Empty(t, got.CurrentDigest)
-					require.Empty(t, got.LatestDigest)
-					require.Nil(t, got.CurrentCreated)
-					require.Nil(t, got.LatestCreated)
-				default:
-					require.Equal(t, "rebuild", got.State, "an unproven container keeps the shared state")
-					require.Empty(t, got.Platform, "without a proven platform the web shows no build facts")
+				} else {
+					require.Empty(t, got.Platform, "without a proven platform the web shows neither a date nor a short ID")
 					require.Nil(t, got.CurrentCreated)
 					require.Nil(t, got.LatestCreated)
 				}
+				// Reference lookups lend the observation to every consumer of the tag.
+				byRef, err := svc.GetUpdateInfoByImageRefs(t.Context(), []string{live.Image})
+				require.NoError(t, err)
+				require.NotNil(t, byRef[live.Image])
+				require.Empty(t, byRef[live.Image].Platform)
+				require.Nil(t, byRef[live.Image].LatestCreated)
 			})
 		}
 	}

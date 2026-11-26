@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; update joins match equivalent image reference spellings. M34 #548: recorded Compose environment inputs.
+// Deviations: Local module namespace; update joins match equivalent image reference spellings. M34 #548: recorded Compose environment inputs. #634: replica merges share build facts only within one platform.
 
 // Package details derives project runtime state: service status from Compose
 // and containers, include files, logs and image update checks.
@@ -342,6 +342,22 @@ func MergeProjectContainerUpdateInfo(base map[string]*imagetypes.UpdateInfo, ser
 // mergeReplicaObservation prefers the replica that still needs its update,
 // then the newer check.
 func mergeReplicaObservation(candidate, previous *imagetypes.UpdateInfo) imagetypes.UpdateInfo {
+	merged := mergeReplicaState(candidate, previous)
+	// Replicas observed on different platforms share no build facts. A lent
+	// side without facts borrows them where both name the same native build.
+	if candidate.Platform != "" && previous.Platform != "" && candidate.Platform != previous.Platform {
+		merged.Platform, merged.CurrentCreated, merged.LatestCreated = "", nil, nil
+	} else if merged.Platform == "" && candidate.CurrentDigest == previous.CurrentDigest && candidate.LatestDigest == previous.LatestDigest {
+		source := candidate
+		if source.Platform == "" {
+			source = previous
+		}
+		merged.Platform, merged.CurrentCreated, merged.LatestCreated = source.Platform, source.CurrentCreated, source.LatestCreated
+	}
+	return merged
+}
+
+func mergeReplicaState(candidate, previous *imagetypes.UpdateInfo) imagetypes.UpdateInfo {
 	if candidate.HasUpdate != previous.HasUpdate {
 		if candidate.HasUpdate {
 			return *candidate

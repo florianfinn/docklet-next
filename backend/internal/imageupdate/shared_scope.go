@@ -2,7 +2,7 @@
 // Revision: 35f39e8729df29cabccc10a4adc42b4b68220a7c
 // Retrieved: 2026-11-26
 // License: Apache-2.0
-// Deviations: Original platform scope for image-level observations lent to containers.
+// Deviations: Original platform scope for image-level observations lent to containers and services.
 
 package imageupdate
 
@@ -17,46 +17,25 @@ import (
 
 // ScopeSharedObservation lends an image-level observation to one container of
 // that image. A classic image ID names one platform's build. A containerd ID
-// names an index shared by all platforms: a container proven on the observed
-// platform keeps everything, one proven on another platform gets an unknown
-// observation, and an unproven one keeps the state without build facts.
+// names an index shared by all platforms, so build facts stay only for a
+// container proven on the observed platform.
 func ScopeSharedObservation(record *ImageUpdateRecord, descriptor *ocispec.Descriptor) *image.UpdateInfo {
 	info := record.UpdateInfo()
 	observed, err := identity.DecodeObservation(mo.PointerToOption(record.Platform).OrEmpty(), info.CurrentDigest, info.LatestDigest)
 	if err != nil || !observed.SharedIndex() {
 		return info
 	}
-	if running, e := identity.DescriptorPlatform(descriptor); e == nil {
-		want, _ := identity.ParsePlatform(info.Platform)
-		if running.Matches(want) {
-			return info
-		}
-		return foreignPlatform(info)
-	}
-	// Without the platform field the web shows neither a date nor a short ID.
-	info.Platform, info.CurrentCreated, info.LatestCreated = "", nil, nil
-	return info
-}
-
-// ScopeServiceObservation lends an image-level observation, made at the
-// daemon's default platform, to a Compose service. A service pinned to another
-// platform gets an unknown observation instead of that platform's result.
-func ScopeServiceObservation(info *image.UpdateInfo, platform string) *image.UpdateInfo {
-	if info == nil || platform == "" {
+	if running, e := identity.DescriptorPlatform(descriptor); e == nil && SamePlatform(running.String(), info.Platform) {
 		return info
 	}
-	pinned, err := identity.ParsePlatform(platform)
-	observed, e := identity.ParsePlatform(info.Platform)
-	if err == nil && e == nil && pinned.Matches(observed) {
-		return info
-	}
-	return foreignPlatform(info)
+	return image.Lend(info)
 }
 
-func foreignPlatform(info *image.UpdateInfo) *image.UpdateInfo {
-	unknown := &image.UpdateInfo{ImageRef: info.ImageRef, CheckTime: info.CheckTime, Code: "update.check-unavailable"}
-	image.ProjectUpdate(unknown)
-	return unknown
+// SamePlatform compares two platform strings; unparseable ones never match.
+func SamePlatform(a, b string) bool {
+	x, err := identity.ParsePlatform(a)
+	y, e := identity.ParsePlatform(b)
+	return err == nil && e == nil && x.Matches(y)
 }
 
 // ImageRecords loads image-level observations by local image ID.

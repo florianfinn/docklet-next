@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; split inventory reads; bind scoped digest observations to live container identity and policy; #634 platform scope of lent image observations.
+// Deviations: Local module namespace; split inventory reads; bind scoped digest observations to live container identity and policy; #634 lent image observations keep build facts only on a proven platform.
 
 package image
 
@@ -679,7 +679,7 @@ func (s *ImageService) GetUpdateInfoByImageRefs(ctx context.Context, imageRefs [
 	index := indexLatestImageUpdateRecordsInternal(updateRecords)
 	for _, lookup := range lookups {
 		if record := selectLatestMatchingImageUpdateRecordInternal(lookup, updateRecords, index); record != nil {
-			result[lookup.originalRef] = record.UpdateInfo()
+			result[lookup.originalRef] = imagetypes.Lend(record.UpdateInfo())
 		}
 	}
 
