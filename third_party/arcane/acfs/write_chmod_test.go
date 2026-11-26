@@ -42,3 +42,40 @@ func TestInPlaceWriteChmodsOnlyWhenModeDiffers(t *testing.T) {
 		t.Fatalf("mode change: mode=%v err=%v chmod calls=%d, want 0640 and 1", info.Mode().Perm(), err, calls)
 	}
 }
+
+func TestInPlaceWriteKeepsStickyAndKernelClearedSetIDWithoutChmod(t *testing.T) {
+	root := t.TempDir()
+	calls := 0
+	previous := chmodFile
+	chmodFile = func(f *os.File, mode os.FileMode) error { calls++; return previous(f, mode) }
+	t.Cleanup(func() { chmodFile = previous })
+	ctx := context.Background()
+
+	sticky := filepath.Join(root, "sticky.yaml")
+	if err := os.WriteFile(sticky, []byte("old"), 0o664); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(sticky, 0o664|os.ModeSticky); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(ctx, root, "/sticky.yaml", []byte("new"), WriteOptions{Mode: 0o664, InPlace: true}); err != nil || calls != 0 {
+		t.Fatalf("sticky content write: err=%v chmod calls=%d, want nil and 0", err, calls)
+	}
+
+	if os.Geteuid() == 0 {
+		t.Skip("root keeps set-ID bits on write (CAP_FSETID)")
+	}
+	setuid := filepath.Join(root, "setuid.yaml")
+	if err := os.WriteFile(setuid, []byte("old"), 0o764); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(setuid, 0o764|os.ModeSetuid); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(ctx, root, "/setuid.yaml", []byte("new"), WriteOptions{Mode: 0o764, InPlace: true}); err != nil || calls != 0 {
+		t.Fatalf("set-ID content write: err=%v chmod calls=%d, want nil and 0", err, calls)
+	}
+	if info, err := os.Stat(setuid); err != nil || info.Mode()&os.ModeSetuid != 0 {
+		t.Fatalf("set-ID bit after write: mode=%v err=%v, want cleared", info.Mode(), err)
+	}
+}

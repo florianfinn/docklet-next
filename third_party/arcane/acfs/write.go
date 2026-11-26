@@ -2,8 +2,8 @@
 // Revision: 3da7cfd43c4da62bc06fd384b7da5f109ce010fb
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: In-place writes chmod only when the mode differs, so a writer that
-// is not the file owner (ACL or group write) can update content (#651).
+// Deviations: In-place writes chmod only when permission or set-ID bits differ after
+// writing, so a writer that is not the file owner (ACL or group write) can update content (#651).
 
 package acfs
 
@@ -263,6 +263,7 @@ func writeFileInPlaceInternal(ctx context.Context, root *os.Root, targetPath str
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	current := opened.Mode()
 	if !identical {
 		if err := file.Truncate(0); err != nil {
 			return fmt.Errorf("truncate %q: %w", kitfs.LogicalPath(targetPath), err)
@@ -270,9 +271,14 @@ func writeFileInPlaceInternal(ctx context.Context, root *os.Root, targetPath str
 		if _, err := file.Write(data); err != nil {
 			return fmt.Errorf("write %q: %w", kitfs.LogicalPath(targetPath), err)
 		}
+		// The kernel clears set-ID bits on a write without CAP_FSETID; compare the mode it left.
+		if written, err := file.Stat(); err == nil {
+			current = written.Mode()
+		}
 	}
-	// chmod needs ownership; content writes by a non-owner succeed while the mode already matches.
-	if opened.Mode()&chmodModeMask != mode {
+	// chmod needs ownership, so a non-owner content write succeeds while the mode already matches.
+	// Linux ignores the sticky bit on regular files; it is kept rather than forcing a chmod.
+	if current&(chmodModeMask&^os.ModeSticky) != mode&^os.ModeSticky {
 		if err := chmodFile(file, mode); err != nil {
 			return fmt.Errorf("chmod %q: %w", kitfs.LogicalPath(targetPath), err)
 		}

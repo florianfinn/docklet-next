@@ -5,7 +5,8 @@
 // Deviations: Original coverage for an optional top-level Compose name on existing stacks.
 
 import { EditorView } from "@codemirror/view";
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { simulationStore } from "@/data/demo/simulation";
@@ -36,6 +37,10 @@ describe("Compose name in the stack workspace (#652)", () => {
     expect(screen.queryByText("Stackname fehlt") === null).toBe(true);
     expect(screen.getByText(/0 Fehler/) !== null).toBe(true);
     expect((screen.getByRole("button", { name: "Speichern & Redeploy" }) as HTMLButtonElement).disabled).toBe(false);
+
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Bearbeitungsmodus" })).getByRole("radio", { name: "Easy" }));
+    await userEvent.click(within(screen.getByRole("list", { name: "Schritte des Entwurfs" })).getByRole("button", { name: /Stack/ }));
+    expect((document.getElementById("ed-name") as HTMLInputElement).required).toBe(false);
   });
 
   it("still requires a name for a new stack", () => {
