@@ -2,7 +2,8 @@
 // Revision: 3da7cfd43c4da62bc06fd384b7da5f109ce010fb
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: In-place writes chmod only when the mode differs, so a writer that
+// is not the file owner (ACL or group write) can update content (#651).
 
 package acfs
 
@@ -211,6 +212,9 @@ func createTemporaryFileInternal(root *os.Root, parent string) (*os.File, string
 	return nil, "", errors.New("could not allocate a unique temporary file")
 }
 
+// chmodFile is a test seam for in-place mode changes.
+var chmodFile = (*os.File).Chmod
+
 func writeFileInPlaceInternal(ctx context.Context, root *os.Root, targetPath string, data []byte, mode os.FileMode) (retErr error) {
 	info, err := root.Lstat(targetPath)
 	flags := os.O_WRONLY
@@ -267,8 +271,9 @@ func writeFileInPlaceInternal(ctx context.Context, root *os.Root, targetPath str
 			return fmt.Errorf("write %q: %w", kitfs.LogicalPath(targetPath), err)
 		}
 	}
-	if !identical || opened.Mode()&chmodModeMask != mode {
-		if err := file.Chmod(mode); err != nil {
+	// chmod needs ownership; content writes by a non-owner succeed while the mode already matches.
+	if opened.Mode()&chmodModeMask != mode {
+		if err := chmodFile(file, mode); err != nil {
 			return fmt.Errorf("chmod %q: %w", kitfs.LogicalPath(targetPath), err)
 		}
 	}
