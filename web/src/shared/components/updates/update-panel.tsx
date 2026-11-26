@@ -110,16 +110,30 @@ function TimesList({ times, local, showUpdated }: { times: UpdateTimes; local?: 
   );
 }
 
-/** Same-tag builds differ by build date, shown precisely enough to differ from the other build; without one a short image ID tells them apart. */
-function BuildLabel({ image, other, empty, plain }: { image: ImageVersion; other?: ImageVersion; empty?: string; plain?: boolean }) {
+type Stamp = { at: string; key: "builtAt" | "deployedAt" | "checkedAt" };
+
+/** The running build's date: its build date, else the deploy of its container. */
+function currentStamp(update: UpdateInfo): Stamp | undefined {
+  const { published, deployed } = update.current;
+  return published ? { at: published, key: "builtAt" } : deployed ? { at: deployed, key: "deployedAt" } : undefined;
+}
+
+/** The new build's date: its build date, else the check that saw it. */
+function latestStamp(update: UpdateInfo): Stamp | undefined {
+  const published = latestOf(update)?.published;
+  const checked = "checkedAt" in update ? update.checkedAt : undefined;
+  return published ? { at: published, key: "builtAt" } : checked ? { at: checked, key: "checkedAt" } : undefined;
+}
+
+/** Same-tag builds differ by date, shown precisely enough to differ from the other build; the hover names the date's source. */
+function BuildLabel({ image, stamp, other, empty, plain }: { image: ImageVersion; stamp?: Stamp; other?: Stamp; empty?: string; plain?: boolean }) {
   const t = useTranslations("common.updates");
   const name = !plain && image.version && image.version !== image.tag ? image.version : image.tag;
-  if (image.published) return <span title={t("builtAt", { date: formatInstant(image.published) })}>{name} · {formatDistinctDate(image.published, other?.published)}</span>;
-  if (image.buildId) return <span title={t("noBuildDate")}>{name} · {image.buildId}</span>;
+  if (stamp) return <span title={t(stamp.key, { date: formatInstant(stamp.at) })}>{name} · {formatDistinctDate(stamp.at, other?.at)}</span>;
   return <>{empty ?? name}</>;
 }
 
-function VersionRow({ label, image, other, tone, latest, build, plain }: { label: string; image: ImageVersion; other?: ImageVersion; tone?: string; latest?: boolean; build?: boolean; plain?: boolean }) {
+function VersionRow({ label, image, stamp, other, tone, latest, build, plain }: { label: string; image: ImageVersion; stamp?: Stamp; other?: Stamp; tone?: string; latest?: boolean; build?: boolean; plain?: boolean }) {
   const t = useTranslations("common.updates");
   return (
     <div className="flex items-center justify-between gap-3">
@@ -133,7 +147,7 @@ function VersionRow({ label, image, other, tone, latest, build, plain }: { label
           data-tone={tone ?? "gray"}
           className={cn("rounded-md px-2 py-0.5 font-mono text-sm font-semibold", tone ? "bg-(--tone)/14 text-(--tone)" : "bg-muted text-foreground")}
         >
-          {build ? <BuildLabel image={image} other={other} empty={latest ? t("chipRebuild") : undefined} plain={plain} /> : image.version ?? (latest ? t("versionUnknown") : image.tag)}
+          {build ? <BuildLabel image={image} stamp={stamp} other={other} empty={latest ? t("chipRebuild") : undefined} plain={plain} /> : image.version ?? (latest ? t("versionUnknown") : image.tag)}
         </span>
       </span>
     </div>
@@ -203,8 +217,8 @@ export function UpdatePanel({ update, actions = {}, updatedAt }: { update: Updat
         ) : (
           <>
             <div className="flex flex-col gap-2">
-              <VersionRow label={t("current")} image={update.current} other={latest} build={update.state === "rebuild"} plain />
-              {latest && <VersionRow label={t("latest")} image={latest} other={update.current} tone={tone} latest build={update.state === "rebuild"} />}
+              <VersionRow label={t("current")} image={update.current} stamp={currentStamp(update)} other={latestStamp(update)} build={update.state === "rebuild"} plain />
+              {latest && <VersionRow label={t("latest")} image={latest} stamp={latestStamp(update)} other={currentStamp(update)} tone={tone} latest build={update.state === "rebuild"} />}
             </div>
             {latest?.published && update.state !== "rebuild" && <div className="text-right text-[11px] text-muted-foreground">{t("published", { date: formatDate(latest.published) })}</div>}
             {copy.note && (
@@ -256,12 +270,12 @@ export function StackUpdatePanel({ services, actions = {}, times, gaps }: { serv
               <RowIcon data-tone={rowTone} className="size-3.5 shrink-0 text-(--tone)" aria-hidden />
               <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
               <span className="flex min-w-0 shrink-0 items-center gap-1.5 font-mono text-[13px] font-semibold" data-slot="update-versions">
-                <span className={cn("rounded-md px-1.5 py-0.5", latest ? "text-muted-foreground" : "bg-muted text-foreground")}>{v === "rebuild" ? <BuildLabel image={s.update.current} other={latest} plain /> : s.update.current.version ?? s.update.current.tag}</span>
+                <span className={cn("rounded-md px-1.5 py-0.5", latest ? "text-muted-foreground" : "bg-muted text-foreground")}>{v === "rebuild" ? <BuildLabel image={s.update.current} stamp={currentStamp(s.update)} other={latestStamp(s.update)} plain /> : s.update.current.version ?? s.update.current.tag}</span>
                 {latest && (
                   <>
                     <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
                     <span data-tone={rowTone} className="rounded-md bg-(--tone)/14 px-1.5 py-0.5 text-(--tone)">
-                      {v === "rebuild" ? <BuildLabel image={latest} other={s.update.current} empty={t("chipRebuild")} /> : latest.version ?? t("chipRebuild")}
+                      {v === "rebuild" ? <BuildLabel image={latest} stamp={latestStamp(s.update)} other={currentStamp(s.update)} empty={t("chipRebuild")} /> : latest.version ?? t("chipRebuild")}
                     </span>
                   </>
                 )}
@@ -285,10 +299,11 @@ export function UpdateChip({ update }: { update: UpdateInfo }) {
   const v = updateVisual(update);
   const Icon = UPDATE_ICON[v];
   const latest = latestOf(update);
-  // Same-tag rebuilds read "tag · build date", else "tag · short image ID"; a changed version replaces the tag.
+  // Same-tag rebuilds read "tag · date" (build date, else check date); a changed version replaces the tag.
   const rebuilt = v === "rebuild" ? latest : undefined;
-  const build = rebuilt?.published ? formatDistinctDate(rebuilt.published, update.current.published) : rebuilt?.buildId;
-  const title = rebuilt?.published ? t("builtAt", { date: formatInstant(rebuilt.published) }) : rebuilt?.buildId ? t("noBuildDate") : undefined;
+  const stamp = rebuilt ? latestStamp(update) : undefined;
+  const build = stamp ? formatDistinctDate(stamp.at, currentStamp(update)?.at) : undefined;
+  const title = stamp ? t(stamp.key, { date: formatInstant(stamp.at) }) : undefined;
   const text =
     v === "current" ? t("chipCurrent") : v === "rebuild" ? (build ? `${rebuilt?.version ?? rebuilt?.tag} · ${build}` : rebuilt?.version ?? t("chipRebuild")) : v === "error" ? t("chipError") : v === "local" ? t("chipLocal") : v === "unknown" ? t("chipUnknown") : v === "unchecked" ? t("chipUnchecked") : (latest?.version ?? "");
   return (

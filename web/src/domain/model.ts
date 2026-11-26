@@ -118,8 +118,8 @@ export interface ImageVersion {
   version?: string;
   /** Build or publication date of this image state (ISO). */
   published?: string;
-  /** Short image ID that tells same-tag builds apart when no build date is known. */
-  buildId?: string;
+  /** Creation of the running container, the deploy date shown when no build date is known (ISO). */
+  deployed?: string;
 }
 
 export type UpdateLevel = "major" | "minor" | "patch";

@@ -62,7 +62,7 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
   const origin = row.origin ?? "unknown";
   const originSource = row.originSource ?? "detected";
   const owner = composeProjectOwner(projects, project, row.id);
-  const image = imageVersion(row.image);
+  const image = { ...imageVersion(row.image), ...(row.created > 0 ? { deployed: new Date(row.created * 1000).toISOString() } : {}) };
   return {
     redeployDisabled: row.redeployDisabled === true,
     imageId: row.imageId ? inventoryId(hostId, row.imageId) : undefined,
@@ -109,7 +109,7 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
     // A service with `build:` and no `image:` that was never created has no image and no container: the project list
     // reports it "not-created", the project detail "stopped" (#600).
     if (!runtime.image && !runtime.containerId) return { ...common, image: { repository: "", tag: "" }, buildOnly: true as const, update: { state: "local" as const, current: { repository: "", tag: "" } } };
-    const image = imageVersion(runtime.image);
+    const image = { ...imageVersion(runtime.image), ...(container?.image.deployed ? { deployed: container.image.deployed } : {}) };
     return { ...common, image,
       update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale), incomplete } };
   });
