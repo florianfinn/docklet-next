@@ -113,10 +113,10 @@ describe("guided tour", () => {
       reached.push(inside.contains(document.activeElement) || document.activeElement === link);
     }
     expect([reached.every(Boolean), router.state.location.pathname]).toEqual([true, "/settings/help"]);
-    // From Next, Tab reaches the highlighted entry; Enter opens it.
+    // From Next, Tab reaches the highlighted entry; the arrow key steps from there as from the card.
     await userEvent.tab();
     expect(document.activeElement === link).toBe(true);
-    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard("{ArrowRight}");
     await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"));
   });
 
@@ -190,6 +190,20 @@ describe("guided tour", () => {
     await userEvent.keyboard("{ArrowRight}");
     await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"));
     await waitFor(() => expect(overlay()?.dataset.phase).toBe("page"));
+  });
+
+  it("keeps focus inside the open phone menu when the tour ends there", async () => {
+    measured();
+    setViewport(390);
+    renderRoutes(helpRoutes, ["/settings/help"]);
+    await userEvent.click(await screen.findByRole("button", { name: "Tour starten" }));
+    await waitFor(() => expect(tourCard() !== null).toBe(true));
+    await userEvent.click(document.querySelector<HTMLElement>('[data-slot="sidebar-trigger"]') as HTMLElement);
+    await waitFor(() => expect(tourCard()?.closest('[data-mobile="true"]') != null).toBe(true));
+    await userEvent.click(within(tourCard() as HTMLElement).getByRole("button", { name: "Tour beenden" }));
+    // The opener lies behind the modal menu; focus stays in the menu instead.
+    const menu = document.querySelector('[data-mobile="true"][data-state="open"]');
+    expect([tourStore.get().status, menu?.contains(document.activeElement) === true]).toEqual(["idle", true]);
   });
 
   it("waits behind the discard confirmation of an unsaved settings draft", async () => {

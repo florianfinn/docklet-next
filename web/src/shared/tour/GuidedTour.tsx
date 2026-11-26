@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original guided tour: setup offer, navigation pointer and page spotlight.
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
@@ -210,20 +210,30 @@ function TourRun({ index }: { index: number }) {
   useEffect(() => {
     if (settled && !waiting) next.current?.focus({ preventScroll: true });
   }, [index, pointing, settled, sheet, waiting]);
-  // Keyboard reach outside the card: the highlighted navigation entry while pointing.
-  const reach = useRef<HTMLElement | null>(null);
+  const advance = () => {
+    if (pointing && step.route) void navigate(step.route);
+    else if (last) endTour();
+    else goToStep(index + 1);
+  };
+  // Keyboard reach outside the card (the highlighted navigation entry while pointing) and the arrow-key steps.
+  const reach = useRef<{ target: HTMLElement | null; forward: (() => void) | null; back: () => void }>({ target: null, forward: null, back: () => {} });
   useLayoutEffect(() => {
-    reach.current = pointing ? anchorEl : null;
+    reach.current = { target: pointing ? anchorEl : null, forward: last && !pointing ? null : advance, back: () => goToStep(index - 1) };
   });
   useEffect(() => {
     // Read live, not from render state: another dialog leads from the moment it opens until it is gone.
     const other = () => document.querySelector(OTHER_DIALOG) !== null;
     // Capture on window runs before the dialogs' own Escape handling, while they still count as open.
     const onKey = (e: globalThis.KeyboardEvent) => {
-      const target = reach.current;
-      if (other()) return;
+      const { target, forward, back } = reach.current;
+      if (other() || !card.current) return;
       if (e.key === "Escape") endTour();
-      if (e.key !== "Tab" || !card.current) return;
+      // Arrow keys step from the card and from the highlighted entry alike.
+      const active = document.activeElement;
+      const owned = active instanceof Node && (card.current.contains(active) || target?.contains(active) === true);
+      if (owned && e.key === "ArrowRight") forward?.();
+      if (owned && e.key === "ArrowLeft") back();
+      if (e.key !== "Tab") return;
       // The tour owns Tab: it cycles through the card's buttons and, while pointing, the highlighted entry.
       const items = [...card.current.querySelectorAll<HTMLElement>("button:not(:disabled)"), ...(target ? [target] : [])];
       const at = items.indexOf(document.activeElement as HTMLElement);
@@ -234,30 +244,24 @@ function TourRun({ index }: { index: number }) {
     // Focus that still lands behind the shields returns to the card.
     const onFocus = (e: FocusEvent) => {
       const node = e.target instanceof Node ? e.target : null;
-      if (node && !other() && !card.current?.contains(node) && !reach.current?.contains(node)) next.current?.focus({ preventScroll: true });
+      if (node && !other() && !card.current?.contains(node) && !reach.current.target?.contains(node)) next.current?.focus({ preventScroll: true });
     };
     addEventListener("keydown", onKey, true);
     addEventListener("focusin", onFocus, true);
-    // Focus returns to the opener, or to the page when the opener is gone.
+    // Focus returns to the opener, or to the page when the opener is gone. An open modal (the phone menu)
+    // keeps it, since everything behind it is hidden.
     const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     return () => {
       removeEventListener("keydown", onKey, true);
       removeEventListener("focusin", onFocus, true);
-      (opener?.isConnected ? opener : document.getElementById("main-content"))?.focus({ preventScroll: true });
+      const back = opener?.isConnected ? opener : document.getElementById("main-content");
+      const modal = document.querySelector<HTMLElement>(`${OPEN_SHEET}, ${OTHER_DIALOG}`);
+      (modal && !(back && modal.contains(back)) ? modal : back)?.focus({ preventScroll: true });
     };
   }, []);
   const position = placeCard(rect, size.width, size.height, innerWidth, innerHeight);
   const move = motion ? "transition-[top,left,width,height] duration-300 ease-out" : undefined;
 
-  const advance = () => {
-    if (pointing && step.route) void navigate(step.route);
-    else if (last) endTour();
-    else goToStep(index + 1);
-  };
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "ArrowRight" && !(last && !pointing)) advance();
-    if (e.key === "ArrowLeft") goToStep(index - 1);
-  };
   const spotlight: CSSProperties | undefined = rect
     ? { top: rect.top - PAD, left: rect.left - PAD, width: rect.width + PAD * 2, height: rect.height + PAD * 2, boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.7)" }
     : undefined;
@@ -284,7 +288,6 @@ function TourRun({ index }: { index: number }) {
         tabIndex={-1}
         data-slot="tour-card"
         data-step={step.key}
-        onKeyDown={onKeyDown}
         className={cn("pointer-events-auto fixed flex max-h-[calc(100dvh-2rem)] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-y-auto gap-3 rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl outline-none", move, !settled && "opacity-0")}
         style={position}
       >
