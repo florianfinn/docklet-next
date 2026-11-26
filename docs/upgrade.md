@@ -167,7 +167,7 @@ Upgrading to 1.9.0: migration `008_image_build_dates` adds two nullable build
 time columns to stored update checks; back up the hub first. There is no new
 environment variable and the agent contract stays 24. Stored checks show build
 dates after their next update check; agents on 1.6.0 to 1.8.0 keep working and
-their stacks show a short image ID instead of a date until they are updated.
+their rebuilds show the deploy and check dates instead until they are updated.
 
 ## Recover a failed in-app update
 
