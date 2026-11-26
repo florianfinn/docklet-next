@@ -163,7 +163,7 @@ describe("guided tour", () => {
     await userEvent.keyboard("{Escape}");
     expect(tourStore.get().status === "idle" && overlay() === null).toBe(true);
     // Without a remaining opener, focus returns to the page.
-    expect(document.activeElement?.id).toBe("main-content");
+    await waitFor(() => expect(document.activeElement?.id).toBe("main-content"));
   });
 
   it("finishes on the last step", async () => {
@@ -202,8 +202,34 @@ describe("guided tour", () => {
     await waitFor(() => expect(tourCard()?.closest('[data-mobile="true"]') != null).toBe(true));
     await userEvent.click(within(tourCard() as HTMLElement).getByRole("button", { name: "Tour beenden" }));
     // The opener lies behind the modal menu; focus stays in the menu instead.
-    const menu = document.querySelector('[data-mobile="true"][data-state="open"]');
-    expect([tourStore.get().status, menu?.contains(document.activeElement) === true]).toEqual(["idle", true]);
+    expect(tourStore.get().status).toBe("idle");
+    await waitFor(() => expect(document.querySelector('[data-mobile="true"][data-state="open"]')?.contains(document.activeElement)).toBe(true));
+  });
+
+  it("returns focus to the opener when Escape closes the tour and the phone menu together", async () => {
+    measured();
+    setViewport(390);
+    renderRoutes(helpRoutes, ["/settings/help"]);
+    const opener = await screen.findByRole("button", { name: "Tour starten" });
+    await userEvent.click(opener);
+    await waitFor(() => expect(tourCard() !== null).toBe(true));
+    await userEvent.click(document.querySelector<HTMLElement>('[data-slot="sidebar-trigger"]') as HTMLElement);
+    await waitFor(() => expect(tourCard()?.closest('[data-mobile="true"]') != null).toBe(true));
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect([tourStore.get().status, document.querySelector('[data-mobile="true"]') === null]).toEqual(["idle", true]));
+    await waitFor(() => expect(document.activeElement === opener).toBe(true));
+  });
+
+  it("recovers focus when the focused entry disappears with a viewport change", async () => {
+    measured();
+    render("/settings/help");
+    act(() => startTour());
+    await waitFor(() => expect(overlay()?.dataset.phase).toBe("nav"));
+    await waitFor(() => expect(document.activeElement === within(card()).getByRole("button", { name: "Weiter" })).toBe(true));
+    await userEvent.tab();
+    expect(document.activeElement?.getAttribute("href")).toBe("/dashboard");
+    setViewport(390);
+    await waitFor(() => expect(document.activeElement === within(tourCard() as HTMLElement).getByRole("button", { name: "Weiter" })).toBe(true));
   });
 
   it("waits behind the discard confirmation of an unsaved settings draft", async () => {

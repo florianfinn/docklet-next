@@ -36,6 +36,32 @@ const subscribeDom = (notify: () => void) => {
   return () => observer.disconnect();
 };
 const useElement = (selector: string) => useSyncExternalStore(subscribeDom, () => document.querySelector<HTMLElement>(selector));
+/** A dialog still playing its exit animation; focus decisions wait until it is gone. */
+const CLOSING_DIALOG = '[role="dialog"][data-state="closed"], [role="alertdialog"][data-state="closed"]';
+const usable = (el: HTMLElement | null): el is HTMLElement => el !== null && el.isConnected && !el.closest('[aria-hidden="true"]');
+
+/**
+ * Returns focus once the tour has ended and any dialog closing with it (the phone menu on Escape)
+ * is gone: into a modal that stays open, otherwise to the opener, otherwise to the page content.
+ */
+function returnFocus(opener: HTMLElement | null) {
+  let clear = 0;
+  const deadline = performance.now() + 1000;
+  const settle = () => {
+    if (tourStore.get().status === "running") return;
+    clear = document.querySelector(CLOSING_DIALOG) && performance.now() < deadline ? 0 : clear + 1;
+    // Two quiet frames let the closing dialog's own focus restoration run first.
+    if (clear < 2) return void requestAnimationFrame(settle);
+    const modal = document.querySelector<HTMLElement>(`${OPEN_SHEET}, ${OTHER_DIALOG}`);
+    if (modal) {
+      if (!modal.contains(document.activeElement)) modal.focus({ preventScroll: true });
+      return;
+    }
+    (usable(opener) ? opener : document.getElementById("main-content"))?.focus({ preventScroll: true });
+  };
+  requestAnimationFrame(settle);
+}
+
 const subscribeResize = (notify: () => void) => {
   addEventListener("resize", notify);
   return () => removeEventListener("resize", notify);
@@ -246,17 +272,18 @@ function TourRun({ index }: { index: number }) {
       const node = e.target instanceof Node ? e.target : null;
       if (node && !other() && !card.current?.contains(node) && !reach.current.target?.contains(node)) next.current?.focus({ preventScroll: true });
     };
+    // Focus lost with its element (a viewport change swaps the navigation, a page re-renders) returns as well.
+    const lost = setInterval(() => {
+      if (!other() && (document.activeElement === null || document.activeElement === document.body)) next.current?.focus({ preventScroll: true });
+    }, 400);
     addEventListener("keydown", onKey, true);
     addEventListener("focusin", onFocus, true);
-    // Focus returns to the opener, or to the page when the opener is gone. An open modal (the phone menu)
-    // keeps it, since everything behind it is hidden.
     const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     return () => {
+      clearInterval(lost);
       removeEventListener("keydown", onKey, true);
       removeEventListener("focusin", onFocus, true);
-      const back = opener?.isConnected ? opener : document.getElementById("main-content");
-      const modal = document.querySelector<HTMLElement>(`${OPEN_SHEET}, ${OTHER_DIALOG}`);
-      (modal && !(back && modal.contains(back)) ? modal : back)?.focus({ preventScroll: true });
+      returnFocus(opener);
     };
   }, []);
   const position = placeCard(rect, size.width, size.height, innerWidth, innerHeight);
