@@ -112,6 +112,12 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 				containerErr = imageDTO.Failure("update.check-unavailable", 503)
 			}
 		}
+		if containerErr == nil && policyErr == nil && policy.Strategy == "digest" && projected.Platform != "" && projected.Platform != local.Platform.String() {
+			// Another platform's same-tag result names neither this consumer's
+			// state nor its candidate digest.
+			projected = checkDTO.Response{ImageRef: discovered.ImageRef, CheckedAt: snapshot.CheckedAt, CheckTime: snapshot.CheckTime}
+			containerErr = imageDTO.Failure("update.check-unavailable", 503)
+		}
 		scopeBuildTimes(&projected, local)
 		if inspectErr != nil || containerErr != nil || inspected.Container.Image != consumers[id] || consumers[id] == "" || consumers[id] != baseline.ID {
 			projected.State = "unknown"
