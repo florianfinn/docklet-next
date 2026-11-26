@@ -2,7 +2,7 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original executor-owned deploy progress observation and behavioural coverage.
+// Deviations: Original executor-owned deploy progress observation and behavioural coverage. #655: per-service stage rows.
 
 package projects
 
@@ -34,6 +34,8 @@ type DeployReporter struct {
 	services     []deployService
 	activity     map[string]any
 	activitySeen bool
+	builds       map[string]string
+	containers   map[string]*deployStages
 	dirty        bool
 	lastPatch    time.Time
 	now          func() time.Time
@@ -42,7 +44,10 @@ type DeployReporter struct {
 }
 
 type deployResource struct{ label, service string }
-type deployService struct{ name, prefix, custom string }
+type deployService struct {
+	name, prefix, custom, image string
+	check                       *bool
+}
 
 type deployLayer struct {
 	done           bool
@@ -51,7 +56,7 @@ type deployLayer struct {
 }
 
 func NewDeployReporter(phase func(string, bool), patch func(map[string]any), now func() time.Time) *DeployReporter {
-	return &DeployReporter{images: make(map[string]map[string]*deployLayer), resources: make(map[string]deployResource), appendPhase: phase, patch: patch, now: now}
+	return &DeployReporter{images: make(map[string]map[string]*deployLayer), resources: make(map[string]deployResource), builds: make(map[string]string), containers: make(map[string]*deployStages), appendPhase: phase, patch: patch, now: now}
 }
 
 func WithDeployReporter(ctx context.Context, reporter *DeployReporter) context.Context {
@@ -64,19 +69,28 @@ func DeployReporterFromContext(ctx context.Context) *DeployReporter {
 }
 
 // ConfigureProject binds container observations to services so replicas are
-// counted once. Unknown resource names carry no service-count claim.
+// counted once. Unknown resource names carry no service-count claim. A later
+// call replaces the binding, so resolved build image names take effect.
 func (r *DeployReporter) ConfigureProject(project *composetypes.Project) {
 	if r == nil || project == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.services = r.services[:0]
 	for name, service := range project.Services {
 		if len(r.services) >= 512 {
 			break
 		}
-		r.services = append(r.services, deployService{name: name, prefix: project.Name + "-" + name + "-", custom: service.ContainerName})
+		var check *bool
+		if hc := service.HealthCheck; hc != nil {
+			declared := !hc.Disable && (len(hc.Test) == 0 || hc.Test[0] != "NONE")
+			check = &declared
+		}
+		r.services = append(r.services, deployService{name: name, prefix: project.Name + "-" + name + "-", custom: service.ContainerName, image: service.Image, check: check})
 	}
+	r.dirty = true
+	r.flushLocked(false)
 }
 
 func (r *DeployReporter) resourceService(id string) string {
@@ -226,14 +240,9 @@ func (r *DeployReporter) pullLocked() map[string]any {
 	var current, total int64
 	known := r.layers > 0 && !r.incomplete
 	for _, layers := range r.images {
-		for _, layer := range layers {
-			if layer.done {
-				done++
-			}
-			known = known && layer.known
-			current = saturatingDeployAdd(current, layer.current)
-			total = saturatingDeployAdd(total, layer.total)
-		}
+		imageDone, imageCurrent, imageTotal, imageKnown := deployLayerSum(layers)
+		done, known = done+imageDone, known && imageKnown
+		current, total = saturatingDeployAdd(current, imageCurrent), saturatingDeployAdd(total, imageTotal)
 	}
 	result := map[string]any{"v": 1, "images": len(r.images), "layersDone": done, "layersTotal": r.layers}
 	if known {
@@ -253,6 +262,7 @@ func (r *DeployReporter) On(events ...api.Resource) {
 		return
 	}
 	for _, event := range events {
+		r.observeStage(event)
 		if event.Status != api.Working {
 			active, exists := r.resources[event.ID]
 			delete(r.resources, event.ID)
@@ -328,6 +338,9 @@ func (r *DeployReporter) flushLocked(final bool) {
 	}
 	if r.activitySeen {
 		patch["deployActivity"] = r.activity
+	}
+	if len(r.services) > 0 {
+		patch["deployServices"] = r.servicesLocked()
 	}
 	r.patch(patch)
 	r.lastPatch = r.now()
