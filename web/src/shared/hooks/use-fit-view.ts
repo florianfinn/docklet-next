@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { INITIAL_FIT, nextFit, type FitState, type FitView } from "@/shared/lib/fit-view";
+import { activePopupId, subscribePopups } from "@/shared/lib/popup-coordinator";
 
 /**
  * Picks the widest overview view that fits without horizontal overflow. The
@@ -20,15 +21,29 @@ export function useFitView<E extends HTMLElement>(resetKey: string, views?: read
     setState(INITIAL_FIT);
   }
 
-  // Web fonts change text widths without resizing the container: measure the mounted view again. Resetting to the
-  // table would remount the rows and close anything open inside them (hover cards on phones).
+  // Web fonts change text widths without resizing the container: measure again from the widest view, since widths
+  // recorded with the fallback font are stale. That reset remounts the rows, so while a popup is open (a hover card
+  // inside a row on phones) only the mounted view is measured and the full reset waits until the popup closes.
   const [fontTick, setFontTick] = useState(0);
   useEffect(() => {
     const fonts = typeof document !== "undefined" ? document.fonts : undefined;
     if (!fonts?.addEventListener) return;
-    const remeasure = () => setFontTick((t) => t + 1);
+    let unsubscribe: (() => void) | undefined;
+    const reset = () => {
+      unsubscribe?.();
+      unsubscribe = undefined;
+      setState(INITIAL_FIT);
+    };
+    const remeasure = () => {
+      if (activePopupId() === null) return reset();
+      setFontTick((t) => t + 1);
+      unsubscribe ??= subscribePopups(() => { if (activePopupId() === null) reset(); });
+    };
     fonts.addEventListener("loadingdone", remeasure);
-    return () => fonts.removeEventListener("loadingdone", remeasure);
+    return () => {
+      fonts.removeEventListener("loadingdone", remeasure);
+      unsubscribe?.();
+    };
   }, []);
 
   useLayoutEffect(() => {

@@ -17,6 +17,11 @@ export function activePopupId(): string | null {
   return popupStore.get().active;
 }
 
+/** Calls `listener` on every popup open/close; returns the unsubscribe function. */
+export function subscribePopups(listener: () => void): () => void {
+  return popupStore.subscribe(listener);
+}
+
 /**
  * Open state for one exclusive popup. `onForcedClose` runs when another popup
  * or a context change closes this one, so callers can skip focus restoration.
