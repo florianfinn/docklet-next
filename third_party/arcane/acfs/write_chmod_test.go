@@ -43,39 +43,38 @@ func TestInPlaceWriteChmodsOnlyWhenModeDiffers(t *testing.T) {
 	}
 }
 
-func TestInPlaceWriteKeepsStickyAndKernelClearedSetIDWithoutChmod(t *testing.T) {
+func TestInPlaceWriteKeepsExistingSpecialBitsWithoutChmod(t *testing.T) {
 	root := t.TempDir()
 	calls := 0
 	previous := chmodFile
 	chmodFile = func(f *os.File, mode os.FileMode) error { calls++; return previous(f, mode) }
 	t.Cleanup(func() { chmodFile = previous })
 	ctx := context.Background()
-
-	sticky := filepath.Join(root, "sticky.yaml")
-	if err := os.WriteFile(sticky, []byte("old"), 0o664); err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		name    string
+		special os.FileMode
+		perm    os.FileMode
+		content string
+	}{
+		{"sticky-changed", os.ModeSticky, 0o664, "new"},
+		{"setuid-changed", os.ModeSetuid, 0o764, "new"},
+		{"setuid-identical", os.ModeSetuid, 0o764, "old"},
+		// Read-only for the owner: an identical restore must return before opening for write.
+		{"sticky-identical-readonly", os.ModeSticky, 0o444, "old"},
 	}
-	if err := os.Chmod(sticky, 0o664|os.ModeSticky); err != nil {
-		t.Fatal(err)
-	}
-	if err := Write(ctx, root, "/sticky.yaml", []byte("new"), WriteOptions{Mode: 0o664, InPlace: true}); err != nil || calls != 0 {
-		t.Fatalf("sticky content write: err=%v chmod calls=%d, want nil and 0", err, calls)
-	}
-
-	if os.Geteuid() == 0 {
-		t.Skip("root keeps set-ID bits on write (CAP_FSETID)")
-	}
-	setuid := filepath.Join(root, "setuid.yaml")
-	if err := os.WriteFile(setuid, []byte("old"), 0o764); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(setuid, 0o764|os.ModeSetuid); err != nil {
-		t.Fatal(err)
-	}
-	if err := Write(ctx, root, "/setuid.yaml", []byte("new"), WriteOptions{Mode: 0o764, InPlace: true}); err != nil || calls != 0 {
-		t.Fatalf("set-ID content write: err=%v chmod calls=%d, want nil and 0", err, calls)
-	}
-	if info, err := os.Stat(setuid); err != nil || info.Mode()&os.ModeSetuid != 0 {
-		t.Fatalf("set-ID bit after write: mode=%v err=%v, want cleared", info.Mode(), err)
+	for _, tc := range cases {
+		target := filepath.Join(root, tc.name)
+		if err := os.WriteFile(target, []byte("old"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(target, tc.perm|tc.special); err != nil {
+			t.Fatal(err)
+		}
+		if err := Write(ctx, root, "/"+tc.name, []byte(tc.content), WriteOptions{Mode: tc.perm, InPlace: true}); err != nil || calls != 0 {
+			t.Fatalf("%s: err=%v chmod calls=%d, want nil and 0", tc.name, err, calls)
+		}
+		if got, _ := os.ReadFile(target); string(got) != tc.content {
+			t.Fatalf("%s: contents=%q, want %q", tc.name, got, tc.content)
+		}
 	}
 }
