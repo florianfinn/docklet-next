@@ -206,7 +206,7 @@ func TestPR1ReadProjectionDeniedAndRateLimitedAreErrors(t *testing.T) {
 					_, _ = w.Write([]byte(`{"OSType":"linux","Architecture":"amd64"}`))
 					return
 				}
-				_, _ = fmt.Fprintf(w, `{"Id":%q,"RepoDigests":[%q],"Os":"linux","Architecture":"amd64","Config":{"Labels":{"org.opencontainers.image.version":"1.0.0"}}}`, "sha256:"+strings.Repeat("a", 64), host+"/app@sha256:"+strings.Repeat("b", 64))
+				_, _ = fmt.Fprintf(w, `{"Id":%q,"Created":"2026-11-12T08:00:00Z","RepoDigests":[%q],"Os":"linux","Architecture":"amd64","Config":{"Labels":{"org.opencontainers.image.version":"1.0.0"}}}`, "sha256:"+strings.Repeat("a", 64), host+"/app@sha256:"+strings.Repeat("b", 64))
 			}))
 			defer daemon.Close()
 			db := setupImageUpdateRegistryTestDBInternal(t)
@@ -229,6 +229,8 @@ func TestPR1ReadProjectionDeniedAndRateLimitedAreErrors(t *testing.T) {
 			require.NoError(t, db.First(&saved, "id = ?", prior.ID).Error)
 			require.Equal(t, "error", saved.UpdateInfo().State, "failed fresh observation must replace cached success")
 			require.True(t, saved.CheckTime.After(prior.CheckTime))
+			require.Nil(t, saved.CurrentCreated, "a build time leaves with its native evidence")
+			require.Nil(t, result.CurrentCreated)
 			if status == 401 {
 				require.Equal(t, "authentication-required", saved.UpdateInfo().AuthState)
 			}

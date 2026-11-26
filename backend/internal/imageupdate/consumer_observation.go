@@ -61,6 +61,10 @@ func (s *ImageUpdateService) saveConsumerObservation(ctx context.Context, consum
 			record.CurrentCreated, record.LatestCreated = result.CurrentCreated, result.LatestCreated
 		}
 	}
+	if record.Platform == nil {
+		// Build times leave the returned observation with their evidence, too.
+		result.CurrentCreated, result.LatestCreated = nil, nil
+	}
 	if result.Error != "" {
 		record.LastError = &result.Error
 	}

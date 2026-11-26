@@ -66,6 +66,8 @@ func TestConsumerObservationLateIdentityAndFailureInvalidation(t *testing.T) {
 				result := &checkDTO.Response{ImageRef: ref, State: "version", HasUpdate: true, CurrentDigest: id, LatestDigest: next, CheckTime: time.Now().UTC(), CurrentCreated: &built, LatestCreated: &built}
 				require.NoError(t, svc.saveConsumerObservation(t.Context(), consumer, result, identity.LocalImage{}, &native))
 				require.Equal(t, "unknown", result.State)
+				require.Nil(t, result.CurrentCreated, "the returned observation drops build times with its evidence")
+				require.Nil(t, result.LatestCreated)
 			}
 			var after ImageUpdateRecord
 			require.NoError(t, db.First(&after, "id=?", saved.ID).Error)

@@ -96,7 +96,6 @@ func (s *ImageUpdateService) readImageObservationAt(ctx context.Context, ref, re
 		return finish()
 	}
 	info.Platform = resolved.Platform.String()
-	info.CurrentCreated = resolved.Created
 	if local.Config != nil {
 		info.CurrentVersion = local.Config.Labels["org.opencontainers.image.version"]
 	}
@@ -132,6 +131,8 @@ func (s *ImageUpdateService) readImageObservationAt(ctx context.Context, ref, re
 		return finish()
 	}
 	native = &observation
+	// Build times are kept only together with this native evidence.
+	info.CurrentCreated = resolved.Created
 	_, info.CurrentDigest, info.LatestDigest = observation.Storage()
 	info.LatestVersion = next.Version
 	info.LatestCreated = imageDTO.BuildTime(next.Created)
