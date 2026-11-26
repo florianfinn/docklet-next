@@ -176,7 +176,7 @@
   ],
   "embeddedInventory": {
     "path": "docs/provenance/tools-embedded.json",
-    "sha256": "787484a31db8d72810a36cbafd792685d2429f2617da7fbe994f2ae6c69dbf96"
+    "sha256": "91a8c83988736518b1734ef37237089678c1c4be4bd1aad7b5cc81d8d22daa1b"
   },
   "dependencyAssessment": "Trivy: exact amd64/arm64 release binary build metadata and 460-module release SBOM plus two actual linked module versions absent from that SBOM; exact legal texts and source forms in dependencyInventory. acfs and BusyBox: source/compiled package graph, static C link map and embedded libc/compiler notices in embeddedInventory. docklet-probe: original Apache-2.0 independent module with no external packages; source hashes, compiled package graph and binary build information in embeddedInventory."
 }

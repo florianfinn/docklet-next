@@ -51,12 +51,12 @@ export function StackStep({ draft, model, hosts, isNew, labelSuggestions, onEdit
           <div className="grid gap-5 md:grid-cols-2">
             <Field data-invalid={nameIssue?.level === "error" || undefined}>
               <HelpLabel htmlFor="ed-name" topic="stack.name">
-                {t("name")} <span className="text-destructive">*</span>
+                {t("name")} {isNew && <span className="text-destructive">*</span>}
               </HelpLabel>
               <Input
                 id="ed-name"
                 className="font-mono"
-                required
+                required={isNew}
                 aria-invalid={nameIssue?.level === "error" || undefined}
                 value={model.name}
                 placeholder="media"
