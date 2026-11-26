@@ -124,7 +124,7 @@ export function RunOutput({ run, defaultOpen = false, fill = false, className }:
               const el = e.currentTarget;
               stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
             }}
-            className={cn("overflow-auto border-t bg-code py-1.5 font-mono text-[11.5px] leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring", fill ? "min-h-0 flex-1" : "max-h-80")}
+            className={cn("overflow-auto border-t bg-code py-1.5 font-mono text-[11.5px] leading-relaxed outline-none focus-visible:ring-2 focus-visible:ring-ring", fill ? "min-h-40 flex-1" : "max-h-80")}
           >
             {shown.map((r) => (
               <LineView key={r.index} row={r} timeZone={timeZone} />

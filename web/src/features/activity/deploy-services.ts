@@ -17,6 +17,8 @@ export interface DeployServiceRow {
   create?: DeployStageState;
   start?: DeployStageState;
   health?: DeployStageState;
+  /** A one-shot container exited successfully while Compose waited for it. */
+  completed?: boolean;
 }
 /** `prepared`: the producer reached deploy, so pulls and builds not observed were not needed. */
 export interface DeployServices { rows: DeployServiceRow[]; truncated: boolean; prepared: boolean }
@@ -36,10 +38,11 @@ export function parseDeployServices(metadata: unknown): DeployServices | undefin
   const rows: DeployServiceRow[] = [];
   for (const item of root.services) {
     const row = object(item);
-    if (!row || typeof row.name !== "string" || !row.name || row.name.length > 256 || (row.check !== undefined && typeof row.check !== "boolean")) return undefined;
+    if (!row || typeof row.name !== "string" || !row.name || row.name.length > 256 || (row.check !== undefined && typeof row.check !== "boolean") || (row.completed !== undefined && row.completed !== true)) return undefined;
     if (!stage(row.build) || !stage(row.create) || !stage(row.start) || !stage(row.health)) return undefined;
     const parsed: DeployServiceRow = { name: row.name };
     if (row.check !== undefined) parsed.check = row.check;
+    if (row.completed === true) parsed.completed = true;
     for (const key of ["build", "create", "start", "health"] as const) {
       const value = row[key];
       if (value === "running" || value === "done" || value === "error") parsed[key] = value;
@@ -63,7 +66,7 @@ export type SegmentState = StepState | "interrupted";
 export interface ServiceSegment { stage: DeployStage; state: SegmentState; fraction?: number }
 export type ServiceSummary =
   | { kind: "failed" } | { kind: "pulling"; fraction: number } | { kind: "building" | "creating" | "starting" | "waiting" }
-  | { kind: "healthy" | "ready" | "running" | "interrupted" | "pending" | "notReached" };
+  | { kind: "healthy" | "ready" | "completed" | "running" | "interrupted" | "pending" | "notReached" };
 
 /** Share of the pull already transferred: bytes when every layer total is known, layers otherwise. */
 export function pullFraction(pull: DeployServicePull): number {
@@ -84,7 +87,8 @@ export function serviceSegments(row: DeployServiceRow, run: Pick<ActionRun, "sta
   const observed: Record<DeployStage, SegmentState | undefined> = {
     pull: row.pull ? row.pull.layersDone === row.pull.layersTotal ? "done" : active && !prepared ? "running" : "interrupted" : undefined,
     build: settle(row.build), create: settle(row.create), start: settle(row.start),
-    health: row.check === false ? "skipped" : settle(row.health),
+    // A disabled healthcheck is dashed, but a confirmed failed wait stays visible.
+    health: row.check === false && row.health !== "error" ? "skipped" : settle(row.health),
   };
   return DEPLOY_STAGES.map((key, index) => {
     const later = DEPLOY_STAGES.slice(index + 1).some((next) => observed[next] && observed[next] !== "skipped");
@@ -102,7 +106,7 @@ export function serviceSummary(row: DeployServiceRow, segments: ServiceSegment[]
     return { kind: ({ build: "building", create: "creating", start: "starting", health: "waiting" } as const)[running.stage] };
   }
   const health = segments[4]!, start = segments[3]!;
-  if (health.state === "done") return { kind: row.check === true ? "healthy" : "ready" };
+  if (health.state === "done") return { kind: row.completed ? "completed" : row.check === true ? "healthy" : "ready" };
   if (start.state === "done" && health.state !== "interrupted") return { kind: "running" };
   if (segments.some((s) => s.state === "interrupted")) return { kind: "interrupted" };
   return { kind: run.status === "running" || run.status === "queued" ? "pending" : "notReached" };

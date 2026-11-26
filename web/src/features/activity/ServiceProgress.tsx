@@ -16,7 +16,7 @@ import { stepTone } from "./run-phase";
 
 const SUMMARY_TONE: Record<ServiceSummary["kind"], string> = {
   failed: "err", pulling: "run", building: "run", creating: "run", starting: "run", waiting: "run",
-  healthy: "ok", ready: "ok", running: "ok", interrupted: "gray", pending: "gray", notReached: "gray",
+  healthy: "ok", ready: "ok", completed: "ok", running: "ok", interrupted: "gray", pending: "gray", notReached: "gray",
 };
 
 function ServiceLine({ row, run, prepared }: { row: DeployServiceRow; run: ActionRun; prepared: boolean }) {
@@ -76,7 +76,8 @@ export function ServiceProgress({ run, className }: { run: ActionRun; className?
       <div className="grid grid-cols-5 gap-1 text-[10.5px] leading-tight text-muted-foreground" aria-hidden>
         {DEPLOY_STAGES.map((stage) => <span key={stage} className="truncate">{t(`stage.${stage}`)}</span>)}
       </div>
-      <ul className="flex flex-col gap-2.5">
+      {/* Long lists scroll on their own so an open raw output keeps its room. */}
+      <ul className="-mr-1 flex max-h-[min(40dvh,22rem)] flex-col gap-2.5 overflow-y-auto pr-1" data-slot="service-list">
         {data.services.rows.map((row) => <ServiceLine key={row.name} row={row} run={run} prepared={data.prepared} />)}
       </ul>
       {data.services.truncated && <p className="text-[11px] text-muted-foreground">{t("truncated")}</p>}

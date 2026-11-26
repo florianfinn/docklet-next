@@ -26,7 +26,11 @@ const (
 )
 
 // deployStages records the observed stages of one container.
-type deployStages struct{ create, start, health string }
+type deployStages struct {
+	create, start, health string
+	// completed: a one-shot container exited successfully while Compose waited for it.
+	completed bool
+}
 
 // healthcheckDeclared reports whether Compose declares a healthcheck: nil when
 // the image may define one, false when the service disables it.
@@ -125,6 +129,9 @@ func (r *DeployReporter) observeStage(event api.Resource) {
 		stages.health = deployStageRunning
 	case event.Text == api.StatusHealthy:
 		stages.health = deployStageDone
+	case event.Text == api.StatusExited && event.Status == api.Done:
+		// service_completed_successfully: a zero exit ends the wait; failures arrive as errors.
+		stages.health, stages.completed = deployStageDone, true
 	default:
 		return
 	}
@@ -154,6 +161,7 @@ func (r *DeployReporter) servicesLocked() map[string]any {
 			merged[name] = row
 		}
 		row.create, row.start, row.health = mergeStage(row.create, stages.create), mergeStage(row.start, stages.start), mergeStage(row.health, stages.health)
+		row.completed = row.completed || stages.completed
 	}
 	all := slices.Clone(r.services)
 	for name := range r.bindings {
@@ -192,6 +200,9 @@ func (r *DeployReporter) servicesLocked() map[string]any {
 			row["build"] = build
 		}
 		if stages := merged[service.name]; stages != nil {
+			if stages.completed {
+				row["completed"] = true
+			}
 			for key, value := range map[string]string{"create": stages.create, "start": stages.start, "health": stages.health} {
 				if value != "" {
 					row[key] = value
@@ -201,8 +212,8 @@ func (r *DeployReporter) servicesLocked() map[string]any {
 		rows = append(rows, row)
 	}
 	result := map[string]any{"v": 1, "services": rows}
-	// Image preparation is over once deploy began; unobserved pulls and builds were not needed.
-	if r.phase == "deploy" {
+	// Image preparation succeeded; unobserved pulls and builds were not needed.
+	if r.prepared {
 		result["prepared"] = true
 	}
 	if len(services) > deployServiceRowLimit {

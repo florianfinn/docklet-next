@@ -38,6 +38,7 @@ type DeployReporter struct {
 	activitySeen bool
 	builds       map[string]string
 	pullSent     bool
+	prepared     bool
 	bindings     map[string]string
 	containers   map[string]*deployStages
 	dirty        bool
@@ -129,6 +130,10 @@ func (r *DeployReporter) Phase(phase string) {
 	}
 	r.phase = phase
 	r.appendPhase(phase, false)
+	// Only a successful preparation reaches deploy here; PrepareFailed sets the phase without this boundary.
+	if phase == "deploy" && !r.prepared {
+		r.prepared, r.dirty = true, true
+	}
 }
 
 // Preparation can fail before any pull is needed. Name that failed operation

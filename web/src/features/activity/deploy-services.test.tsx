@@ -41,7 +41,7 @@ describe("parseDeployServices", () => {
   it("copies valid rows and hides the whole projection for any invalid row", () => {
     expect(parseDeployServices(services)?.rows.map((r) => r.name)).toEqual(["app", "db", "web", "worker"]);
     expect(parseDeployServices({ ...services, truncated: true })?.truncated).toBe(true);
-    for (const invalid of [undefined, null, [], { ...services, v: 2 }, { ...services, truncated: false }, { ...services, prepared: false }, { v: 1, services: [] },
+    for (const invalid of [undefined, null, [], { ...services, v: 2 }, { ...services, truncated: false }, { ...services, prepared: false }, { v: 1, services: [{ name: "a", completed: false }] }, { v: 1, services: [] },
       { v: 1, services: Array.from({ length: 65 }, (_, i) => ({ name: `svc-${i}` })) },
       { v: 1, services: [{ name: "" }] }, { v: 1, services: [{ name: "x".repeat(257) }] }, { v: 1, services: [{ name: "a", check: "yes" }] },
       { v: 1, services: [{ name: "a", start: "skipped" }] }, { v: 1, services: [{ name: "a", pull: { layersDone: 3, layersTotal: 2 } }] },
@@ -95,6 +95,10 @@ describe("serviceSegments", () => {
     expect(summary({ name: "a", pull: { layersDone: 1, layersTotal: 2 }, start: "done", health: "done" }, "failed")).toBe("ready");
     expect(summary({ name: "a", start: "done", health: "running" }, "failed")).toBe("interrupted");
     expect(summary({ name: "a", start: "running" }, "failed")).toBe("interrupted");
+    expect(summary({ name: "a", start: "done", health: "done", completed: true }, "succeeded")).toBe("completed");
+    // A disabled healthcheck stays dashed, except when Compose confirmed the wait failed.
+    expect(states({ name: "a", check: false, start: "done", health: "error" }, "failed")).toBe("skipped skipped skipped done error");
+    expect(summary({ name: "a", check: false, start: "done", health: "error" }, "failed")).toBe("failed");
   });
 });
 
@@ -155,4 +159,16 @@ it.each(["timeline", "console"] as const)("%s dialog design renders the service 
     expect(facts?.hasAttribute("data-compact")).toBe(true);
     expect(facts?.textContent).toMatch(/^\d+ s · Example /);
   } finally { view.unmount(); queryClient.clear(); f.helper.reset(); }
+});
+
+it("shows a settled one-shot completion and keeps long lists scrollable", () => {
+  const rows = { v: 1, prepared: true, services: [{ name: "migrate", start: "done", health: "done", completed: true }, ...Array.from({ length: 30 }, (_, i) => ({ name: `svc-${i}`, start: "done" }))] };
+  const run = renderRun(mapActivitySummary(row("success", "deploy", rows)), "en-US");
+  const view = wrap("en-US", <RunFocusBody run={run} now={0} />);
+  try {
+    const migrate = view.container.querySelector('[data-service="migrate"]');
+    expect(migrate?.getAttribute("data-summary")).toBe("completed");
+    expect(migrate?.textContent).toContain("Completed");
+    expect(view.container.querySelector('[data-slot="service-list"]')?.className.includes("overflow-y-auto")).toBe(true);
+  } finally { view.unmount(); }
 });

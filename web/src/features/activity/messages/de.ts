@@ -44,7 +44,7 @@ export const deActivity: typeof enActivity = {
   serviceStages: {
     heading: "Dienste",
     stage: { pull: "Download", build: "Build", create: "Erstellen", start: "Start", health: "Health" },
-    summary: { failed: "Fehlgeschlagen", pulling: "Download {percent} %", building: "Wird gebaut", creating: "Wird erstellt", starting: "Startet", waiting: "Wartet auf Health", healthy: "Healthy", ready: "Bereit", running: "Läuft", pending: "Wartet", notReached: "Nicht erreicht", interrupted: "Unterbrochen" },
+    summary: { failed: "Fehlgeschlagen", pulling: "Download {percent} %", building: "Wird gebaut", creating: "Wird erstellt", starting: "Startet", waiting: "Wartet auf Health", healthy: "Healthy", ready: "Bereit", running: "Läuft", pending: "Wartet", notReached: "Nicht erreicht", interrupted: "Unterbrochen", completed: "Abgeschlossen" },
     layers: "{done}/{total} Layer", bytes: "{done} / {total}",
     state: { pending: "ausstehend", running: "läuft", done: "erledigt", error: "fehlgeschlagen", skipped: "übersprungen", interrupted: "unterbrochen" },
     stageState: "{stage}: {state}",

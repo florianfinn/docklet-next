@@ -203,3 +203,44 @@ func TestDeployServiceBindingCapIsStable(t *testing.T) {
 		require.Equal(t, "svc-511", r.services[511].name, "the cap keeps the first services by name")
 	}
 }
+
+// Compose 5.6 waits on service_completed_successfully with Waiting, then Exited on a zero exit code.
+func TestDeployServiceRowsRecordCompletedOneShot(t *testing.T) {
+	var patch map[string]any
+	r := NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patch = p }, time.Now)
+	r.ConfigureProject(stageProject())
+	r.Phase("deploy")
+	r.On(
+		api.Resource{ID: "Container example-builder-1", Text: api.StatusStarted, Status: api.Done},
+		api.Resource{ID: "Container example-builder-1", Text: api.StatusWaiting, Status: api.Working},
+		api.Resource{ID: "Container example-builder-1", Text: api.StatusExited, Status: api.Done},
+		api.Resource{ID: "Container example-worker-1", Text: api.StatusWaiting, Status: api.Working},
+		api.Resource{ID: "Container example-worker-1", Text: "dependency failed", Status: api.Error},
+	)
+	r.Flush(true)
+	rows := serviceRows(t, patch)
+	require.Equal(t, deployStageDone, rows["builder"]["health"])
+	require.Equal(t, true, rows["builder"]["completed"], "a successful one-shot exit is a confirmed completion")
+	require.Equal(t, deployStageError, rows["worker"]["health"], "a failed wait stays an error even with a disabled healthcheck")
+	require.NotContains(t, rows["worker"], "completed")
+}
+
+func TestDeployServicePreparedBoundaryIsExplicit(t *testing.T) {
+	now := time.Unix(100, 0)
+	var patch map[string]any
+	r := NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patch = p }, func() time.Time { return now })
+	r.ConfigureProject(stageProject())
+	r.Flush(false)
+	require.NotContains(t, patch["deployServices"], "prepared")
+	now = now.Add(100 * time.Millisecond)
+	r.Phase("deploy")
+	now = now.Add(time.Second)
+	r.Flush(false)
+	require.Equal(t, true, patch["deployServices"].(map[string]any)["prepared"], "the boundary is published after a tick drained the rows")
+
+	failed := NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patch = p }, time.Now)
+	failed.ConfigureProject(stageProject())
+	failed.PrepareFailed()
+	failed.Flush(true)
+	require.NotContains(t, patch["deployServices"], "prepared", "a failed preparation never claims its pulls were not needed")
+}
