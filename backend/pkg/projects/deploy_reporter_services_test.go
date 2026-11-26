@@ -244,3 +244,26 @@ func TestDeployServicePreparedBoundaryIsExplicit(t *testing.T) {
 	failed.Flush(true)
 	require.NotContains(t, patch["deployServices"], "prepared", "a failed preparation never claims its pulls were not needed")
 }
+
+// Compose can finish a dependency wait before its project-wide --wait pass emits Waiting again.
+func TestDeployServiceCompletionSurvivesRepeatedWait(t *testing.T) {
+	var patch map[string]any
+	r := NewDeployReporter(func(string, bool) {}, func(p map[string]any) { patch = p }, time.Now)
+	r.ConfigureProject(stageProject())
+	r.Phase("deploy")
+	r.On(
+		api.Resource{ID: "Container example-worker-1", Text: api.StatusStarted, Status: api.Done},
+		api.Resource{ID: "Container example-worker-1", Text: api.StatusWaiting, Status: api.Working},
+		api.Resource{ID: "Container example-worker-1", Text: api.StatusExited, Status: api.Done},
+		api.Resource{ID: "Container example-worker-1", Text: api.StatusWaiting, Status: api.Working},
+		api.Resource{ID: "Container example-app-1", Text: "sibling failed", Status: api.Error},
+	)
+	r.Flush(true)
+	rows := serviceRows(t, patch)
+	require.Equal(t, deployStageDone, rows["worker"]["health"], "a repeated wait keeps the confirmed completion")
+	require.Equal(t, true, rows["worker"]["completed"])
+	require.Equal(t, false, rows["worker"]["check"])
+	r.On(api.Resource{ID: "Container example-worker-1", Text: "later failure", Status: api.Error})
+	r.Flush(true)
+	require.Equal(t, deployStageError, serviceRows(t, patch)["worker"]["health"], "a later explicit error still wins")
+}

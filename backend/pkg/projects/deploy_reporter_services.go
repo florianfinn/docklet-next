@@ -126,7 +126,10 @@ func (r *DeployReporter) observeStage(event api.Resource) {
 	case event.Text == api.StatusStarted || event.Text == api.StatusRunning:
 		stages.start = deployStageDone
 	case event.Text == api.StatusWaiting:
-		stages.health = deployStageRunning
+		// A later project-wide wait never undoes a confirmed one-shot completion.
+		if !stages.completed {
+			stages.health = deployStageRunning
+		}
 	case event.Text == api.StatusHealthy:
 		stages.health = deployStageDone
 	case event.Text == api.StatusExited && event.Status == api.Done:

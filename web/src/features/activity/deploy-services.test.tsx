@@ -96,6 +96,9 @@ describe("serviceSegments", () => {
     expect(summary({ name: "a", start: "done", health: "running" }, "failed")).toBe("interrupted");
     expect(summary({ name: "a", start: "running" }, "failed")).toBe("interrupted");
     expect(summary({ name: "a", start: "done", health: "done", completed: true }, "succeeded")).toBe("completed");
+    expect(summary({ name: "a", check: false, start: "done", health: "done", completed: true }, "succeeded")).toBe("completed");
+    expect(summary({ name: "a", check: false, start: "done", health: "done", completed: true }, "failed")).toBe("completed");
+    expect(summary({ name: "a", check: false, start: "done", health: "error", completed: true }, "failed")).toBe("failed");
     // A disabled healthcheck stays dashed, except when Compose confirmed the wait failed.
     expect(states({ name: "a", check: false, start: "done", health: "error" }, "failed")).toBe("skipped skipped skipped done error");
     expect(summary({ name: "a", check: false, start: "done", health: "error" }, "failed")).toBe("failed");
@@ -162,7 +165,7 @@ it.each(["timeline", "console"] as const)("%s dialog design renders the service 
 });
 
 it("shows a settled one-shot completion and keeps long lists scrollable", () => {
-  const rows = { v: 1, prepared: true, services: [{ name: "migrate", start: "done", health: "done", completed: true }, ...Array.from({ length: 30 }, (_, i) => ({ name: `svc-${i}`, start: "done" }))] };
+  const rows = { v: 1, prepared: true, services: [{ name: "migrate", check: false, start: "done", health: "done", completed: true }, ...Array.from({ length: 30 }, (_, i) => ({ name: `svc-${i}`, start: "done" }))] };
   const run = renderRun(mapActivitySummary(row("success", "deploy", rows)), "en-US");
   const view = wrap("en-US", <RunFocusBody run={run} now={0} />);
   try {

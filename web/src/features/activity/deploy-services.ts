@@ -106,7 +106,9 @@ export function serviceSummary(row: DeployServiceRow, segments: ServiceSegment[]
     return { kind: ({ build: "building", create: "creating", start: "starting", health: "waiting" } as const)[running.stage] };
   }
   const health = segments[4]!, start = segments[3]!;
-  if (health.state === "done") return { kind: row.completed ? "completed" : row.check === true ? "healthy" : "ready" };
+  // Completion is a confirmed wait outcome, also when a disabled healthcheck keeps the segment dashed.
+  if (row.completed) return { kind: "completed" };
+  if (health.state === "done") return { kind: row.check === true ? "healthy" : "ready" };
   if (start.state === "done" && health.state !== "interrupted") return { kind: "running" };
   if (segments.some((s) => s.state === "interrupted")) return { kind: "interrupted" };
   return { kind: run.status === "running" || run.status === "queued" ? "pending" : "notReached" };
