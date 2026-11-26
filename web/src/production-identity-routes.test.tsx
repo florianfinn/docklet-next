@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original production runtime route coverage for M4 identity; optional-module foundation (#472); M29 first-run claim instead of the initial password change.
 
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { RouteObject } from "react-router";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -85,6 +85,9 @@ it("claims a pending hub, runs first setup, connected settings and profile on pr
   await waitFor(() => expect(settings.setupCompleted).toBe("true"));
   await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"), { timeout: 5_000 });
   await waitFor(() => expect(document.querySelector('[data-slot="sidebar"] a[href="/dashboard"]') !== null).toBe(true), { timeout: 5_000 });
+  // The dashboard offers the guided tour once; declining it leaves the regular pages.
+  const offer = await screen.findByRole("dialog", { name: "Einrichtung abgeschlossen" });
+  await userEvent.click(within(offer).getByRole("button", { name: "Nicht jetzt" }));
   await router.navigate("/settings/general");
   expect((await screen.findByLabelText("Name des Hubs")) !== null).toBe(true);
   await router.navigate("/settings/auth");

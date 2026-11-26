@@ -81,7 +81,7 @@ function TourOffer() {
   const t = useTranslations("tour.offer");
   return (
     <Dialog open onOpenChange={(open) => !open && endTour()}>
-      <DialogContent className="sm:max-w-md" data-slot="tour-offer">
+      <DialogContent className="sm:max-w-md" data-tour="offer">
         <DialogHeader>
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("text")}</DialogDescription>
