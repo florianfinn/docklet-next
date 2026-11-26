@@ -38,7 +38,7 @@
       "third_party/arcane/acfs/read.go": "b9b8a8a4b9b376a8310d5eff159be4465ec70a57c3d8149e5f6d3be2f3bd3a54",
       "third_party/arcane/acfs/rename.go": "f8e58d38c7d1b28150ebabddb5c2f955824f686de315fd048ec06c84534fdf21",
       "third_party/arcane/acfs/temp.go": "1a8aa366b47a72e54430cefbae147e5aa40a5c5f149f11a01039af96d8eeb3cd",
-      "third_party/arcane/acfs/write.go": "a815ee886f861cb86d0c0c5c36ac36b228f2b64511ad5db2c17757a23bcaa5a1",
+      "third_party/arcane/acfs/write.go": "ba2b7bd1d782bac20d5e020369b52e40fc14d462f6284f4e620e9560f16040b3",
       "third_party/arcane/acfs/internal/version/version.go": "bce1a6205a8436b21e8ad7a0362409aa4a470d0e39e1383894f703e5bdd39d7e",
       "third_party/arcane/acfs/internal/cli/run.go": "b3e01c7e97a748f7f57f5e2e2df0a714299e82114278a92372248378a9363325",
       "third_party/arcane/acfs/cmd/main.go": "52aa83c6b589607d690f9d59133e8c5cd12fa71e14d1dcfe065abaf942d542bb",

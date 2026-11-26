@@ -27,7 +27,7 @@ export function UserStack({ stack }: { stack: StackDetail }) {
   const tab = params.get("tab") === "logs" ? "logs" : params.get("tab") === "editor" && edit.available ? "editor" : "overview";
   const hosts = useHostScope();
   const [mode, setMode] = useState<EditorMode>("advanced");
-  const draft = useComposeDraft({ compose: stack.compose, env: stack.env, hostId: stack.hostId, labels: stack.labels });
+  const draft = useComposeDraft({ compose: stack.compose, env: stack.env, hostId: stack.hostId, labels: stack.labels, existing: true });
   return <>
     <StackHeader stack={stack} host={hosts.byId.get(stack.hostId)} />
     <Tabs value={tab} onValueChange={(value) => setParams({ tab: value }, { replace: true })}>
