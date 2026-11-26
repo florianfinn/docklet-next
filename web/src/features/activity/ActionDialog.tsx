@@ -33,6 +33,7 @@ import { RuntimeControls } from "./RuntimeControls";
 import { runtimeState } from "./runtime-presentation";
 import { ActionDetail } from "./ActionDetail";
 import { RunOutput } from "./RunOutput";
+import { ServiceProgress } from "./ServiceProgress";
 
 /** Whether a design opens the raw output by itself. */
 const OUTPUT_OPEN: Record<ActionDialogDesign, boolean> = { focus: false, timeline: true, console: true };
@@ -49,6 +50,7 @@ function TimelineBody({ run, now }: { run: ActionRun; now: number }) {
         <StepList run={run} dense />
         <RunFacts run={run} now={now} className="content-start sm:grid-cols-2" />
       </div>
+      <ServiceProgress run={run} />
       <RunErrorBox run={run} />
       <UpdateRecovery run={run} />
       <JobUpdateOutcomes run={run} />
@@ -74,6 +76,7 @@ function ConsoleBody({ run, now }: { run: ActionRun; now: number }) {
       <div className="shrink-0">
         <StepTrack steps={runPhase(run).phases} status={run.status} labels thin />
       </div>
+      <ServiceProgress run={run} />
       <RunErrorBox run={run} />
       <UpdateRecovery run={run} />
       <JobUpdateOutcomes run={run} />

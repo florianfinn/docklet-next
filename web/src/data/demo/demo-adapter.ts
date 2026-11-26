@@ -272,6 +272,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         failAt: fail,
         failMessage: fail ? "Simulierter Fehler (Design-Labor)" : undefined,
         restorePointId: rp?.id,
+        stageRows: command === "redeploy",
         onSuccess: () => {
           const now = new Date().toISOString();
           setServices(stackId, (s) => ({ ...s, state: effectiveCommand === "stop" ? "stopped" : "running", containersRemoved: effectiveCommand === "stop" ? removesContainers : false, startedAt: effectiveCommand === "stop" ? undefined : now }));

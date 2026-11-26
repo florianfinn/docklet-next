@@ -40,6 +40,13 @@ export const enActivity = {
     start: "starting {count, plural, one {# service} other {# services}}",
     wait: "waiting for {count, plural, one {# service} other {# services}}",
   },
+  serviceStages: {
+    heading: "Services",
+    stage: { pull: "Download", build: "Build", create: "Create", start: "Start", health: "Health" },
+    summary: { failed: "Failed", pulling: "Download {percent}%", building: "Building", creating: "Creating", starting: "Starting", waiting: "Waiting for health", healthy: "Healthy", ready: "Ready", running: "Running", pending: "Waiting", notReached: "Not reached" },
+    layers: "{done}/{total} layers", bytes: "{done} / {total}",
+    truncated: "More services are not shown.",
+  },
   bulk: {
     checked: "{count, plural, one {# of {planned} checked} other {# of {planned} checked}}",
     soFar: "{count, plural, one {# checked so far} other {# checked so far}}",
@@ -150,6 +157,7 @@ export const enActivity = {
     designs: { focus: "Focus", timeline: "Timeline", console: "Console" },
   },
   dialog: {
+    compactFacts: "{seconds} s · {target}",
     close: "Close progress window",
     closeShort: "Close",
     closeHint: "Closing does not end the action. Reopen it via the notice at top right or the action center.",
