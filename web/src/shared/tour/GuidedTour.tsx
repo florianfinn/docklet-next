@@ -72,6 +72,7 @@ function TourOffer() {
 
 interface Anchor {
   rect: DOMRect | null;
+  el: HTMLElement | null;
   /** False while the page loads and the anchor is still searched. */
   settled: boolean;
 }
@@ -89,7 +90,7 @@ const navAnchors = (route: string) => [`a[data-slot="sidebar-menu-button"][href=
 
 /** Tracks the first visible anchor of a step through scrolling, resizing and re-rendering. */
 function useAnchor(step: TourStep, phase: Phase, motion: boolean): Anchor {
-  const [anchor, setAnchor] = useState<Anchor & { for: string | null }>({ rect: null, settled: false, for: null });
+  const [anchor, setAnchor] = useState<Anchor & { for: string | null }>({ rect: null, el: null, settled: false, for: null });
   const target = `${step.key}:${phase}`;
   useEffect(() => {
     const candidates = phase === "nav" && step.route ? navAnchors(step.route) : step.anchors;
@@ -124,10 +125,10 @@ function useAnchor(step: TourStep, phase: Phase, motion: boolean): Anchor {
         if (!el && performance.now() - started <= ANCHOR_WAIT_MS) return;
         el = null;
         rank = Infinity;
-        setAnchor((prev) => (prev.for === target && prev.settled && !prev.rect ? prev : { rect: null, settled: true, for: target }));
+        setAnchor((prev) => (prev.for === target && prev.settled && !prev.rect ? prev : { rect: null, el: null, settled: true, for: target }));
         return;
       }
-      if (el) setAnchor({ rect: el.getBoundingClientRect(), settled: true, for: target });
+      if (el) setAnchor({ rect: el.getBoundingClientRect(), el, settled: true, for: target });
     };
     const search = () => {
       const found = find();
@@ -135,7 +136,7 @@ function useAnchor(step: TourStep, phase: Phase, motion: boolean): Anchor {
         attach(found);
         measure();
       } else if (performance.now() - started > ANCHOR_WAIT_MS) {
-        setAnchor({ rect: null, settled: true, for: target });
+        setAnchor({ rect: null, el: null, settled: true, for: target });
       } else {
         frame = requestAnimationFrame(search);
       }
@@ -154,7 +155,7 @@ function useAnchor(step: TourStep, phase: Phase, motion: boolean): Anchor {
     };
   }, [step, phase, target, motion]);
   // A result of another step or phase does not count.
-  return anchor.for === target ? anchor : { rect: null, settled: false };
+  return anchor.for === target ? anchor : { rect: null, el: null, settled: false };
 }
 
 /** Click shields around the highlight; the hole stays open only while the user should click into it. */
@@ -188,7 +189,7 @@ function TourRun({ index }: { index: number }) {
   useSyncExternalStore(subscribeResize, () => `${innerWidth}x${innerHeight}`);
   // On another page the tour points at the navigation; the step continues once that page opens, by the link or Next.
   const phase: Phase = step.route && pathname !== step.route ? "nav" : "page";
-  const { rect, settled } = useAnchor(step, phase, motion);
+  const { rect, el: anchorEl, settled } = useAnchor(step, phase, motion);
   const pointing = phase === "nav";
   const titleId = useId(), textId = useId();
 
@@ -209,14 +210,39 @@ function TourRun({ index }: { index: number }) {
   useEffect(() => {
     if (settled && !waiting) next.current?.focus({ preventScroll: true });
   }, [index, pointing, settled, sheet, waiting]);
+  // Keyboard reach outside the card: the highlighted navigation entry while pointing.
+  const reach = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    reach.current = pointing ? anchorEl : null;
+  });
   useEffect(() => {
-    // Escape inside another dialog closes only that dialog.
-    const onKey = (e: globalThis.KeyboardEvent) => e.key === "Escape" && !document.querySelector(OTHER_DIALOG) && endTour();
-    addEventListener("keydown", onKey);
+    // Read live, not from render state: another dialog leads from the moment it opens until it is gone.
+    const other = () => document.querySelector(OTHER_DIALOG) !== null;
+    // Capture on window runs before the dialogs' own Escape handling, while they still count as open.
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      const target = reach.current;
+      if (other()) return;
+      if (e.key === "Escape") endTour();
+      if (e.key !== "Tab" || !card.current) return;
+      // The tour owns Tab: it cycles through the card's buttons and, while pointing, the highlighted entry.
+      const items = [...card.current.querySelectorAll<HTMLElement>("button:not(:disabled)"), ...(target ? [target] : [])];
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      e.preventDefault();
+      e.stopPropagation();
+      items[at < 0 ? (e.shiftKey ? items.length - 1 : 0) : (at + (e.shiftKey ? -1 : 1) + items.length) % items.length]?.focus();
+    };
+    // Focus that still lands behind the shields returns to the card.
+    const onFocus = (e: FocusEvent) => {
+      const node = e.target instanceof Node ? e.target : null;
+      if (node && !other() && !card.current?.contains(node) && !reach.current?.contains(node)) next.current?.focus({ preventScroll: true });
+    };
+    addEventListener("keydown", onKey, true);
+    addEventListener("focusin", onFocus, true);
     // Focus returns to the opener, or to the page when the opener is gone.
     const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     return () => {
-      removeEventListener("keydown", onKey);
+      removeEventListener("keydown", onKey, true);
+      removeEventListener("focusin", onFocus, true);
       (opener?.isConnected ? opener : document.getElementById("main-content"))?.focus({ preventScroll: true });
     };
   }, []);
@@ -231,15 +257,6 @@ function TourRun({ index }: { index: number }) {
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "ArrowRight" && !(last && !pointing)) advance();
     if (e.key === "ArrowLeft") goToStep(index - 1);
-    // On a page step the card is modal: Tab cycles through its buttons.
-    if (e.key === "Tab" && !pointing && card.current) {
-      const buttons = [...card.current.querySelectorAll<HTMLElement>("button:not(:disabled)")];
-      const edge = e.shiftKey ? buttons[0] : buttons.at(-1);
-      if (edge && document.activeElement === edge) {
-        e.preventDefault();
-        (e.shiftKey ? buttons.at(-1) : buttons[0])?.focus();
-      }
-    }
   };
   const spotlight: CSSProperties | undefined = rect
     ? { top: rect.top - PAD, left: rect.left - PAD, width: rect.width + PAD * 2, height: rect.height + PAD * 2, boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.7)" }

@@ -26,7 +26,7 @@ export const enTour = {
   steps: {
     dashboard: {
       title: "Dashboard",
-      text: "The situation of all hosts at a glance: the ring shows the stacks of the selected hosts by status, the panel next to it lists what needs attention first. Customize arranges the widgets.",
+      text: "The situation of all hosts at a glance: the ring shows the stacks and standalone containers of the selected hosts by status, the panel next to it lists what needs attention first. Customize arranges the widgets.",
     },
     hostFilter: {
       title: "Host filter",

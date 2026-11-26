@@ -27,10 +27,12 @@ important pages for administrators, offered when first-run setup finishes.
 - While the phone menu is open, the tour renders inside the menu sheet, so the
   sheet's modal focus scope keeps the card reachable and announced.
 - Another open dialog (a discard confirmation for an unsaved settings draft, the
-  search palette, a side sheet) takes precedence: the tour hides and resumes once
-  the dialog closes.
-- On page steps the card is modal and Tab cycles through its buttons. Ending the
-  tour returns focus to the opener, or to the page content when the opener is gone.
+  search palette, a side sheet) takes precedence: the tour hides, leaves Tab and
+  Escape to that dialog, and resumes once it closes.
+- The tour owns the keyboard as well: Tab cycles through the card's buttons and,
+  while a navigation entry is highlighted, that entry; focus that still lands
+  behind the shields returns to the card. Ending the tour returns focus to the
+  opener, or to the page content when the opener is gone.
 - A change of the signed-in identity ends the tour.
 - Each step names anchor candidates in order. A better candidate that renders later
   (a lazily loaded page, the opened phone menu) replaces a fallback, and a lost
@@ -55,8 +57,9 @@ important pages for administrators, offered when first-run setup finishes.
 ## Tests
 
 `web/src/shared/tour/guided-tour.test.tsx` covers the offer, the navigation phase
-through Next and through the link, the exact click hole, page steps, Back, Tab
-cycling, Escape with focus return, finishing, the phone menu inside the open sheet,
+through Next and through the link, the exact click hole, keyboard reach while
+pointing, page steps, Back, Tab cycling, Escape with focus return, Escape in the
+search palette, finishing, the phone menu inside the open sheet,
 waiting behind a discard confirmation, a disappearing anchor, the identity change,
 the centred fallback, the simple-user exclusion and card placement. The setup and
 help settings tests cover the offer after setup, the restart and the hidden button

@@ -26,7 +26,7 @@ export const deTour: typeof enTour = {
   steps: {
     dashboard: {
       title: "Dashboard",
-      text: "Die Lage aller Hosts auf einen Blick: Der Ring zeigt die Stacks der gewählten Hosts nach Zustand, die Tafel daneben nennt zuerst, was Aufmerksamkeit braucht. Über Anpassen ordnest du die Widgets.",
+      text: "Die Lage aller Hosts auf einen Blick: Der Ring zeigt Stacks und einzelne Container der gewählten Hosts nach Zustand, die Tafel daneben nennt zuerst, was Aufmerksamkeit braucht. Über Anpassen ordnest du die Widgets.",
     },
     hostFilter: {
       title: "Hostfilter",

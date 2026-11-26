@@ -98,6 +98,41 @@ describe("guided tour", () => {
     expect(document.querySelectorAll('[data-slot="tour-shield"]').length).toBe(5);
   });
 
+  it("keeps the keyboard on the card and the highlighted entry while pointing", async () => {
+    measured();
+    const { router } = render("/settings/help");
+    act(() => startTour());
+    await waitFor(() => expect(overlay()?.dataset.phase).toBe("nav"));
+    const inside = card();
+    const link = document.querySelector<HTMLAnchorElement>('a[data-slot="sidebar-menu-button"][href="/dashboard"]');
+    await waitFor(() => expect(document.activeElement === within(inside).getByRole("button", { name: "Weiter" })).toBe(true));
+    // Shift+Tab cycles through End tour and the highlighted entry; nothing behind the shields is reached.
+    const reached: boolean[] = [];
+    for (let i = 0; i < 6; i++) {
+      await userEvent.tab({ shift: true });
+      reached.push(inside.contains(document.activeElement) || document.activeElement === link);
+    }
+    expect([reached.every(Boolean), router.state.location.pathname]).toEqual([true, "/settings/help"]);
+    // From Next, Tab reaches the highlighted entry; Enter opens it.
+    await userEvent.tab();
+    expect(document.activeElement === link).toBe(true);
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"));
+  });
+
+  it("leaves Escape to the search palette and resumes afterwards", async () => {
+    measured();
+    render("/dashboard");
+    act(() => goToStep(TOUR_STEPS.length - 1));
+    await waitFor(() => expect(within(card()).getByRole("heading").textContent).toBe("Suche und Aktivität"));
+    await userEvent.keyboard("{Control>}k{/Control}");
+    await waitFor(() => expect(overlay() === null && screen.queryByRole("dialog", { name: "Suchen" }) !== null).toBe(true));
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Suchen" })).toBe(null));
+    expect(tourStore.get().status).toBe("running");
+    await waitFor(() => expect(overlay() !== null).toBe(true));
+  });
+
   it("continues when the user opens the page through the navigation link", async () => {
     measured();
     const { router } = render("/dashboard");
