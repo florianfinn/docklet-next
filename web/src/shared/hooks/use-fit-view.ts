@@ -20,11 +20,13 @@ export function useFitView<E extends HTMLElement>(resetKey: string, views?: read
     setState(INITIAL_FIT);
   }
 
-  // Web fonts change text widths without resizing the container: measure again from the widest view.
+  // Web fonts change text widths without resizing the container: measure the mounted view again. Resetting to the
+  // table would remount the rows and close anything open inside them (hover cards on phones).
+  const [fontTick, setFontTick] = useState(0);
   useEffect(() => {
     const fonts = typeof document !== "undefined" ? document.fonts : undefined;
     if (!fonts?.addEventListener) return;
-    const remeasure = () => setState(INITIAL_FIT);
+    const remeasure = () => setFontTick((t) => t + 1);
     fonts.addEventListener("loadingdone", remeasure);
     return () => fonts.removeEventListener("loadingdone", remeasure);
   }, []);
@@ -44,7 +46,7 @@ export function useFitView<E extends HTMLElement>(resetKey: string, views?: read
     const ro = new ResizeObserver(check);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [state.view, resetKey, views, remeasureKey]);
+  }, [state.view, resetKey, views, remeasureKey, fontTick]);
 
   return { view: state.view, ref };
 }
