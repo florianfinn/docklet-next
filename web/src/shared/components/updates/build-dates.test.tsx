@@ -62,4 +62,23 @@ for (const locale of ["de", "en-US"] as const) {
     expect(labels(second).every((label) => !label?.includes("2026"))).toBe(true);
     view.unmount();
   });
+  it(`adds the year only when nothing else tells builds apart in ${locale}`, () => {
+    setAppLocale(locale);
+    const [first, second] = ["2025-11-24T06:00:00Z", "2026-11-24T06:00:00Z"];
+    const view = renderWithApp(<StackUpdatePanel services={[{ name: "web", update: rebuild({ published: first }, { published: second }) }]} />, updateFixture().adapter);
+    const titled = Array.from(document.querySelectorAll("[data-slot=update-versions] [title]"));
+    expect(titled.map((node) => node.textContent?.includes("2025") ?? false)).toEqual([true, false]);
+    expect(titled.map((node) => node.textContent?.includes("2026") ?? false)).toEqual([false, true]);
+    expect(titled.every((node) => /20(25|26)/.test(node.getAttribute("title") ?? "") && (node.getAttribute("title") ?? "").includes(formatTime(first, true)))).toBe(true);
+    view.unmount();
+  });
+  it(`keeps the target build whole and truncates the running build first in ${locale}`, () => {
+    setAppLocale(locale);
+    const view = renderWithApp(<StackUpdatePanel services={[{ name: "web", update: rebuild({ published: "2026-10-31T08:00:00Z" }, { published: "2026-11-21T08:00:00Z" }) }]} />, updateFixture().adapter);
+    const slot = (name: string) => document.querySelector(`[data-slot=${name}]`);
+    expect(slot("update-versions")?.classList.contains("shrink-0")).toBe(false);
+    expect(slot("update-current")?.classList.contains("truncate")).toBe(true);
+    expect(slot("update-target")?.classList.contains("shrink-0")).toBe(true);
+    view.unmount();
+  });
 }
