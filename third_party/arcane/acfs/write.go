@@ -2,7 +2,9 @@
 // Revision: 3da7cfd43c4da62bc06fd384b7da5f109ce010fb
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: In-place writes chmod only when permission bits differ or a requested
+// special bit is missing, so a writer that is not the file owner (ACL or group write)
+// can update content (#651).
 
 package acfs
 
@@ -211,6 +213,18 @@ func createTemporaryFileInternal(root *os.Root, parent string) (*os.File, string
 	return nil, "", errors.New("could not allocate a unique temporary file")
 }
 
+// chmodFile is a test seam for in-place mode changes.
+var chmodFile = (*os.File).Chmod
+
+// modeSatisfied reports whether an existing file already has the requested mode.
+// Permission bits must match; set-ID and sticky bits only when requested, so special
+// bits already on the file are kept as an ordinary write keeps them. chmod needs
+// ownership, so skipping it lets a non-owner with write access update content.
+func modeSatisfied(have, want os.FileMode) bool {
+	special := os.ModeSetuid | os.ModeSetgid | os.ModeSticky
+	return have&os.ModePerm == want&os.ModePerm && have&want&special == want&special
+}
+
 func writeFileInPlaceInternal(ctx context.Context, root *os.Root, targetPath string, data []byte, mode os.FileMode) (retErr error) {
 	info, err := root.Lstat(targetPath)
 	flags := os.O_WRONLY
@@ -232,7 +246,7 @@ func writeFileInPlaceInternal(ctx context.Context, root *os.Root, targetPath str
 			return fmt.Errorf("read %q: %w", kitfs.LogicalPath(targetPath), err)
 		}
 		identical = bytes.Equal(existing, data)
-		if identical && info.Mode()&chmodModeMask == mode {
+		if identical && modeSatisfied(info.Mode(), mode) {
 			return ctx.Err()
 		}
 	}
@@ -267,8 +281,8 @@ func writeFileInPlaceInternal(ctx context.Context, root *os.Root, targetPath str
 			return fmt.Errorf("write %q: %w", kitfs.LogicalPath(targetPath), err)
 		}
 	}
-	if !identical || opened.Mode()&chmodModeMask != mode {
-		if err := file.Chmod(mode); err != nil {
+	if !modeSatisfied(opened.Mode(), mode) {
+		if err := chmodFile(file, mode); err != nil {
 			return fmt.Errorf("chmod %q: %w", kitfs.LogicalPath(targetPath), err)
 		}
 	}

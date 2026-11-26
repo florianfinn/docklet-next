@@ -83,7 +83,7 @@ function ExistingStack({ stack, onRetry }: { stack: StackDetail; onRetry: () => 
   // failure keeps the last loaded files as its base; writes stay gated meanwhile.
   const [files, setFiles] = useState(stack.filesUnavailable ? undefined : { compose: stack.compose, env: stack.env });
   if (!stack.filesUnavailable && (files?.compose !== stack.compose || files?.env !== stack.env)) setFiles({ compose: stack.compose, env: stack.env });
-  const draft = useComposeDraft({ compose: files?.compose ?? "", env: files?.env ?? "", hostId: stack.hostId, labels: stack.labels });
+  const draft = useComposeDraft({ compose: files?.compose ?? "", env: files?.env ?? "", hostId: stack.hostId, labels: stack.labels, existing: true });
   const host = byId.get(stack.hostId);
 
   return (

@@ -33,11 +33,15 @@ const DURATION = /^(\d+(\.\d+)?(us|ms|s|m|h))+$/;
 const CONTAINER_PORT = /^\d+(-\d+)?(\/(tcp|udp))?$/;
 const HOST_PORT = /^(\d{1,3}(\.\d{1,3}){3}:)?\d+(-\d+)?$/;
 
-/** Required-field and plausibility checks; codes are translated by the UI. */
-export function validateCompose(m: ComposeModel): Issue[] {
+/**
+ * Required-field and plausibility checks; codes are translated by the UI.
+ * An existing stack is named by its directory, so a top-level name is optional there.
+ */
+export function validateCompose(m: ComposeModel, opts: { existing?: boolean } = {}): Issue[] {
   const out: Issue[] = [];
-  if (!m.name.trim()) out.push({ level: "error", code: "name-missing", field: "name" });
-  else if (!NAME.test(m.name)) out.push({ level: "warn", code: "name-format", field: "name" });
+  if (!m.name.trim()) {
+    if (!opts.existing) out.push({ level: "error", code: "name-missing", field: "name" });
+  } else if (!NAME.test(m.name)) out.push({ level: "warn", code: "name-format", field: "name" });
   if (!m.services.length) out.push({ level: "error", code: "no-services", field: "services" });
   for (const s of m.services) {
     if (!s.image.trim()) out.push({ level: "error", code: "image-missing", field: "image", service: s.key });
