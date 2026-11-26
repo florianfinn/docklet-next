@@ -148,7 +148,7 @@ export const StackRow = memo(function StackRow({ stack, host, mode, view, column
         {services}
       </div>
     ),
-    updates: <StackUpdateIndicator name={stack.name} services={stack.services} actions={updateActions} />,
+    updates: <StackUpdateIndicator name={stack.name} services={stack.services} gaps={stack.updateGaps} actions={updateActions} />,
     load: <LoadView values={online ? load : null} memLimitMb={memLimitMb} />,
     ports,
     auto,

@@ -115,7 +115,7 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
   });
   const url = stackAddress(row.urls);
   const role = members.map((item) => systemRole(item.dockerLabels)).find((value) => value !== undefined);
-  return { id: inventoryId(hostId, row.id), hostId, name: row.name, ...(url ? { url } : {}), path: row.path, definitionHint: row.definitionHint, definitionReason: row.definitionReason, definitionFile: safeRuntimeFile(row.definitionFile) ? row.definitionFile : undefined, definitionVariable: safeVariable(row.definitionVariable), composeNamePeers: safePeers(row.composeNamePeers), reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
+  return { id: inventoryId(hostId, row.id), hostId, name: row.name, ...(url ? { url } : {}), path: row.path, definitionHint: row.definitionHint, definitionReason: row.definitionReason, definitionFile: safeRuntimeFile(row.definitionFile) ? row.definitionFile : undefined, definitionVariable: safeVariable(row.definitionVariable), composeNamePeers: safePeers(row.composeNamePeers), reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, ...(row.updateInfo ? { updateGaps: { missing: Math.max(0, row.updateInfo.imageCount - row.updateInfo.checkedImageCount) + row.updateInfo.errorCount, notPulled: row.updateInfo.imagesNotPulled } } : {}), autoUpdate: { mode: "check" }, inventory,
     ...(role ? { dockerLabels: { [SYSTEM_LABEL]: role } } : {}) };
 }
 

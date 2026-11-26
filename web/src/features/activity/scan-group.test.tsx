@@ -230,9 +230,9 @@ it("keeps a scan that starts while the closed group is still leaving", async () 
 // Row 8 / S23-R02: partial results that only detail owners know keep the group, also for candidate runs.
 it.each([
   ["host partial", { a: withSummary(summary({ status: "partial", failed: 1, scanned: 3 })) }],
-  ["candidate deferred", { a: { candidateScan: { targets: 5, scanned: 3, cached: 0, deferred: 2, failed: 0 } } }],
+  ["candidate failed", { a: { candidateScan: { targets: 5, scanned: 3, cached: 0, deferred: 0, failed: 2 } } }],
 ] as const)("keeps a succeeded activity with a %s result until closed", async (_, details) => {
-  const candidate = _ === "candidate deferred" ? { type: "vulnerability.candidate-scan" } : {};
+  const candidate = _ === "candidate failed" ? { type: "vulnerability.candidate-scan" } : {};
   const f = harness([], details as Record<string, Partial<CodedActionRun>>);
   await f.publish([]);
   await f.publish([scan("b", "second", "running"), scan("a", "first", "running", candidate)]);
@@ -363,7 +363,8 @@ it("starts the countdown once a held outcome turns out complete, and after a fai
   expect(lifeTrack() !== null).toBe(true);
 });
 
-it("holds the countdown for a candidate run until its counters arrive and keeps a deferred result", async () => {
+// Deferred targets only reached the per-run limit and wait for later scans, so the ordinary lifetime applies.
+it("holds the countdown for a candidate run until its counters arrive and then counts down a deferred-only result", async () => {
   const candidate = { type: "vulnerability.candidate-scan" };
   const f = harness([], { a: { candidateScan: { targets: 5, scanned: 3, cached: 0, deferred: 2, failed: 0 } } });
   await f.publish([]);
@@ -375,7 +376,7 @@ it("holds the countdown for a candidate run until its counters arrive and keeps 
   expect(lifeTrack() === null).toBe(true);
   await f.release("a");
   await tick(50);
-  expect([lifeTrack() === null, toasts().length]).toEqual([true, 1]);
+  expect([toasts()[0]?.dataset.status, lifeTrack() !== null, toasts().length]).toEqual(["succeeded", true, 1]);
 });
 
 // CXR-02 (first load): a single scan whose first detail has not arrived shows the listed run without a countdown.

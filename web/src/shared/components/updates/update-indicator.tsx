@@ -1,6 +1,6 @@
 import { useTranslations } from "use-intl";
 
-import type { Service, UpdateInfo } from "@/domain/model";
+import type { Service, UpdateGaps, UpdateInfo } from "@/domain/model";
 import { summarizeUpdates } from "@/domain/updates";
 
 import { InteractiveHoverCard } from "../interactive-hover-card";
@@ -25,18 +25,20 @@ export function StackUpdateIndicator({
   actions,
   side,
   times,
+  gaps,
 }: {
   name: string;
   services: Pick<Service, "name" | "update">[];
   actions?: UpdateActions;
   side?: "top" | "bottom" | "left" | "right";
   times?: UpdateTimes;
+  gaps?: UpdateGaps;
 }) {
   const t = useTranslations("common.updates");
   const s = summarizeUpdates(services);
   const state = s.pending ? t("chipPending", { count: s.pending }) : s.errors ? t("chipError") : s.visual === "unknown" ? t("chipUnknown") : s.visual === "unchecked" ? t("chipUnchecked") : s.visual === "local" ? t("chipLocal") : t("chipCurrent");
   return (
-    <InteractiveHoverCard label={t("triggerLabel", { name, state })} side={side} content={<StackUpdatePanel services={services} actions={actions} times={times} />}>
+    <InteractiveHoverCard label={t("triggerLabel", { name, state })} side={side} content={<StackUpdatePanel services={services} actions={actions} times={times} gaps={gaps} />}>
       <StackUpdateChip services={services} />
     </InteractiveHoverCard>
   );

@@ -14,7 +14,7 @@ import type { ReactNode } from "react";
 import { useTranslations } from "use-intl";
 
 import { formatDate, formatDateTime, formatRelative } from "@/domain/format";
-import type { ImageVersion, Service, UpdateInfo } from "@/domain/model";
+import type { ImageVersion, Service, UpdateGaps, UpdateInfo } from "@/domain/model";
 import { hasUpdate, summarizeUpdates, updateVisual } from "@/domain/updates";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
@@ -89,6 +89,12 @@ function TimesList({ times, local, showUpdated }: { times: UpdateTimes; local?: 
         ) : (
           <span data-tone="warn" className="font-medium text-(--tone)">
             {t("neverChecked")}
+          </span>
+        )}
+        {!!times.notPulled && (
+          <span data-tone="warn" className="text-(--tone)" data-slot="not-pulled">
+            {" "}
+            · {t("notPulled", { count: times.notPulled })}
           </span>
         )}
       </dd>
@@ -212,7 +218,7 @@ export function UpdatePanel({ update, actions = {}, updatedAt }: { update: Updat
  * Aggregated panel for a stack: one row per service with its versions, then
  * the last check and, when the caller knows the stack's history, the last update.
  */
-export function StackUpdatePanel({ services, actions = {}, times }: { services: Pick<Service, "name" | "update">[]; actions?: UpdateActions; times?: UpdateTimes }) {
+export function StackUpdatePanel({ services, actions = {}, times, gaps }: { services: Pick<Service, "name" | "update">[]; actions?: UpdateActions; times?: UpdateTimes; gaps?: UpdateGaps }) {
   const t = useTranslations("common.updates");
   const copyOf = useUpdateCopy();
   const summary = summarizeUpdates(services);
@@ -259,7 +265,7 @@ export function StackUpdatePanel({ services, actions = {}, times }: { services: 
       {pending && (
         <p className="px-4 pb-3 text-[11px] leading-relaxed text-muted-foreground">{t("noteManual")}</p>
       )}
-      <TimesList times={times ?? checkTimes(services.map((s) => s.update))} showUpdated={!!times} />
+      <TimesList times={times ?? checkTimes(services.map((s) => s.update), gaps)} showUpdated={!!times} />
       <Footer actions={{ updateLabel: t("actionUpdateStack"), ...actions, updateOperation: "installStackUpdates" }} pending={pending} />
     </div>
   );

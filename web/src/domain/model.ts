@@ -191,6 +191,8 @@ export type AutoUpdateMode = "check" | "scheduled";
 /** Only check, or install updates on a typed schedule in the hub time zone. */
 export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule: Schedule };
 
+export interface UpdateGaps { missing: number; notPulled: number }
+
 export interface Stack {
   definitionHint?: "definition-invalid";
  definitionReason?: "compose.identity-unreadable" | "compose.selection-unsupported" | "compose.env-file-missing" | "compose.variable-missing" | "compose.env-label-invalid" | "compose.env-label-conflict";
@@ -211,6 +213,8 @@ export interface Stack {
   description?: string;
   labels: string[];
   url?: string;
+  /** Producer image counts: `missing` images without a usable check (unrecorded or failed), `notPulled` distinct references absent on the host. */
+  updateGaps?: UpdateGaps;
   services: Service[];
   autoUpdate: AutoUpdatePolicy;
   lastDeployAt?: string;
