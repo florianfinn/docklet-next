@@ -367,6 +367,18 @@ func (h *ImageHandler) PruneImages(ctx context.Context, input *PruneImagesInput)
 	mode := resolvePruneImageModeInternal(input)
 	until := resolvePruneImageUntilInternal(input)
 
+	if h.activityService != nil {
+		user, _ := handlerutil.RequireUser(ctx)
+		progress := &pruneActivity{service: h.activityService, environmentID: input.EnvironmentID, user: user}
+		report, err := progress.run(ctx, func(ctx context.Context) (*image.PruneReport, error) {
+			return h.imageService.PruneImages(ctx, system.PruneImagesOptions{Mode: system.PruneImageMode(mode), Until: until})
+		})
+		if err != nil {
+			return nil, image.Neutral(err, "image.prune-failed", 502)
+		}
+		return &handlerutil.Out[image.PruneReport]{Body: base.ApiResponse[image.PruneReport]{Success: true, Data: *report}}, nil
+	}
+
 	report, err := h.imageService.PruneImages(ctx, system.PruneImagesOptions{
 		Mode:  system.PruneImageMode(mode),
 		Until: until,

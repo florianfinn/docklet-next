@@ -58,7 +58,7 @@ describe.each(["close", "remount"] as const)("pull after %s", (detach) => {
     expect(vi.mocked(ok ? toast.success : toast.error).mock.calls[0]?.[0]).toContain(ok ? initial.reference : t.errors["image_pull-failed"]);
   });
 });
-it("locks prune mode while cleanup runs and retains image names after inventory refresh", async () => {
+it("replaces the form with progress while cleanup runs and retains image names after inventory refresh", async () => {
   const f = imageRegistryFixture(), done = barrier(); f.state.delay = () => done.promise;
   const digest = `sha256:${"a".repeat(64)}`;
   f.state.response = { status: 200, body: { success: true, data: { imagesDeleted: ["sha256:abc", digest], skipped: [{ id: "sha256:abc", code: "image.in-use" }], failed: [], spaceReclaimed: 1048576, spaceReclaimedKnown: true } } };
@@ -66,14 +66,16 @@ it("locks prune mode while cleanup runs and retains image names after inventory 
   function Inventory() { const [images, setImages] = useState([image]); refresh = () => setImages([]); return <PruneDialog open onOpenChange={vi.fn()} hosts={[host]} images={images} />; }
   renderWithApp(<Inventory />, f.adapter);
   await start(t.pruneDialog.confirm); await waitFor(() => expect(mutations(f)).toHaveLength(1));
-  const mode = screen.getByRole("radio", { name: t.pruneDialog.modes.unused });
-  expect((mode.closest("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
-  await userEvent.click(mode); expect(mode.getAttribute("aria-checked")).toBe("false"); expect(mutations(f)).toHaveLength(1);
+  expect(screen.queryByRole("radio", { name: t.pruneDialog.modes.unused }) === null).toBe(true);
+  expect(screen.getByText(t.pruneDialog.progressStarting) !== null).toBe(true); expect(mutations(f)).toHaveLength(1);
   await act(async () => refresh());
   await act(async () => done.release());
   await screen.findByText(t.pruneDialog.report);
   const dialog = screen.getByRole("dialog");
-  expect(within(dialog).getByText("example/app:1") !== null).toBe(true);
+  expect(within(dialog).getByText((_, node) => node?.tagName === "LI" && node.textContent?.startsWith("example/app:1") === true) !== null).toBe(true);
+  // Removed names stay collapsed until the user opens the details.
+  expect(dialog.textContent).not.toContain("sha256:aaaaaaaaaaaa");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Details anzeigen (2)" }));
   expect(dialog.textContent).toContain("sha256:aaaaaaaaaaaa"); expect(dialog.textContent).not.toContain(digest);
   expect(dialog.textContent).not.toContain("host~"); expect(dialog.textContent).toContain("1 MB");
 });
@@ -89,7 +91,7 @@ it.each(["success", "report", "unknown", "rejected"] as const)("reports detached
   await act(async () => done.release());
   await waitFor(() => expect(outcome === "success" ? toast.success : toast.error).toHaveBeenCalledOnce());
   expect(outcome === "success" ? toast.error : toast.success).not.toHaveBeenCalled(); expect(screen.queryByRole("alert") === null).toBe(true);
-  if (outcome === "report") { expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toContain("Example host: Entfernt: 1 · Übersprungen: 2 · Fehlgeschlagen: 1"); }
+  if (outcome === "report") { expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe("Entfernt: 1 · Übersprungen: 2 · Fehlgeschlagen: 1"); }
   if (outcome === "unknown") { expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toContain(t.errors["image_outcome-unknown"]); }
 });
 it("formats streamed byte counts while awaiting completion", async () => {

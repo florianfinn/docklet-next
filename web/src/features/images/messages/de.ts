@@ -110,6 +110,11 @@ export const deImages: typeof enImages = {
     previewHint: "Nur Vorschau. Der Host prüft Nutzung und Schutz erneut; der Bericht zeigt die tatsächlichen Ergebnisse.",
     report: "Aufräumbericht", removed: "Entfernt: {count}", skipped: "Übersprungen: {count}", failed: "Fehlgeschlagen: {count}", space: "Freigegeben: {size}", spaceUnknown: "Freigegebener Speicher unbekannt", close: "Schließen",
     nothing: "Nichts zu entfernen.",
+    details: "Details anzeigen ({count})",
+    progressStarting: "Wird aufgeräumt …",
+    progressTotal: "{done} von {planned} Images bearbeitet",
+    incomplete: "Ergebnis unvollständig – Details in der Aktivität",
+    totals: "{hosts} Hosts: {removed} entfernt · {skipped} übersprungen · {failed} fehlgeschlagen",
   },
   removeDialog: {
     title: "{name} entfernen?",

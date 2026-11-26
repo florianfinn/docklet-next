@@ -52,9 +52,7 @@ it("shows actual prune outcomes and unknown reclaimed space, retaining the repor
   await waitFor(() => expect((within(dialog).getByRole("button", { name: t.pruneDialog.confirm }) as HTMLButtonElement).disabled).toBe(false));
   await userEvent.click(within(dialog).getByRole("button", { name: t.pruneDialog.confirm }));
   await within(dialog).findByText(t.pruneDialog.report);
-  expect(within(dialog).getByText("Entfernt: 1") !== null).toBe(true);
-  expect(within(dialog).getByText("Übersprungen: 2") !== null).toBe(true);
-  expect(within(dialog).getByText("Fehlgeschlagen: 1") !== null).toBe(true);
+  expect(within(dialog).getByText("Entfernt: 1 · Übersprungen: 2 · Fehlgeschlagen: 1") !== null).toBe(true);
   expect(within(dialog).getByText(t.pruneDialog.spaceUnknown) !== null).toBe(true);
   expect(dialog.textContent).toContain(t.errors["image_in-use"]); expect(dialog.textContent).toContain(t.errors["image_system-protected"]);
   expect(close).not.toHaveBeenCalled();

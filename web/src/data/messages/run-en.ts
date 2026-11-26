@@ -5,6 +5,7 @@ export const enRunMessages = {
     "job": "Scheduled job",
     "action": "Action",
     "imagePatch": "Patch image",
+    "imagePrune": "Clean up images",
     "projectPull": "Pull stack images",
     "projectBuild": "Build stack",
     "projectDestroy": "Delete stack",

@@ -49,6 +49,7 @@ export const deActivity: typeof enActivity = {
     failed: "{count, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}",
     skipped: "{count, plural, one {# übersprungen} other {# übersprungen}}",
     separator: " · ",
+    prune: { processed: "{count} von {planned} Images bearbeitet", removed: "{count, plural, one {# Image entfernt} other {# Images entfernt}}" },
     outsidePlan: "Nicht Teil dieser Prüfung",
     updateAvailable: "Update verfügbar",
   },

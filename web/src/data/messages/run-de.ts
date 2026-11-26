@@ -5,6 +5,7 @@ export const deRunMessages = {
     "job": "Geplante Aufgabe",
     "action": "Aktion",
     "imagePatch": "Image patchen",
+    "imagePrune": "Images aufräumen",
     "projectPull": "Stack-Images herunterladen",
     "projectBuild": "Stack bauen",
     "projectDestroy": "Stack löschen",

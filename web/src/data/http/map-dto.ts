@@ -9,7 +9,7 @@ import type { DeployProgress } from "@/features/activity/deploy-progress";
 import { runtimePeerAudit } from "./runtime-peer-audit";
 import { operationReasonKey } from "../operation-reason";
 import type { components } from "@/api/generated/schema";
-import type { ActionKind, ActionStatus, DeployStepKey, EventKind, EventLevel, OutputStream, StepState } from "@/domain/model";
+import type { ActionKind, ActionStatus, BulkCheckCounts, DeployStepKey, EventKind, EventLevel, OutputStream, StepState } from "@/domain/model";
 import { DELIVERY_REASONS, isProvider } from "@/domain/notifications";
 
 import type { CodedActionRun, CodedEvent, MessageCode } from "../message-code";
@@ -40,6 +40,17 @@ const REPOSITORY_CHECK_ACTION = "check_volume_backup_repository";
  * The producer records the receiving host's hub-assigned ID (settings hubHostId) or "0" before any target set
  * arrived; the latter is valid only for the host-local target. Anything else stays unclaimed.
  */
+/** Counts from any host are kept only when they are whole, non-negative and consistent; otherwise progress stays indeterminate. */
+function bulkCounts(value: unknown): BulkCheckCounts | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const b = value as Record<string, unknown>;
+  const counts = ["planned", "completed", "succeeded", "failed", "skipped", "updates"].map((key) => b[key]);
+  if (b.unit !== "target" || typeof b.plannedKnown !== "boolean" || !counts.every((n) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0)) return undefined;
+  const [planned, completed, succeeded, failed, skipped, updates] = counts as number[];
+  if (succeeded! + failed! + skipped! > completed! || (b.plannedKnown && completed! > planned!)) return undefined;
+  return { unit: "target", planned: planned!, plannedKnown: b.plannedKnown, completed: completed!, succeeded: succeeded!, failed: failed!, skipped: skipped!, updates: updates! };
+}
+
 function repositoryCheckResult(run: Activity): { snapshotCount: number } | undefined {
   const metadata = run.metadata;
   const check = metadata?.backupTargetCheck;
@@ -54,7 +65,7 @@ function repositoryCheckResult(run: Activity): { snapshotCount: number } | undef
 
 const STREAMS = new Set<OutputStream>(["cmd", "stdout", "stderr", "note"]);
 const KINDS: Record<string, ActionKind> = {
-  image_pull: "pull", image_update_check: "check-updates", image_patch: "update",
+  image_pull: "pull", image_prune: "prune", image_update_check: "check-updates", image_patch: "update",
   project_update: "update", project_restore: "restore",
   project_deploy: "deploy", project_redeploy: "redeploy", project_down: "stop",
   project_restart: "restart", container_start: "start", container_stop: "stop",
@@ -288,9 +299,10 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       ...(line.level === "error" ? { level: "error" as const } : line.level === "warning" ? { level: "warn" as const } : {}),
     };
   });
+  const bulk = bulkCounts(run.bulk);
   return Object.assign({
     id: run.id,
-    ...(run.bulk ? { bulk: { ...run.bulk } } : {}),
+    ...(bulk ? { bulk } : {}),
     deployProgress: deployProgress(run),
     ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
     ...(updateRecovery ? { updateRecovery } : {}),

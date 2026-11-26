@@ -25,6 +25,7 @@ const (
 	StatusCancelled   Status = "cancelled"
 
 	TypeImagePull         Type = "image_pull"
+	TypeImagePrune        Type = "image_prune"
 	TypeImageUpdateCheck  Type = "image_update_check"
 	TypeProjectPull       Type = "project_pull"
 	TypeProjectBuild      Type = "project_build"

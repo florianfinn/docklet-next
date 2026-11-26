@@ -48,6 +48,7 @@ export const enActivity = {
     failed: "{count, plural, one {# failed} other {# failed}}",
     skipped: "{count, plural, one {# skipped} other {# skipped}}",
     separator: " · ",
+    prune: { processed: "{count} of {planned} images processed", removed: "{count, plural, one {# image removed} other {# images removed}}" },
     outsidePlan: "Not part of this check",
     updateAvailable: "Update available",
   },

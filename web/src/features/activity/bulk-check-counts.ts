@@ -22,7 +22,19 @@ export function formatBulkCheckCounts(bulk: BulkCheckCounts, running: boolean, t
   return parts.join(t("separator"));
 }
 
+type PruneText = (key: "processed" | "removed" | "failed" | "skipped" | "separator", values?: { count: number; planned?: number }) => string;
+
+/** Image cleanup counts processed images while running and removed ones at the end; zero parts are left out. */
+export function formatBulkPruneCounts(bulk: BulkCheckCounts, running: boolean, t: PruneText): string {
+  const parts = [running ? t("processed", { count: bulk.completed, planned: bulk.planned }) : t("removed", { count: bulk.succeeded })];
+  if (bulk.failed > 0) parts.push(t("failed", { count: bulk.failed }));
+  if (bulk.skipped > 0) parts.push(t("skipped", { count: bulk.skipped }));
+  return parts.join(t("separator"));
+}
+
 export function useBulkCheckCounts(run: ActionRun): string | undefined {
   const t = useTranslations("activity.bulk");
-  return run.bulk ? formatBulkCheckCounts(run.bulk, run.status === "running" || run.status === "queued", t) : undefined;
+  const running = run.status === "running" || run.status === "queued";
+  if (!run.bulk) return undefined;
+  return run.kind === "prune" ? formatBulkPruneCounts(run.bulk, running, (key, values) => t(key === "processed" || key === "removed" ? `prune.${key}` : key, values)) : formatBulkCheckCounts(run.bulk, running, t);
 }

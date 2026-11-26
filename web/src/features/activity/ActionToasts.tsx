@@ -179,7 +179,8 @@ export function ActionToasts() {
       const targetedOnly = runs.length > 0 && runs.every((run) => runtimePresentation(renderRun(run, localeRef.current))?.sourceObserved === false);
       const firstSourceObservation = initialSources === undefined && !targetedOnly;
       const pending = initialSources ?? (targetedOnly ? new Set<string>() : (initialSources = new Set(failed)));
-      const rendered = runs.map((run) => renderRun(run, localeRef.current));
+      // Image cleanup shows its progress in its own dialog and one summary toast, never a run toast.
+      const rendered = runs.map((run) => renderRun(run, localeRef.current)).filter((run) => run.sourceOperation !== "image_prune");
       const history = new Set(rendered.filter((run) => (firstSourceObservation || (run.hostId !== undefined && pending.has(run.hostId))) && !seen.has(run.id) && !hasPresentationIntent(run, presentationStore.get()) && !notifiesOnFirstObservation(run)).map((run) => run.id));
       seen = new Set(runs.map((run) => run.id));
       // Health clears before its array: seed this last history first, then retire the source.
