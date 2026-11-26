@@ -6,12 +6,16 @@
 
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthGate } from "@/app/AuthGate";
 import { AppShell } from "@/app/shell/AppShell";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { registerIdentityLifetime } from "@/data/identity-lifetime";
 import { simulationStore } from "@/data/demo/simulation";
+import { HelpSection } from "@/features/settings/sections/HelpSection";
+import { helpStore } from "@/shared/preferences/help-store";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 import { renderRoutes } from "@/test/render";
 
@@ -33,8 +37,11 @@ function Page({ name }: { name: string }) {
 const pages = ["/dashboard", "/hosts", "/stacks", "/containers", "/security", "/backups", "/settings/notifications", "/settings/help"];
 const routes = [{ element: <AppShell />, children: pages.map((path) => ({ path, element: <Page name={`Seite ${path}`} /> })) }];
 const render = (path: string, adapter = createDemoAdapter()) => renderRoutes(routes, [path], adapter);
+/** The real Explanations section with its unsaved-changes guard. */
+const helpRoutes = [{ element: <AppShell />, children: [{ path: "/dashboard", element: <Page name="Seite /dashboard" /> }, { path: "/settings/help", element: <HelpSection /> }] }];
 
 const card = () => screen.getByRole("dialog", { name: /./ });
+const tourCard = () => document.querySelector<HTMLElement>('[data-slot="tour-card"]');
 const overlay = () => document.querySelector<HTMLElement>('[data-slot="tour-overlay"]');
 const spotlight = () => document.querySelector('[data-slot="tour-spotlight"]');
 /** happy-dom has no layout; anchors count as visible only with a measured box. */
@@ -49,6 +56,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   tourStore.reset();
   setViewport(1280);
+  helpStore.reset();
   preferencesStore.reset();
   simulationStore.reset();
   localStorage.clear();
@@ -78,6 +86,9 @@ describe("guided tour", () => {
     expect(within(card()).getByText("Öffne „Dashboard“ in der Navigation links oder wähle Weiter.") !== null && spotlight() !== null).toBe(true);
     // The hole above the navigation entry stays clickable: four shields surround it, none covers it.
     expect(document.querySelectorAll('[data-slot="tour-shield"]').length).toBe(4);
+    // The hole matches the entry exactly (top 20, left 20), without the visual padding that would expose neighbours.
+    const [above, , beside] = document.querySelectorAll<HTMLElement>('[data-slot="tour-shield"]');
+    expect([above?.style.height, beside?.style.width]).toEqual(["20px", "20px"]);
 
     await userEvent.click(within(card()).getByRole("button", { name: "Weiter" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"));
@@ -110,8 +121,14 @@ describe("guided tour", () => {
     expect(within(card()).getByText("Schritt 2 von 9") !== null).toBe(true);
     await userEvent.click(within(card()).getByRole("button", { name: "Zurück" }));
     await waitFor(() => expect(within(card()).getByRole("heading").textContent).toBe("Dashboard"));
+    // The page step is modal: Tab moves from Next, the last button, back to the first one.
+    await waitFor(() => expect(document.activeElement === within(card()).getByRole("button", { name: "Weiter" })).toBe(true));
+    await userEvent.tab();
+    expect(document.activeElement === within(card()).getByRole("button", { name: "Tour beenden" })).toBe(true);
     await userEvent.keyboard("{Escape}");
     expect(tourStore.get().status === "idle" && overlay() === null).toBe(true);
+    // Without a remaining opener, focus returns to the page.
+    expect(document.activeElement?.id).toBe("main-content");
   });
 
   it("finishes on the last step", async () => {
@@ -123,12 +140,64 @@ describe("guided tour", () => {
     expect(tourStore.get().status === "idle" && overlay() === null).toBe(true);
   });
 
-  it("points at the menu button while the mobile navigation is closed", async () => {
+  it("points at the menu button on phones and keeps the tour usable inside the opened menu", async () => {
     measured();
     setViewport(390);
-    render("/settings/help");
+    const { router } = render("/settings/help");
     act(() => startTour());
-    await waitFor(() => expect(within(card()).getByText("Öffne oben links das Menü und dann „Dashboard“ oder wähle Weiter.") !== null).toBe(true));
+    await waitFor(() => expect(tourCard()?.textContent?.includes("Öffne oben links das Menü und dann „Dashboard“ oder wähle Weiter.")).toBe(true));
+    await userEvent.click(document.querySelector<HTMLElement>('[data-slot="sidebar-trigger"]') as HTMLElement);
+    // The open menu is a modal sheet; the card lives inside it, so it stays reachable and focused.
+    await waitFor(() => expect(tourCard()?.closest('[data-mobile="true"]') != null).toBe(true));
+    const inside = tourCard() as HTMLElement;
+    await waitFor(() => expect(document.activeElement === within(inside).getByRole("button", { name: "Weiter" })).toBe(true));
+    expect([inside.closest('[aria-hidden="true"]') === null, inside.textContent?.includes("Öffne „Dashboard“ in der Navigation links oder wähle Weiter.")]).toEqual([true, true]);
+    await userEvent.keyboard("{ArrowRight}");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"));
+    await waitFor(() => expect(overlay()?.dataset.phase).toBe("page"));
+  });
+
+  it("waits behind the discard confirmation of an unsaved settings draft", async () => {
+    measured();
+    const { router } = renderRoutes(helpRoutes, ["/settings/help"]);
+    await userEvent.click(within(await screen.findByRole("radiogroup", { name: "Erklärungen" })).getByRole("radio", { name: "Kurz" }));
+    await userEvent.click(screen.getByRole("button", { name: "Tour starten" }));
+    await waitFor(() => expect(overlay()?.dataset.phase).toBe("nav"));
+    await userEvent.click(within(card()).getByRole("button", { name: "Weiter" }));
+    // The tour steps aside while the confirmation is open, then continues on the opened page.
+    const confirm = await screen.findByRole("alertdialog");
+    expect(overlay() === null && router.state.location.pathname === "/settings/help").toBe(true);
+    await userEvent.click(within(confirm).getByRole("button", { name: "Verwerfen und wechseln" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"));
+    await waitFor(() => expect(overlay()?.dataset.phase).toBe("page"));
+  });
+
+  it("clears the highlight when the anchor disappears", async () => {
+    measured();
+    function Vanishing() {
+      const [shown, setShown] = useState(true);
+      return shown ? <><Page name="Seite /hosts" /><button type="button" onClick={() => setShown(false)}>Ausblenden</button></> : <p>leer</p>;
+    }
+    renderRoutes([{ element: <AppShell />, children: [{ path: "/hosts", element: <Vanishing /> }] }], ["/hosts"]);
+    act(() => goToStep(TOUR_STEPS.findIndex((s) => s.key === "hosts")));
+    await waitFor(() => expect(spotlight() !== null).toBe(true));
+    // happy-dom has no hit testing; the click stands in for the page replacing its content.
+    await userEvent.click(screen.getByRole("button", { name: "Ausblenden" }));
+    await waitFor(() => expect(spotlight() === null && document.querySelectorAll('[data-slot="tour-shield"]').length === 0).toBe(true));
+    expect(tourCard()?.classList.contains("opacity-0")).toBe(false);
+  });
+
+  it("ends when the signed-in identity changes", async () => {
+    measured();
+    const demo = createDemoAdapter();
+    const adapter = { ...demo, subscribeChanges: demo.subscribeChanges.bind(demo) };
+    let notify = () => {};
+    registerIdentityLifetime(adapter.subscribeChanges, { version: () => 0, active: () => true, listen: (n) => { notify = n; return () => {}; } });
+    render("/dashboard", adapter);
+    act(() => startTour());
+    await waitFor(() => expect(overlay() !== null).toBe(true));
+    act(() => notify());
+    expect(tourStore.get().status === "idle" && overlay() === null).toBe(true);
   });
 
   it("shows the card centred without a highlight when no anchor is visible", async () => {
@@ -158,6 +227,8 @@ describe("card placement", () => {
     expect(placeCard(rect(100, 500, 200, 280), w, h, vw, vh)).toEqual({ left: 320, top: 492 });
     expect(placeCard(rect(800, 600, 380, 180), w, h, vw, vh)).toEqual({ left: 792, top: 430 });
     expect(placeCard(rect(700, 20, 480, 760), w, h, vw, vh)).toEqual({ left: 380, top: 16 });
+    // A highlight scrolled above the viewport keeps the card on screen.
+    expect(placeCard(rect(100, -300, 200, 40), w, h, vw, vh)).toEqual({ left: 92, top: 16 });
   });
 
   it("centres without a highlight and overlaps at the bottom right when nothing fits", () => {

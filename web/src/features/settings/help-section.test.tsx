@@ -1,7 +1,10 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState, type ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { queryKeys } from "@/data/query-keys";
 import { DEFAULT_HELP, helpStore, mergeHelp } from "@/shared/preferences/help-store";
 import { tourStore } from "@/shared/tour/tour-store";
 import { renderWithApp } from "@/test/render";
@@ -15,6 +18,13 @@ afterEach(() => {
 });
 
 const KEY = "docklet-react-opus.help";
+
+/** Seeds the principal cache that AuthGate owns in the app. */
+function AsSimpleUser({ children }: { children: ReactNode }) {
+  const client = useQueryClient();
+  useState(() => client.setQueryData(queryKeys.currentUser, { id: "member", username: "member", isAdmin: false, assignments: [], requiresPasswordChange: false }));
+  return children;
+}
 const mode = () => within(screen.getByRole("radiogroup", { name: "Erklärungen" }));
 
 describe("explanation settings", () => {
@@ -49,5 +59,11 @@ describe("explanation settings", () => {
     await userEvent.click(screen.getByRole("button", { name: "Tour starten" }));
     expect(tourStore.get()).toEqual({ status: "running", index: 0 });
     expect(screen.getByRole("status").textContent).toBe("Alles gespeichert");
+  });
+
+  it("hides the tour button from simple users", async () => {
+    renderWithApp(<AsSimpleUser><HelpSection /></AsSimpleUser>);
+    expect(await screen.findByRole("radiogroup", { name: "Erklärungen" }) !== null).toBe(true);
+    expect(screen.queryByRole("button", { name: "Tour starten" })).toBe(null);
   });
 });

@@ -4,16 +4,19 @@
 // License: Apache-2.0
 // Deviations: Original guided tour: setup offer, navigation pointer and page spotlight.
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
+import { identityLifetime } from "@/data/identity-lifetime";
+import { useAdapter } from "@/data/use-adapter";
 import { useStore } from "@/shared/lib/store";
 import { cn } from "@/shared/lib/utils";
 import { useMotionEnabled } from "@/shared/theme/use-design-tokens";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { useSidebar } from "@/shared/ui/sidebar";
 
 import { PAD, placeCard } from "./place-card";
 import { TOUR_STEPS, type TourStep } from "./tour-steps";
@@ -22,8 +25,27 @@ import { endTour, goToStep, startTour, tourStore } from "./tour-store";
 /** Lazy pages may take a moment; after this the card shows centred without a highlight. */
 const ANCHOR_WAIT_MS = 1500;
 
+/** The open phone navigation; the tour renders inside it so the sheet's focus scope keeps the card reachable. */
+const OPEN_SHEET = '[data-slot="sidebar"][data-mobile="true"][data-state="open"]';
+/** Another dialog (a discard confirmation, the search palette, a side sheet) takes precedence; the tour waits behind it. */
+const OTHER_DIALOG = ['[role="alertdialog"]', '[data-slot="dialog-content"]', '[data-slot="sheet-content"]'].map((s) => `${s}[data-state="open"]`).join(", ");
+
+const subscribeDom = (notify: () => void) => {
+  const observer = new MutationObserver(notify);
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state"] });
+  return () => observer.disconnect();
+};
+const useElement = (selector: string) => useSyncExternalStore(subscribeDom, () => document.querySelector<HTMLElement>(selector));
+const subscribeResize = (notify: () => void) => {
+  addEventListener("resize", notify);
+  return () => removeEventListener("resize", notify);
+};
+
 export function GuidedTour() {
   const state = useStore(tourStore, (s) => s);
+  const adapter = useAdapter();
+  // A tour belongs to the signed-in administrator; a session change ends it.
+  useEffect(() => identityLifetime(adapter).listen(endTour), [adapter]);
   if (state.status === "offer") return <TourOffer />;
   if (state.status === "running") return <TourRun index={state.index} />;
   return null;
@@ -50,8 +72,6 @@ function TourOffer() {
 
 interface Anchor {
   rect: DOMRect | null;
-  /** Index of the matched candidate; a lower rank is a better anchor. */
-  rank: number;
   /** False while the page loads and the anchor is still searched. */
   settled: boolean;
 }
@@ -69,7 +89,7 @@ const navAnchors = (route: string) => [`a[data-slot="sidebar-menu-button"][href=
 
 /** Tracks the first visible anchor of a step through scrolling, resizing and re-rendering. */
 function useAnchor(step: TourStep, phase: Phase, motion: boolean): Anchor {
-  const [anchor, setAnchor] = useState<Anchor & { for: string | null }>({ rect: null, rank: 0, settled: false, for: null });
+  const [anchor, setAnchor] = useState<Anchor & { for: string | null }>({ rect: null, settled: false, for: null });
   const target = `${step.key}:${phase}`;
   useEffect(() => {
     const candidates = phase === "nav" && step.route ? navAnchors(step.route) : step.anchors;
@@ -81,6 +101,7 @@ function useAnchor(step: TourStep, phase: Phase, motion: boolean): Anchor {
       return null;
     };
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => measure());
+    // The tracked anchor and the index of its candidate; a lower rank is a better anchor.
     let el: HTMLElement | null = null;
     let rank = Infinity;
     let frame = 0;
@@ -93,10 +114,20 @@ function useAnchor(step: TourStep, phase: Phase, motion: boolean): Anchor {
       el.scrollIntoView?.({ block: phase === "nav" ? "nearest" : "center", behavior: motion ? "smooth" : "auto" });
     };
     const measure = () => {
-      // A fallback anchor gives way to a better one that renders later: a lazy page, the opened mobile menu.
-      const best = rank > 0 || !el?.isConnected ? find() : null;
-      if (best && (best.rank < rank || !el?.isConnected)) attach(best);
-      if (el?.isConnected) setAnchor({ rect: el.getBoundingClientRect(), rank, settled: true, for: target });
+      const held = el !== null && el.isConnected && visible(el);
+      // A fallback gives way to a better anchor that renders later (a lazy page, the opened phone menu); a lost anchor to any remaining one.
+      const best = rank > 0 || !held ? find() : null;
+      if (best && (!held || best.rank < rank)) attach(best);
+      else if (!held) {
+        // Without any candidate the highlight clears and the card centres, once the initial wait is over.
+        if (el) observer?.unobserve(el);
+        if (!el && performance.now() - started <= ANCHOR_WAIT_MS) return;
+        el = null;
+        rank = Infinity;
+        setAnchor((prev) => (prev.for === target && prev.settled && !prev.rect ? prev : { rect: null, settled: true, for: target }));
+        return;
+      }
+      if (el) setAnchor({ rect: el.getBoundingClientRect(), settled: true, for: target });
     };
     const search = () => {
       const found = find();
@@ -104,7 +135,7 @@ function useAnchor(step: TourStep, phase: Phase, motion: boolean): Anchor {
         attach(found);
         measure();
       } else if (performance.now() - started > ANCHOR_WAIT_MS) {
-        setAnchor({ rect: null, rank: Infinity, settled: true, for: target });
+        setAnchor({ rect: null, settled: true, for: target });
       } else {
         frame = requestAnimationFrame(search);
       }
@@ -123,14 +154,15 @@ function useAnchor(step: TourStep, phase: Phase, motion: boolean): Anchor {
     };
   }, [step, phase, target, motion]);
   // A result of another step or phase does not count.
-  return anchor.for === target ? anchor : { rect: null, rank: 0, settled: false };
+  return anchor.for === target ? anchor : { rect: null, settled: false };
 }
 
 /** Click shields around the highlight; the hole stays open only while the user should click into it. */
 function Shields({ rect, open }: { rect: DOMRect | null; open: boolean }) {
   if (!rect) return <div className="pointer-events-auto fixed inset-0 bg-black/70" />;
-  const top = Math.max(0, rect.top - PAD), left = Math.max(0, rect.left - PAD);
-  const bottom = rect.bottom + PAD, right = rect.right + PAD;
+  // The hole matches the target exactly; the visual padding would expose neighbouring navigation entries.
+  const top = Math.max(0, rect.top), left = Math.max(0, rect.left);
+  const bottom = rect.bottom, right = rect.right;
   const parts: CSSProperties[] = [
     { top: 0, left: 0, right: 0, height: top },
     { top: bottom, left: 0, right: 0, bottom: 0 },
@@ -150,9 +182,13 @@ function TourRun({ index }: { index: number }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const motion = useMotionEnabled();
+  const { isMobile, openMobile } = useSidebar();
+  const sheet = useElement(OPEN_SHEET);
+  const waiting = useElement(OTHER_DIALOG) !== null;
+  useSyncExternalStore(subscribeResize, () => `${innerWidth}x${innerHeight}`);
   // On another page the tour points at the navigation; the step continues once that page opens, by the link or Next.
   const phase: Phase = step.route && pathname !== step.route ? "nav" : "page";
-  const { rect, rank, settled } = useAnchor(step, phase, motion);
+  const { rect, settled } = useAnchor(step, phase, motion);
   const pointing = phase === "nav";
   const titleId = useId(), textId = useId();
 
@@ -162,14 +198,27 @@ function TourRun({ index }: { index: number }) {
   useLayoutEffect(() => {
     const el = card.current;
     if (el && (el.offsetWidth !== size.width || el.offsetHeight !== size.height) && el.offsetWidth > 0) setSize({ width: el.offsetWidth, height: el.offsetHeight });
-  }, [index, phase, settled, size.width, size.height]);
+  }, [index, phase, settled, sheet, waiting, size.width, size.height]);
   useEffect(() => {
-    if (settled) next.current?.focus({ preventScroll: true });
-  }, [index, pointing, settled]);
+    const el = card.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => el.offsetWidth > 0 && setSize((s) => (s.width === el.offsetWidth && s.height === el.offsetHeight ? s : { width: el.offsetWidth, height: el.offsetHeight })));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [sheet, waiting]);
   useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => e.key === "Escape" && endTour();
+    if (settled && !waiting) next.current?.focus({ preventScroll: true });
+  }, [index, pointing, settled, sheet, waiting]);
+  useEffect(() => {
+    // Escape inside another dialog closes only that dialog.
+    const onKey = (e: globalThis.KeyboardEvent) => e.key === "Escape" && !document.querySelector(OTHER_DIALOG) && endTour();
     addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
+    // Focus returns to the opener, or to the page when the opener is gone.
+    const opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    return () => {
+      removeEventListener("keydown", onKey);
+      (opener?.isConnected ? opener : document.getElementById("main-content"))?.focus({ preventScroll: true });
+    };
   }, []);
   const position = placeCard(rect, size.width, size.height, innerWidth, innerHeight);
   const move = motion ? "transition-[top,left,width,height] duration-300 ease-out" : undefined;
@@ -182,13 +231,23 @@ function TourRun({ index }: { index: number }) {
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "ArrowRight" && !(last && !pointing)) advance();
     if (e.key === "ArrowLeft") goToStep(index - 1);
+    // On a page step the card is modal: Tab cycles through its buttons.
+    if (e.key === "Tab" && !pointing && card.current) {
+      const buttons = [...card.current.querySelectorAll<HTMLElement>("button:not(:disabled)")];
+      const edge = e.shiftKey ? buttons[0] : buttons.at(-1);
+      if (edge && document.activeElement === edge) {
+        e.preventDefault();
+        (e.shiftKey ? buttons.at(-1) : buttons[0])?.focus();
+      }
+    }
   };
   const spotlight: CSSProperties | undefined = rect
     ? { top: rect.top - PAD, left: rect.left - PAD, width: rect.width + PAD * 2, height: rect.height + PAD * 2, boxShadow: "0 0 0 9999px rgb(0 0 0 / 0.7)" }
     : undefined;
   const page = step.nav ? nav(step.nav) : "";
-  const text = pointing ? t(rank > 0 ? "openMenu" : "openNav", { page }) : t(`steps.${step.key}.text`);
+  const text = pointing ? t(isMobile && !openMobile ? "openMenu" : "openNav", { page }) : t(`steps.${step.key}.text`);
 
+  if (waiting) return null;
   // Above the mobile navigation sheet (z-50), so the highlight stays visible while it is open.
   return createPortal(
     <div data-slot="tour-overlay" data-phase={phase} className="pointer-events-none fixed inset-0 z-[60]">
@@ -209,7 +268,7 @@ function TourRun({ index }: { index: number }) {
         data-slot="tour-card"
         data-step={step.key}
         onKeyDown={onKeyDown}
-        className={cn("pointer-events-auto fixed flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-3 rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl outline-none", move, !settled && "opacity-0")}
+        className={cn("pointer-events-auto fixed flex max-h-[calc(100dvh-2rem)] w-[min(22rem,calc(100vw-2rem))] flex-col overflow-y-auto gap-3 rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl outline-none", move, !settled && "opacity-0")}
         style={position}
       >
         <p className="text-xs text-muted-foreground tabular-nums">{t("progress", { current: index + 1, total })}</p>
@@ -231,6 +290,6 @@ function TourRun({ index }: { index: number }) {
         </div>
       </section>
     </div>,
-    document.body,
+    sheet ?? document.body,
   );
 }

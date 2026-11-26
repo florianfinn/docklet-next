@@ -16,6 +16,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  tourStore.reset();
   simulationStore.reset();
   localStorage.clear();
 });
@@ -67,7 +68,6 @@ describe("first-run setup", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/dashboard"), { timeout: 4000 });
     // The dashboard then offers the guided tour once.
     expect(tourStore.get().status).toBe("offer");
-    tourStore.reset();
     const saved = await adapter.getSettings();
     expect(await adapter.getModuleStates!()).toEqual({ proxy: true });
     expect([saved.setupCompleted, saved.general.hubAddress, saved.general.domainUrl, saved.auth.mode, saved.auth.local.passwordSet]).toEqual([true, "192.0.2.10:8080", "", "local", true]);

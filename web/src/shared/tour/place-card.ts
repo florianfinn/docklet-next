@@ -15,9 +15,11 @@ export function placeCard(rect: DOMRect | null, width: number, height: number, v
   const clampY = (y: number) => Math.max(MARGIN, Math.min(y, vh - height - MARGIN));
   if (!rect) return { left: clampX((vw - width) / 2), top: clampY((vh - height) / 2) };
   const top = rect.top - PAD, left = rect.left - PAD, right = rect.right + PAD, bottom = rect.bottom + PAD;
-  if (vh - bottom >= height + GAP + MARGIN) return { left: clampX(left), top: bottom + GAP };
-  if (vw - right >= width + GAP + MARGIN) return { left: right + GAP, top: clampY(top) };
-  if (top >= height + GAP + MARGIN) return { left: clampX(left), top: top - GAP - height };
-  if (left >= width + GAP + MARGIN) return { left: left - GAP - width, top: clampY(top) };
-  return { left: clampX(vw), top: clampY(vh) };
+  // Clamped on both axes, so a highlight scrolled partly out of view never pushes the card off screen.
+  const at = (x: number, y: number) => ({ left: clampX(x), top: clampY(y) });
+  if (vh - bottom >= height + GAP + MARGIN) return at(left, bottom + GAP);
+  if (vw - right >= width + GAP + MARGIN) return at(right + GAP, top);
+  if (top >= height + GAP + MARGIN) return at(left, top - GAP - height);
+  if (left >= width + GAP + MARGIN) return at(left - GAP - width, top);
+  return at(vw, vh);
 }

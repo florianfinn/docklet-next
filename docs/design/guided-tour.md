@@ -22,10 +22,21 @@ important pages for administrators, offered when first-run setup finishes.
   once the page opens. The user can open it through the link, through Next or with
   the arrow key; Next opens the page on request.
 - The rest of the page is dimmed and blocked. While a navigation entry is
-  highlighted, only that entry is clickable. Escape ends the tour.
+  highlighted, only that entry is clickable; the click hole matches the entry
+  exactly, so neighbouring entries stay blocked. Escape ends the tour.
+- While the phone menu is open, the tour renders inside the menu sheet, so the
+  sheet's modal focus scope keeps the card reachable and announced.
+- Another open dialog (a discard confirmation for an unsaved settings draft, the
+  search palette, a side sheet) takes precedence: the tour hides and resumes once
+  the dialog closes.
+- On page steps the card is modal and Tab cycles through its buttons. Ending the
+  tour returns focus to the opener, or to the page content when the opener is gone.
+- A change of the signed-in identity ends the tour.
 - Each step names anchor candidates in order. A better candidate that renders later
-  (a lazily loaded page, the opened phone menu) replaces a fallback. If no anchor is
-  visible after a short wait, the card shows centred without a highlight.
+  (a lazily loaded page, the opened phone menu) replaces a fallback, and a lost
+  anchor gives way to any remaining one. If no anchor is visible after a short wait,
+  or the last one disappears, the card shows centred without a highlight. The card
+  stays inside the viewport and scrolls on short screens.
 - Only administrators get the tour. Simple users see neither the offer nor the start
   button.
 
@@ -44,6 +55,9 @@ important pages for administrators, offered when first-run setup finishes.
 ## Tests
 
 `web/src/shared/tour/guided-tour.test.tsx` covers the offer, the navigation phase
-through Next and through the link, page steps, Back, Escape, finishing, the phone
-menu hint, the centred fallback, the simple-user exclusion and card placement. The
-setup and help settings tests cover the offer after setup and the restart.
+through Next and through the link, the exact click hole, page steps, Back, Tab
+cycling, Escape with focus return, finishing, the phone menu inside the open sheet,
+waiting behind a discard confirmation, a disappearing anchor, the identity change,
+the centred fallback, the simple-user exclusion and card placement. The setup and
+help settings tests cover the offer after setup, the restart and the hidden button
+for simple users.
