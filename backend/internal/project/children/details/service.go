@@ -369,13 +369,13 @@ func mergeReplicaObservation(candidate, previous *imagetypes.UpdateInfo) imagety
 	// Replicas observed on different platforms share no build facts. A lent
 	// side without facts borrows them where both name the same native build.
 	if candidate.Platform != "" && previous.Platform != "" && candidate.Platform != previous.Platform {
-		merged.Platform, merged.CurrentCreated, merged.LatestCreated = "", nil, nil
+		merged.Platform, merged.CurrentCreated, merged.LatestCreated, merged.LatestManifest = "", nil, nil, ""
 	} else if merged.Platform == "" && candidate.CurrentDigest == previous.CurrentDigest && candidate.LatestDigest == previous.LatestDigest {
 		source := candidate
 		if source.Platform == "" {
 			source = previous
 		}
-		merged.Platform, merged.CurrentCreated, merged.LatestCreated = source.Platform, source.CurrentCreated, source.LatestCreated
+		merged.Platform, merged.CurrentCreated, merged.LatestCreated, merged.LatestManifest = source.Platform, source.CurrentCreated, source.LatestCreated, source.LatestManifest
 	}
 	return merged
 }
@@ -392,7 +392,7 @@ func mergeReplicaState(candidate, previous *imagetypes.UpdateInfo) imagetypes.Up
 		merged = *candidate
 	}
 	if candidate.HasUpdate && (candidate.LatestVersion != previous.LatestVersion || candidate.LatestDigest != previous.LatestDigest || candidate.UpdateType != previous.UpdateType) {
-		merged.LatestVersion, merged.LatestDigest, merged.UpdateType, merged.LatestCreated = "", "", "", nil
+		merged.LatestVersion, merged.LatestDigest, merged.UpdateType, merged.LatestCreated, merged.LatestManifest = "", "", "", nil, ""
 	}
 	if merged.Error == "" {
 		merged.Error = cmp.Or(candidate.Error, previous.Error)

@@ -31,6 +31,10 @@ func TestMinimumAgeGateAndDisabledBypass(t *testing.T) {
 			require.NoError(t, f.s.deps.Settings.UpdateSetting(t.Context(), "updateMinimumAgeDays", days))
 			if which == "unknown" {
 				info.LatestManifest = ""
+				// An aged native-digest row makes a fallback to LatestDigest visible as an admission.
+				require.NotEmpty(t, info.LatestDigest)
+				c := dto.UpdateCandidate{ImageRef: f.check.ServiceUpdates["app"].ImageRef, Platform: info.Platform, Manifest: info.LatestDigest}
+				require.NoError(t, f.p.store.ObserveFirstSeen(t.Context(), c, time.Now().UTC().Add(-72*time.Hour)))
 			}
 			if which == "invalid" {
 				info.LatestManifest = "invalid"
@@ -68,6 +72,11 @@ func TestMinimumAgeGateAndDisabledBypass(t *testing.T) {
 					code = "update.check-unavailable"
 				}
 				require.Equal(t, code, out.Code)
+				if which == "unknown" {
+					var n int64
+					require.NoError(t, f.db.Model(&policy.FirstSeen{}).Count(&n).Error)
+					require.Equal(t, int64(1), n, "unknown age adds no first-seen row")
+				}
 			}
 		})
 	}

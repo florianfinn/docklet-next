@@ -2,7 +2,7 @@
 // Revision: 0c8a014eda72706e48d60c22e86526e7dfd15964
 // Retrieved: 2026-11-05
 // License: Apache-2.0
-// Deviations: Replicas of one image merge to one coherent projected observation; #634 build times.
+// Deviations: Replicas of one image merge to one coherent projected observation; #634 build times; #680 candidate manifest.
 
 package details
 
@@ -34,12 +34,14 @@ func TestReplicaMergeKeepsOneCoherentObservation(t *testing.T) {
 	t.Run("conflicting candidates", func(t *testing.T) {
 		scoped := map[string]*imagetypes.UpdateInfo{"one": projectedObservation(a, b, early), "two": projectedObservation(a, c, late)}
 		scoped["one"].LatestCreated, scoped["two"].LatestCreated = &early, &late
+		scoped["one"].LatestManifest, scoped["two"].LatestManifest = "sha256:"+repeat("e"), "sha256:"+repeat("f")
 		merged := MergeProjectContainerUpdateInfo(nil, services, scoped)["alpine:3.22"]
 		require.NotNil(t, merged)
 		require.True(t, merged.HasUpdate)
 		require.Equal(t, "rebuild", merged.State)
 		require.Empty(t, merged.LatestDigest, "replicas that disagree choose no candidate")
 		require.Nil(t, merged.LatestCreated, "nor a candidate build time")
+		require.Empty(t, merged.LatestManifest, "nor a candidate manifest")
 		require.Equal(t, late, merged.CheckTime)
 		require.Equal(t, merged.CheckTime, merged.CheckedAt)
 	})
@@ -62,19 +64,23 @@ func TestReplicaMergeScopesBuildFacts(t *testing.T) {
 	amd, arm := projectedObservation(a, b, late), projectedObservation(c, c, early)
 	amd.Platform, arm.Platform = "linux/amd64", "linux/arm64"
 	amd.CurrentCreated, amd.LatestCreated = &early, &late
+	amd.LatestManifest = "sha256:" + repeat("d")
 	merged := MergeProjectContainerUpdateInfo(nil, services, map[string]*imagetypes.UpdateInfo{"one": amd, "two": arm})["alpine:3.22"]
 	require.NotNil(t, merged)
 	require.True(t, merged.HasUpdate)
 	require.Empty(t, merged.Platform, "one platform's build names no build of the other")
 	require.Nil(t, merged.CurrentCreated)
 	require.Nil(t, merged.LatestCreated)
+	require.Empty(t, merged.LatestManifest, "nor its platform manifest")
 
 	lent := imagetypes.Lend(projectedObservation(a, b, late))
 	owned := projectedObservation(a, b, early)
 	owned.Platform, owned.CurrentCreated, owned.LatestCreated = "linux/amd64", &early, &late
+	owned.LatestManifest = "sha256:" + repeat("d")
 	merged = MergeProjectContainerUpdateInfo(nil, services, map[string]*imagetypes.UpdateInfo{"one": lent, "two": owned})["alpine:3.22"]
 	require.NotNil(t, merged)
 	require.Equal(t, late, merged.CheckTime)
 	require.Equal(t, "linux/amd64", merged.Platform, "the same native build lends its facts")
 	require.NotNil(t, merged.LatestCreated)
+	require.Equal(t, owned.LatestManifest, merged.LatestManifest, "and its platform manifest")
 }
