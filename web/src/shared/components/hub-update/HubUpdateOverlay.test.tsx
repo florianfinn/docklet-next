@@ -94,3 +94,16 @@ it("B6 closing progress restores the connected previous focus target", async () 
   fireEvent.click(screen.getByRole("button", { name: "Close" })); await f.tick(0);
   expect(document.activeElement === trigger).toBe(true);
 });
+
+it.each(["en-US", "de"] as const)("combined update done copy in %s preserves the single-update text", async locale => {
+  const f = mount({ phase: "idle" }, locale);
+  f.healthy();
+  await act(async () => { await f.session.start("1.0.1", async () => ({ accepted: true, opId: "operation", phase: "reserved" }), { combined: true }); });
+  await f.tick(0);
+  expect(screen.getByRole("dialog").textContent).toContain(catalogs[locale].settings.updates.fleet.doneHelp);
+  expect(screen.getByRole("dialog").textContent).not.toContain(catalogs[locale].common.hubUpdate.doneHelp);
+  act(() => f.session.clear());
+  await act(async () => { await f.session.start("1.0.1", async () => ({ accepted: true, opId: "operation", phase: "reserved" })); });
+  await f.tick(0);
+  expect(screen.getByRole("dialog").textContent).toContain(catalogs[locale].common.hubUpdate.doneHelp);
+});

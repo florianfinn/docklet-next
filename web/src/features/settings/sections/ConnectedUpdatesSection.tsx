@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original approved connected update settings and policy table. M24 S6: observed recovery and update UI follow-ups.
 
+import { UpdateEverything } from "./UpdateEverything";
 import { AdapterOutcomeError, unavailable } from "@/data/capability";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "use-intl";
@@ -66,6 +67,7 @@ function UpdateForm({ value, refresh }: { value: UpdateSettings & { timeZone: st
       <Field><FieldLabel htmlFor="update-interval">{t("interval")}</FieldLabel><Select value={d.interval} disabled={!cap.available} onValueChange={(interval) => draft.patch({ interval: interval as UpdateSettings["interval"] })}><SelectTrigger id="update-interval" className="w-auto"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{(["6h", "12h", "24h"] as const).map((v) => <SelectItem value={v} key={v}>{t(`intervals.${v}`)}</SelectItem>)}</SelectGroup></SelectContent></Select><FieldDescription>{t("defaultMode")}</FieldDescription></Field>
       <p className="my-3 text-xs">{common("next")}: {value.projectionUnavailable ? common("unavailable") : value.nextRun ? new Intl.DateTimeFormat(locale, { timeZone: value.timeZone, dateStyle: "medium", timeStyle: "short" }).format(new Date(value.nextRun)) : common("unknown")} · {value.timeZone}</p>
       <Button type="button" variant="outline" disabled={!check.available || action.busy} title={check.reason} onClick={() => void action.run(() => startPresented({ stackId: "", kinds: new Set(["check-updates"]) }, "toast", () => adapter.checkAllUpdates!()), () => { void refresh(); })}>{t("checkNow")}</Button>
+      <UpdateEverything />
       {action.error && <p role="alert">{action.error}</p>}
     </div>
     <Alert><AlertDescription>{t("noRollback")}</AlertDescription></Alert>

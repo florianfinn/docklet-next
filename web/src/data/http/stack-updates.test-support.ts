@@ -49,6 +49,8 @@ export function updateFixture() {
     if (path.endsWith("/policies")) return envelope((state.policyList ?? [state.policy]).map((p) => ({ ...(p as object), environmentId: path.split("/")[3] })));
     if (path.includes("/policies/")) { if (init.method === "PUT") { if (state.code) return response({ success: false, error: { code: state.code, message: "raw diagnostic" } }, state.status); const input = JSON.parse(String(init.body)); state.policy = { ...state.policy, mode: input.mode, window: input.mode === "scheduled" ? input.window : undefined, revision: state.policy.revision + 1 }; } return envelope(state.policy); }
     if (path.endsWith("/system-image-hints")) return envelope(state.hints);
+    // The hub answers the combined update read with an empty status before any plan exists.
+    if (path.endsWith("/system/upgrade/all") && (init.method ?? "GET") === "GET") return response({ active: false, agents: [] });
     return response({}, 404);
   });
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => source as unknown as EventSource });

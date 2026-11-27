@@ -58,3 +58,18 @@ export const FLEET_CODE_KEYS = {
   "update.target-changed": IMAGE_ERROR_KEYS["update.target-changed"],
   "agent.update-required": "common.commandErrors.updateRequired",
 } satisfies Record<NonNullable<Schema["SystemFleetUpdateTarget"]["code"]>, CatalogueKey>;
+
+export const FLEET_PHASE_KEYS = {
+  hub: "runMessages.fleet.hub", agents: "runMessages.fleet.agents", settled: "runMessages.fleet.settled",
+} satisfies Record<NonNullable<Schema["SystemFleetUpdateStatus"]["phase"]>, CatalogueKey>;
+export const FLEET_OUTCOME_KEYS = {
+  success: "runMessages.fleet.success", partial: "runMessages.fleet.partial", failed: "runMessages.fleet.failed",
+} satisfies Record<NonNullable<Schema["SystemFleetUpdateStatus"]["outcome"]>, CatalogueKey>;
+export const FLEET_STATE_KEYS = {
+  pending: "runMessages.fleet.pending", reserved: "runMessages.fleet.reserved", skipped: "runMessages.fleet.skipped", settled: "runMessages.fleet.settled",
+} satisfies Record<Schema["SystemFleetUpdateTarget"]["state"], CatalogueKey>;
+export const FLEET_TARGET_OUTCOME_KEYS = {
+  healthy: "runMessages.selfUpdate.healthy", current: "runMessages.selfUpdate.current",
+  "failed-health": "runMessages.selfUpdate.failed-health", "failed-pre-effect": "runMessages.selfUpdate.failed-pre-effect",
+  unknown: "runMessages.selfUpdate.unknown", skipped: "runMessages.fleet.skipped",
+} satisfies Record<NonNullable<Schema["SystemFleetUpdateTarget"]["outcome"]>, CatalogueKey>;

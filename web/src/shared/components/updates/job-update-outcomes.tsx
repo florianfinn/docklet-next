@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original observed update UI and regression coverage.
 
+import { FleetRunOutcomes } from "./fleet-progress";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
@@ -30,7 +31,7 @@ export function JobUpdateOutcomes({ run }: { run: ActionRun }) {
   const ref = run.jobRef, host = run.hostId ?? "0", hosts = useHosts();
   const stacks = useStacks(!!ref), containers = useContainers(!!ref);
   const query = useQuery({ queryKey: ["activity", host, "job-targets", ref?.jobId, ref?.runId, run.status, run.bulk?.completed], queryFn: () => adapter.getUpdateJobTargets!(host, ref!.jobId, ref!.runId), enabled: !!ref && !!adapter.getUpdateJobTargets, gcTime: 0, placeholderData: keepPreviousData, refetchInterval: !run.bulk && (run.status === "running" || run.status === "queued") ? 2000 : false });
-  if (!ref) return null;
+  if (!ref) return run.kind === "activity" && (run.hostId ?? "0") === "0" ? <FleetRunOutcomes runId={run.id} /> : null;
   return <>{query.isError && <QueryError compact error={query.error} />}{query.data?.map((target) => {
     const href = targetHref(target, stacks.isError ? undefined : stacks.data, containers.isError ? undefined : containers.data);
     const name = target.name || target.targetId || target.id;

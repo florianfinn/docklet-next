@@ -314,6 +314,8 @@ export type SetupInput = Pick<HubSettings, "general" | "auth" | "hostDefaults"> 
 export interface SettingsApi extends ModulesApi {
   /** `refresh` makes the hub fetch the release list again (explicit recheck). */
   getSelfUpdate(hostId: string, options?: { refresh?: boolean }): Promise<import("@/domain/self-update").SelfUpdateCheck>;
+  getFleetUpdate(): Promise<import("@/domain/fleet-update").FleetStatus>;
+  updateEverything(targetVersion: string): Promise<import("@/domain/fleet-update").FleetResponse>;
   selfUpdate(hostId: string, input: import("@/domain/self-update").SelfUpdateInput): Promise<string>;
   getSetupStatus(): Promise<boolean>;
   getConnectedSettings(): Promise<Pick<HubSettings, "general" | "activity" | "hostDefaults">>;

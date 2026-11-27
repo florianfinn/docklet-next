@@ -255,6 +255,7 @@ export const deSettings: typeof enSettings = {
     noChown: "Docklet ändert keine Besitzrechte auf Hosts.",
   },
   updates: {
+    fleet: {"title": "Alles aktualisieren", "confirmHub": "Hub auf {version} aktualisieren, danach {count, plural, one {# Agenten} other {# Agenten}} automatisch aktualisieren.", "confirmCurrent": "Der Hub ist mit {version} aktuell. {count, plural, one {# Agenten} other {# Agenten}} auf diese Version aktualisieren.", "progress": "Alles aktualisieren · {version}", "dismiss": "Ausblenden", "doneHelp": "Der Hub ist aktualisiert. Die Agenten werden automatisch im Anschluss aktualisiert."},
     selfUpdate: {
       hub: "Docklet aktualisieren",
       agent: "Agent aktualisieren",

@@ -29,6 +29,8 @@ export function createSettingsApi({ db, runner }: DemoContext): SettingsApi {
  setModuleEnabled: async (id,enabled) => { modules={...modules,[id]:enabled}; },
  deleteModuleData: async () => ({ pendingCleanup:[] }),
     getSelfUpdate: async () => ({ version: "1.0.0", eligibility: { state: "not-eligible", code: "update.self-not-compose", manual: [] } }),
+    getFleetUpdate: async () => ({ active: false, agents: [] }),
+    updateEverything: async () => { throw unavailable("selfUpdate", { kind: "hub", id: "0" }); },
     selfUpdate: async (hostId) => { throw unavailable("selfUpdate", selfUpdateRef(hostId)); },
     getSetupStatus: async () => db.settings.setupCompleted,
     getStackStopMode: async () => db.settings.general.stackStopMode ?? "down",

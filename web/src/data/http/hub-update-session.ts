@@ -25,7 +25,7 @@ export type HubUpdateState = { phase: "idle" }
   | { phase: "signin"; target: string; versionSeen?: string };
 export interface HubUpdateSnapshot { state: HubUpdateState; dismissed: boolean }
 export const HUB_UPDATE_RECORD = "docklet.hub-update";
-interface RecordValue { hubOrigin: string; principalId: string; opId: string; runId?: string; startedAt: number }
+interface RecordValue { combined?: boolean; hubOrigin: string; principalId: string; opId: string; runId?: string; startedAt: number }
 interface Options {
   baseUrl: string;
   client: CsrfClient;
@@ -39,7 +39,7 @@ export type HubUpdateSession = ReturnType<typeof createHubUpdateSession>;
 export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, origin = globalThis.location?.origin ?? "", storage }: Options) {
   const store = createStore<HubUpdateSnapshot>({ state: { phase: "idle" }, dismissed: false });
   let lastVersion: string | undefined, runCode: string | undefined;
-  let administrator = false;
+  let administrator = false, combined = false;
   let epoch = 0, principalId: string | undefined, baseline: string | undefined, terminalSamples = 0;
   let timer: ReturnType<typeof setTimeout> | undefined, recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   let recoveryEpoch = 0;
@@ -60,7 +60,7 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
   }
   function save(state: Extract<HubUpdateState, { phase: "running" }>) {
     if (!principalId) return;
-    try { local()?.setItem(HUB_UPDATE_RECORD, JSON.stringify({ hubOrigin: origin, principalId, opId: state.opId, runId: state.runId, startedAt: state.startedAt })); } catch { /* In-memory progress remains available. */ }
+    try { local()?.setItem(HUB_UPDATE_RECORD, JSON.stringify({ combined, hubOrigin: origin, principalId, opId: state.opId, runId: state.runId, startedAt: state.startedAt })); } catch { /* In-memory progress remains available. */ }
   }
   function stop() { cancelDelay?.(); cancelDelay = undefined; clearTimeout(timer); timer = undefined; controllers.forEach(c => c.abort()); controllers.clear(); }
   function publish(state: HubUpdateState) {
@@ -146,12 +146,13 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
     publish(next); save(next); schedule();
   }
   function clear() {
-    ++epoch; ++recoveryEpoch; clearTimeout(recoveryTimer); stop(); removeRecord(); baseline = undefined;
+    ++epoch; ++recoveryEpoch; clearTimeout(recoveryTimer); stop(); removeRecord(); baseline = undefined; combined = false;
     store.set({ state: { phase: "idle" }, dismissed: false });
   }
   return {
     ...store,
     clear,
+    isCombined: () => combined,
     establish(id: string, admin = true) { if (principalId !== undefined && (principalId !== id || !admin)) clear(); principalId = id; administrator = admin; },
     unauthorized() {
       // A rejected session ends recovery retries; each retry would reject again and could cancel a sign-in.
@@ -175,6 +176,7 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
           const op = await operation();
           if (owner !== epoch || recovery !== recoveryEpoch || store.get().state.phase !== "idle") return;
           const stored = record();
+          combined = stored?.opId === op?.opId && stored?.combined === true;
           if (op && (op.phase !== "settled" || stored?.opId === op.opId)) adopt(op, stored?.opId === op.opId ? stored.startedAt : Date.now());
           else removeRecord();
         } catch {
@@ -185,8 +187,9 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
       };
       await read();
     },
-    async start(target: string, submit: () => Promise<SelfUpdateResponse>): Promise<string> {
+    async start(target: string, submit: () => Promise<SelfUpdateResponse>, options?: { combined?: boolean }): Promise<string> {
       if (["starting", "running", "signin"].includes(store.get().state.phase)) throw runtimeError("host.busy");
+      combined = options?.combined === true;
       const previous = baseline, startedAt = Date.now(), owner = ++epoch;
       clearTimeout(recoveryTimer); ++recoveryEpoch;
       store.set({ state: { phase: "starting", target, startedAt }, dismissed: false });
