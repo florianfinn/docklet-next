@@ -27,6 +27,8 @@ func TestScheduledPrunePlanExcludesIntermediateParents(t *testing.T) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/system/df"):
 			_, _ = fmt.Fprintf(w, `{"Images":[{"Id":%q},{"Id":%q}],"Containers":[],"Volumes":[]}`, parent, head)
+		case strings.HasSuffix(r.URL.Path, "/containers/json"):
+			_, _ = w.Write([]byte(`[]`))
 		case strings.HasSuffix(r.URL.Path, "/images/json"):
 			require.NotContains(t, []string{"true", "1"}, r.URL.Query().Get("all"))
 			_, _ = fmt.Fprintf(w, `[{"Id":%q}]`, head)
