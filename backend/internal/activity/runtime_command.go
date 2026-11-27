@@ -176,7 +176,8 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			}
 			binding := *command.Options.ContainerImage.Policy
 			binding.Suppressed = slices.Clone(binding.Suppressed)
-			if !runtimeSuppressedValid(binding.Suppressed) || binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
+			binding.Expected = slices.Clone(binding.Expected)
+			if !runtimeExpectedValid(binding.Expected) || !runtimeSuppressedValid(binding.Suppressed) || binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
 				return invalid()
 			}
 			if _, err := runtimeUUIDInternal(binding.ChildID); err != nil {
@@ -228,7 +229,8 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			}
 			binding := *owned.Policy
 			binding.Suppressed = slices.Clone(binding.Suppressed)
-			if !runtimeSuppressedValid(binding.Suppressed) || binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
+			binding.Expected = slices.Clone(binding.Expected)
+			if !runtimeExpectedValid(binding.Expected) || !runtimeSuppressedValid(binding.Suppressed) || binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
 				return invalid()
 			}
 			if _, e := runtimeUUIDInternal(binding.ChildID); e != nil {

@@ -10,6 +10,7 @@ import (
 	"cmp"
 	"context"
 	"log/slog"
+	"time"
 
 	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
 	systemtypes "github.com/florianfinn/docklet-next/types/system"
@@ -23,9 +24,14 @@ import (
 const ScheduledPruneJobName = "scheduled-prune"
 
 type ScheduledPruneJob struct {
-	systemService       *system.SystemService
+	systemService interface {
+		PruneScheduled(context.Context, string, systemtypes.PruneAllRequest) (*systemtypes.PruneAllResult, bool, error)
+		ReconcileScheduledPrune(context.Context, schedulertypes.Run) (schedulertypes.Outcome, error)
+	}
 	settingsService     *settings.SettingsService
-	notificationService *notification.NotificationService
+	notificationService interface {
+		SendPruneReportNotification(context.Context, *systemtypes.PruneAllResult) error
+	}
 }
 
 func NewScheduledPruneJob(systemService *system.SystemService, settingsService *settings.SettingsService, notificationService *notification.NotificationService) *ScheduledPruneJob {
@@ -78,6 +84,16 @@ func (j *ScheduledPruneJob) Run(ctx context.Context) (schedulertypes.Outcome, er
 	)
 
 	result, started, err := j.systemService.PruneScheduled(ctx, "0", req)
+	if err != nil && result == nil {
+		result = &systemtypes.PruneAllResult{Success: false, Errors: []string{"Scheduled prune failed; see server logs"}}
+	}
+	if (started || err != nil) && result != nil {
+		reportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+		if reportErr := j.notificationService.SendPruneReportNotification(reportCtx, result); reportErr != nil {
+			slog.WarnContext(reportCtx, "failed to send prune report notification", "error", reportErr)
+		}
+	}
 	if err != nil {
 		slog.ErrorContext(ctx, "scheduled prune run failed", "error", err)
 		return schedulertypes.Outcome{}, err
@@ -100,10 +116,6 @@ func (j *ScheduledPruneJob) Run(ctx context.Context) (schedulertypes.Outcome, er
 		slog.DebugContext(ctx, "scheduled prune run errors", "errors", result.Errors)
 	}
 
-	// Send notification
-	if sendPruneReportNotificationErr := j.notificationService.SendPruneReportNotification(ctx, result); sendPruneReportNotificationErr != nil {
-		slog.WarnContext(ctx, "failed to send prune report notification", "error", sendPruneReportNotificationErr)
-	}
 	outcome := schedulertypes.Outcome{Status: schedulertypes.Succeeded}
 	if result.ActivityID != nil {
 		outcome.ActivityID = *result.ActivityID

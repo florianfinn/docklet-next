@@ -167,12 +167,13 @@ func appliedStackCandidates(ctx context.Context, selections []dto.ImageSelection
 }
 func filterLifecycleCandidates(ctx context.Context, current *life.Snapshot, intent *dto.LifecycleIntent) (*dto.LifecycleIntent, error) {
 	observed := dto.ObservedExecutionFromContext(ctx)
-	if observed.Mode != "scheduled" || len(observed.Suppressed) == 0 {
+	if observed.Mode != "scheduled" || len(observed.Suppressed) == 0 && len(observed.Expected) == 0 {
 		return intent, nil
 	}
 	filtered := *intent
 	filtered.Request = intent.Request.Clone()
 	filtered.Selections = []dto.ImageSelection{}
+	ageDropped := false
 	for _, sel := range intent.Selections {
 		if !lifecycleServiceSelected(intent.Request.SelectedServices(), sel.Service) {
 			return nil, lifecycleFailure("update.invalid-target")
@@ -180,6 +181,10 @@ func filterLifecycleCandidates(ctx context.Context, current *life.Snapshot, inte
 		tuple, err := stackCandidate(sel)
 		if err != nil {
 			return nil, err
+		}
+		if len(observed.Expected) > 0 && !slices.Contains(observed.Expected, dto.ExpectedCandidate{Service: tuple.Service, Manifest: tuple.Manifest}) {
+			ageDropped = true
+			continue
 		}
 		if !slices.Contains(observed.Suppressed, tuple) {
 			filtered.Selections = append(filtered.Selections, sel)
@@ -189,6 +194,9 @@ func filterLifecycleCandidates(ctx context.Context, current *life.Snapshot, inte
 		return intent, nil
 	}
 	if len(filtered.Selections) == 0 {
+		if ageDropped {
+			return nil, lifecycleFailure("update.minimum-age")
+		}
 		return nil, lifecycleFailure("update.candidate-failed")
 	}
 	services := []string{}

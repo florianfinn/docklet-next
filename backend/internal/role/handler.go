@@ -134,6 +134,8 @@ func (h *RoleHandler) UpdateRole(ctx context.Context, input *UpdateRoleInput) (*
 			return nil, huma.Error404NotFound("role not found")
 		case errors.Is(err, common.ErrRoleBuiltIn):
 			return nil, huma.Error403Forbidden("built-in roles cannot be modified")
+		case errors.Is(err, common.ErrNoGlobalAdminRemains):
+			return nil, huma.Error409Conflict(err.Error())
 		case errors.Is(err, common.ErrRoleNameTaken):
 			return nil, huma.Error409Conflict("role name already in use")
 		case errors.Is(err, common.ErrUnknownPermission):

@@ -23,7 +23,7 @@ export interface StackUpdatePolicy {
   targetKind: "stack" | "container"; targetName: string; targetMissing: boolean; window?: UpdateWindow; targetId: string; targetIdentity: string; jobId: string;
   stale: boolean; checkedAt?: string; code?: string; applyCheckedAt?: string; applyCode?: string;
   bookkeepingAt?: string; bookkeepingCode?: string;
-  candidates: { service: string; imageRef: string; version: string; digest: string; platform: string; entryId?: string;
+  candidates: { service: string; imageRef: string; version: string; digest: string; platform: string; entryId?: string; manifest?: string; eligibleAt?: string;
     notificationState: "pending" | "sending" | "sent" | "unconfigured" | "failed" | "not-requested" }[];
 }
 export interface UpdateWindow { kind: "daily" | "weekly"; day?: number; time: string }

@@ -9,6 +9,10 @@ package activity_test
 import (
 	"context"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	policy "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/types/user"
 	"net/http"
 	"strings"
 	"testing"
@@ -28,7 +32,7 @@ import (
 
 func TestVerifiedContainerDirectEdgeMovedAndPinned(t *testing.T) {
 	for _, isEdge := range []bool{false, true} {
-		for _, mode := range []string{"moved", "installed", "stable"} {
+		for _, mode := range []string{"moved", "installed", "stable", "policy-moved"} {
 			t.Run(fmt.Sprint(isEdge)+"/"+mode, func(t *testing.T) {
 				daemon, registry := newContainerImageHTTP(t)
 				tag, err := name.NewTag(daemon.ref, name.Insecure)
@@ -36,7 +40,7 @@ func TestVerifiedContainerDirectEdgeMovedAndPinned(t *testing.T) {
 				manifest, err := remote.Head(tag, remote.WithContext(t.Context()))
 				require.NoError(t, err)
 				expected := manifest.Digest.String()
-				if mode == "moved" {
+				if mode == "moved" || mode == "policy-moved" {
 					moved, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{OS: "linux", Architecture: "amd64", Config: v1.Config{Labels: map[string]string{"generation": "moved-before-update"}}})
 					require.NoError(t, err)
 					require.NoError(t, remote.Write(tag, moved, remote.WithContext(t.Context())))
@@ -73,13 +77,35 @@ func TestVerifiedContainerDirectEdgeMovedAndPinned(t *testing.T) {
 				intake.SetReady(true)
 				command := f.command(activity.RuntimeUpdateContainer, activity.RuntimeTarget{Kind: "container", ID: runtimeContainerID})
 				command.Options.ContainerImage = &dto.ContainerImageRequest{ExpectedManifest: expected}
-				accepted, err := f.hub.Admit(t.Context(), command)
+				var accepted activity.RuntimeAdmissionResult
+				if mode == "policy-moved" {
+					store := policy.Store{DB: f.db.DB}
+					row, e := store.Policy(t.Context(), f.store.EnvironmentID, f.store.RegistrationID, "app", "container")
+					require.NoError(t, e)
+					require.NoError(t, f.db.Exec("INSERT OR IGNORE INTO environments(id,name,api_url,enabled) VALUES(?,?,?,1)", f.store.EnvironmentID, "Remote", "https://agent.example.com").Error)
+					row.Mode, row.ActorID, row.TargetIdentity = "scheduled", command.Actor.ID, "app"
+					row.SetWindow(&dto.UpdateWindow{Kind: "daily", Time: "04:00"})
+					require.NoError(t, store.SavePolicy(t.Context(), row, 0))
+					row.Revision = 1
+					child, _, e := store.PrepareChild(t.Context(), row, "window")
+					require.NoError(t, e)
+					binding := dto.PolicyBinding{PolicyID: row.ID, Revision: 1, JobRunID: "window", ChildID: child.ID, Expected: []dto.ExpectedCandidate{{Service: "app", Manifest: expected}}}
+					ctx := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, authz.SudoPermissionSet())
+					ctx = context.WithValue(ctx, user.CurrentUserContextKey{}, &command.Actor)
+					accepted, err = f.hubActivity.AdmitPolicyContainerUpdate(ctx, f.store.EnvironmentID, runtimeContainerID, child.ID, binding)
+					binding.Expected = nil
+					command.Options.ContainerImage.Policy = &binding
+				} else {
+					accepted, err = f.hub.Admit(t.Context(), command)
+				}
 				require.NoError(t, err)
 				// A retained request key cannot silently bind to another scanned digest.
-				changed := command
-				changed.Options.ContainerImage = &dto.ContainerImageRequest{ExpectedManifest: "sha256:" + strings.Repeat("d", 64)}
-				_, err = f.hub.Admit(t.Context(), changed)
-				require.Error(t, err)
+				if mode != "policy-moved" {
+					changed := command
+					changed.Options.ContainerImage = &dto.ContainerImageRequest{ExpectedManifest: "sha256:" + strings.Repeat("d", 64)}
+					_, err = f.hub.Admit(t.Context(), changed)
+					require.Error(t, err)
+				}
 				ref := activity.RuntimeRunReference{Store: f.store, RunID: accepted.ActivityID}
 				_, err = f.control.Start(t.Context(), ref, command.Options)
 				require.NoError(t, err)

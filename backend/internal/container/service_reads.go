@@ -406,7 +406,7 @@ func (s *ContainerService) buildContainerSortBindings() []pagination.SortBinding
 				if len(b.Names) > 0 {
 					nameB = b.Names[0]
 				}
-				return strings.Compare(nameA, nameB)
+				return strings.Compare(strings.ToLower(nameA), strings.ToLower(nameB))
 			},
 		},
 		{

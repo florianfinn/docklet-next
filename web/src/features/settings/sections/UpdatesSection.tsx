@@ -20,9 +20,10 @@ import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { HelpLabel, HelpTooltip } from "@/shared/help/help-tooltip";
-import { Field, FieldContent, FieldDescription, FieldGroup } from "@/shared/ui/field";
+import { Field, FieldLabel, FieldContent, FieldDescription, FieldGroup } from "@/shared/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Skeleton } from "@/shared/ui/skeleton";
+import { Input } from "@/shared/ui/input";
 import { Switch } from "@/shared/ui/switch";
 import { OverviewRowView, OverviewTable } from "@/shared/components/overview/overview-table";
 
@@ -80,6 +81,7 @@ export function UpdatesSection({ settings }: { settings: HubSettings }) {
     <SettingsForm
       title={t("sections.updates")}
       dirty={section.dirty}
+      valid={!!draft && Number.isInteger(draft.updates.minimumAgeDays) && draft.updates.minimumAgeDays >= 0 && draft.updates.minimumAgeDays <= 90}
       onDiscard={section.reset}
       onSave={async () => {
         if (!draft) return;
@@ -124,6 +126,11 @@ export function UpdatesSection({ settings }: { settings: HubSettings }) {
               {tu("checkNow")}
             </Button>
           </div>
+          <Field>
+            <FieldLabel htmlFor="upd-minimum-age">{tu("minimumAge")}</FieldLabel>
+            <Input id="upd-minimum-age" type="number" min={0} max={90} step={1} value={Number.isNaN(draft.updates.minimumAgeDays) ? "" : draft.updates.minimumAgeDays} aria-describedby="upd-minimum-age-help" onChange={(event) => section.patch({ updates: { ...draft.updates, minimumAgeDays: event.target.valueAsNumber } })} />
+            <FieldDescription id="upd-minimum-age-help">{tu("minimumAgeHelp")}</FieldDescription>
+          </Field>
           <Field orientation="horizontal">
             <Switch id="upd-notify" checked={draft.updates.notify} onCheckedChange={(notify) => section.patch({ updates: { ...draft.updates, notify } })} />
             <FieldContent>

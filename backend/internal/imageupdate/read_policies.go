@@ -148,7 +148,7 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 							}
 						}
 					}
-					info := &imageDTO.UpdateInfo{ImageRef: discovered.ImageRef, CheckTime: snapshot.CheckTime, Platform: local.Platform.String(), CurrentDigest: local.Key.String(), LatestDigest: latest, CurrentVersion: discovered.CurrentVersion, LatestVersion: candidateVersion, AuthState: candidate.AuthState, CurrentCreated: local.Created, LatestCreated: imageDTO.BuildTime(candidate.Created)}
+					info := &imageDTO.UpdateInfo{ImageRef: discovered.ImageRef, CheckTime: snapshot.CheckTime, Platform: local.Platform.String(), CurrentDigest: local.Key.String(), LatestDigest: latest, CurrentVersion: discovered.CurrentVersion, LatestVersion: candidateVersion, AuthState: candidate.AuthState, CurrentCreated: local.Created, LatestCreated: imageDTO.BuildTime(candidate.Created), LatestManifest: candidate.Digest}
 					if lookupErr != nil {
 						problem := imageDTO.Neutral(lookupErr, "update.check-unavailable", 503)
 						info.Error = problem.Error()
@@ -185,5 +185,6 @@ func checkCodeString(message string) string { return checkCode(errors.New(messag
 func scopeBuildTimes(projected *checkDTO.Response, local identity.LocalImage) {
 	if projected.Platform == "" || projected.Platform != local.Platform.String() {
 		projected.CurrentCreated, projected.LatestCreated = nil, nil
+		projected.LatestManifest = ""
 	}
 }

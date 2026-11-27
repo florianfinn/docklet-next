@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Original Docklet platform candidate filter port and optional check platform propagation (#677).
 
 // Package types contains tag update policies and adapter contracts.
 package types
@@ -27,6 +27,7 @@ type RegistryTagLister interface {
 // can be omitted when the local Docker engine has the image.
 type CheckRequest struct {
 	ImageRef      string `json:"imageRef"`
+	Platform      string `json:"platform,omitempty"`
 	CurrentDigest string `json:"currentDigest,omitempty"`
 	Policy        Policy `json:"policy"`
 }
@@ -58,4 +59,12 @@ type ServiceImageChange struct {
 // optional interface on the configured ProjectUpdater to support tag changes.
 type ProjectImageUpdater interface {
 	UpdateServiceImages(ctx context.Context, projectID string, changes map[string]ServiceImageChange) error
+}
+
+// TagCandidate carries references for an optional platform compatibility check.
+type TagCandidate struct{ CurrentRef, TargetRef, Platform string }
+
+// TagCandidateFilter refuses tags lacking a build for the current platform.
+type TagCandidateFilter interface {
+	AcceptTag(context.Context, TagCandidate) (bool, error)
 }

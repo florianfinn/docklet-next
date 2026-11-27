@@ -6,7 +6,7 @@
 
 import { UpdateEverything } from "./UpdateEverything";
 import { AdapterOutcomeError, unavailable } from "@/data/capability";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "use-intl";
 import { startPresented } from "@/features/activity/run-presentation";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
@@ -25,6 +25,7 @@ import { OverviewTable, OverviewRowView } from "@/shared/components/overview/ove
 import { QueryError } from "@/shared/components/page";
 import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
 import { Switch } from "@/shared/ui/switch";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Field, FieldLabel, FieldDescription, FieldGroup } from "@/shared/ui/field";
@@ -59,10 +60,11 @@ function PoliciesTable({ hosts, timeZone }: { hosts: Host[]; timeZone: string })
 }
 function UpdateForm({ value, refresh }: { value: UpdateSettings & { timeZone: string; nextRun?: string; projectionUnavailable?: boolean }; refresh: () => Promise<unknown> }) {
   const adapter = useAdapter(), t = useTranslations("settings.updates"), common = useTranslations("common.stackUpdates"), locale = useLocale();
-  const draft = useSectionDraft<UpdateSettings>({ interval: value.interval, notify: value.notify }), d = draft.draft!;
+  const client = useQueryClient();
+  const draft = useSectionDraft<UpdateSettings>({ interval: value.interval, notify: value.notify, minimumAgeDays: value.minimumAgeDays }), d = draft.draft!;
   // Interval and notify are settings writes; only "Check all now" needs the check job grant.
   const cap = useCapability("saveSettings"), check = useCapability("checkAllUpdates"), action = useUpdateAction(), hosts = useHosts();
-  return <SettingsForm title={t("title")} dirty={draft.dirty} valid={cap.available} onDiscard={draft.reset} onSave={async () => { await adapter.saveSettings("updates", d); draft.commit(d); await refresh(); }}>
+  return <SettingsForm title={t("title")} dirty={draft.dirty} valid={cap.available && Number.isInteger(d.minimumAgeDays) && d.minimumAgeDays >= 0 && d.minimumAgeDays <= 90} onDiscard={draft.reset} onSave={async () => { await adapter.saveSettings("updates", d); draft.commit(d); await Promise.all([refresh(), ...["stack", "container", "schedule"].map((key) => client.invalidateQueries({ queryKey: [key] }))]); }}>
     <FieldGroup><div id={UPDATE_CHECK_ANCHOR} tabIndex={-1} className="scroll-mt-24 rounded-xl border bg-muted/20 p-4">
       <Field><FieldLabel htmlFor="update-interval">{t("interval")}</FieldLabel><Select value={d.interval} disabled={!cap.available} onValueChange={(interval) => draft.patch({ interval: interval as UpdateSettings["interval"] })}><SelectTrigger id="update-interval" className="w-auto"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{(["6h", "12h", "24h"] as const).map((v) => <SelectItem value={v} key={v}>{t(`intervals.${v}`)}</SelectItem>)}</SelectGroup></SelectContent></Select><FieldDescription>{t("defaultMode")}</FieldDescription></Field>
       <p className="my-3 text-xs">{common("next")}: {value.projectionUnavailable ? common("unavailable") : value.nextRun ? new Intl.DateTimeFormat(locale, { timeZone: value.timeZone, dateStyle: "medium", timeStyle: "short" }).format(new Date(value.nextRun)) : common("unknown")} · {value.timeZone}</p>
@@ -70,6 +72,7 @@ function UpdateForm({ value, refresh }: { value: UpdateSettings & { timeZone: st
       <UpdateEverything />
       {action.error && <p role="alert">{action.error}</p>}
     </div>
+    <Field><FieldLabel htmlFor="update-minimum-age">{t("minimumAge")}</FieldLabel><Input id="update-minimum-age" type="number" min={0} max={90} step={1} value={Number.isNaN(d.minimumAgeDays) ? "" : d.minimumAgeDays} disabled={!cap.available} aria-describedby="update-minimum-age-help" aria-invalid={!Number.isInteger(d.minimumAgeDays) || d.minimumAgeDays < 0 || d.minimumAgeDays > 90} onChange={(event) => draft.patch({ minimumAgeDays: event.target.valueAsNumber })} /><FieldDescription id="update-minimum-age-help">{t("minimumAgeHelp")}</FieldDescription></Field>
     <Alert><AlertDescription>{t("noRollback")}</AlertDescription></Alert>
     <Field orientation="horizontal"><Switch id="update-notify" checked={d.notify} disabled={!cap.available} onCheckedChange={(notify) => draft.patch({ notify })} /><div><FieldLabel htmlFor="update-notify">{t("notify")}</FieldLabel><FieldDescription>{t("notifyHint")}</FieldDescription></div></Field>
     <section id={UPDATE_POLICIES_ANCHOR} tabIndex={-1} className="flex min-w-0 scroll-mt-24 flex-col gap-4"><h3 className="text-sm font-semibold">{t("table")}</h3>{hosts.isError && <QueryError error={hosts.error} onRetry={() => void hosts.refetch()} />}{hosts.data && <PoliciesTable hosts={hosts.data} timeZone={value.timeZone} />}<p className="text-xs text-muted-foreground">{t("excluded")}</p></section>

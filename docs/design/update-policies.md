@@ -263,3 +263,28 @@ outcome is not kept: the check says it did not finish and can be sent again,
 because the hub joins an existing run for that host. With no stack on any visible
 host, the page keeps its first-run empty state and offers the all-hosts check in
 its header (AUTO-9).
+
+## Minimum image age
+
+The hub setting `updateMinimumAgeDays` accepts whole numbers from 0 to 90.
+The default, 0, disables the age gate. Manual updates remain immediate. A positive
+value delays scheduled updates until that many days after Docklet first committed
+an observation of the selected platform manifest. This is observation age, not the
+image creation date, and can delay security fixes too. Tag policies keep their
+selected candidate; they do not choose an older tag to satisfy the age gate.
+
+First observations survive hub restarts. Their key is the normalized repository,
+platform and platform manifest. Entries unobserved for more than 120 days expire;
+a later observation then starts a new waiting period. Changing the setting
+recomputes eligibility on the next read and scheduled run.
+
+Contract 26 adds the checked platform manifest and a service/manifest allowlist.
+Eligible stack services can install while younger services wait. The executor
+rechecks the allowlist against its resolved manifests before effects. Unknown
+candidate age fails closed. Age-gated stack updates require contract 26 agents;
+older agents are skipped before admission. Containers also need a check reply
+with the platform manifest. The global minimum agent contract remains 18.
+Migration 009 adds the observation column and the hub first-seen table on both
+hub and agent databases; existing observations have no manifest until rechecked.
+A hub upgrade alone does not give older agents the other executor fixes delivered
+with this version. Upgrade agents to receive those fixes.

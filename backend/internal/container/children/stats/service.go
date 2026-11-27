@@ -289,7 +289,7 @@ func CompareContainerNamesForSort(a, b containertypes.Summary) int {
 	if len(b.Names) > 0 {
 		nameB = b.Names[0]
 	}
-	return strings.Compare(nameA, nameB)
+	return strings.Compare(strings.ToLower(nameA), strings.ToLower(nameB))
 }
 
 // ContainerResourceSortPermissionDenied enforces the extra containers:read

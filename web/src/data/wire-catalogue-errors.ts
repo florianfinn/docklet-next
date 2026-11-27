@@ -22,6 +22,7 @@ export const IMAGE_ERROR_KEYS = {
   "update.auto-restore-failed": "images.errors.update_auto-restore-failed",
   "update.auto-restore-unavailable": "images.errors.update_auto-restore-unavailable",
   "update.interrupted": "images.errors.update_interrupted",
+  "update.minimum-age": "images.errors.update_minimum-age",
   "update.candidate-failed": "images.errors.update_candidate-failed",
   "restore.files-changed": "images.errors.restore_files-changed",
   "container.auto-remove": "images.errors.container_auto-remove",

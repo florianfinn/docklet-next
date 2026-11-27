@@ -295,64 +295,6 @@ func dedupeCoveredBackupEntriesInternal(backup *ProjectUpdateBackup) {
 // RestoreProjectUpdateBackup rolls the scoped parts of projectDir back to the
 // state captured in backup. Files are restored in place (preserving inodes so
 // container bind mounts stay valid) and out-of-scope files are never touched.
-func RestoreProjectUpdateBackup(ctx context.Context, projectDir string, backup *ProjectUpdateBackup) error {
-	projRoot, err := os.OpenRoot(projectDir)
-	if err != nil {
-		return fmt.Errorf("open project directory: %w", err)
-	}
-	defer func() { _ = projRoot.Close() }()
-
-	// 1. Undo directory renames, then 2. remove debris the failed update
-	// created at paths that did not exist.
-	if undoRenamedDirsAndDebrisErr := undoRenamedDirsAndDebrisInternal(projRoot, backup); undoRenamedDirsAndDebrisErr != nil {
-		return undoRenamedDirsAndDebrisErr
-	}
-
-	// 3. Mirror backed-up directories back in place, clearing a file the
-	// failed update may have put where the directory was.
-	for _, rel := range backup.DirEntries {
-		if live, lstatErr := projRoot.Lstat(rel); lstatErr == nil && !live.IsDir() {
-			if removeErr := projRoot.Remove(rel); removeErr != nil {
-				return fmt.Errorf("remove conflicting file %s: %w", rel, removeErr)
-			}
-		}
-		if mkdirAllErr := projRoot.MkdirAll(rel, 0o755); mkdirAllErr != nil {
-			return fmt.Errorf("recreate project directory %s: %w", rel, mkdirAllErr)
-		}
-		preserve := skippedUnderInternal(backup.Skipped, rel)
-		src := filepath.Join(backup.BackupDir, filepath.FromSlash(rel))
-		dest := filepath.Join(projectDir, filepath.FromSlash(rel))
-		if mirrorDirErr := acfs.MirrorDir(ctx, src, dest, acfstypes.MirrorOptions{Preserve: preserve}); mirrorDirErr != nil {
-			return fmt.Errorf("restore project directory %s: %w", rel, mirrorDirErr)
-		}
-	}
-
-	backupRoot, err := os.OpenRoot(backup.BackupDir)
-	if err != nil {
-		return fmt.Errorf("open backup directory: %w", err)
-	}
-	defer func() { _ = backupRoot.Close() }()
-
-	// 4. Restore individual files in place.
-	for _, rel := range backup.FileEntries {
-		if restoreBackupFileErr := restoreBackupFileInternal(ctx, backupRoot, projRoot, backup, rel); restoreBackupFileErr != nil {
-			return restoreBackupFileErr
-		}
-	}
-
-	// 5. Depth-1 mini-mirror of top-level regular files: prune live top-level
-	// regular files absent from the backup (and not skipped as unreadable),
-	// then copy every top-level backup file back. Top-level directories and
-	// symlinks are never touched.
-	if backup.TopLevelFiles {
-		if restoreTopLevelFilesErr := restoreTopLevelFilesInternal(ctx, backupRoot, projRoot, backup); restoreTopLevelFilesErr != nil {
-			return restoreTopLevelFilesErr
-		}
-	}
-
-	return nil
-}
-
 // undoRenamedDirsAndDebrisInternal reverses directory renames with an inverse
 // rename (no copy involved), then removes debris the failed update created at
 // paths that were absent at backup time.
@@ -433,7 +375,7 @@ func restoreBackupFileInternal(ctx context.Context, backupRoot, projRoot *os.Roo
 	}
 	if dir := path.Dir(rel); dir != "." {
 		if mkdirAllErr := projRoot.MkdirAll(dir, 0o755); mkdirAllErr != nil {
-			return fmt.Errorf("recreate parent directory of %s: %w", rel, mkdirAllErr)
+			return FilesystemError(ctx, "recreate parent directory", filepath.Join(projRoot.Name(), dir), mkdirAllErr)
 		}
 	}
 	// Atomic create: a crash mid-restore leaves either nothing or the fully
@@ -476,51 +418,6 @@ func restoreBackupEnvSymlinkInternal(projRoot *os.Root, envBackup *projectUpdate
 	return nil
 }
 
-func restoreTopLevelFilesInternal(ctx context.Context, backupRoot, projRoot *os.Root, backup *ProjectUpdateBackup) error {
-	backupEntries, err := os.ReadDir(backupRoot.Name())
-	if err != nil {
-		return fmt.Errorf("read backup directory: %w", err)
-	}
-	inBackup := make(map[string]bool, len(backupEntries))
-	for _, entry := range backupEntries {
-		if entry.Type().IsRegular() {
-			inBackup[entry.Name()] = true
-		}
-	}
-	skippedTopLevel := make(map[string]bool)
-	for _, s := range backup.Skipped {
-		if !strings.Contains(s, "/") {
-			skippedTopLevel[s] = true
-		}
-	}
-
-	liveEntries, err := os.ReadDir(projRoot.Name())
-	if err != nil {
-		return fmt.Errorf("read project directory: %w", err)
-	}
-	for _, entry := range liveEntries {
-		name := entry.Name()
-		if !entry.Type().IsRegular() || inBackup[name] || skippedTopLevel[name] {
-			continue
-		}
-		if removeErr := projRoot.Remove(name); removeErr != nil {
-			return fmt.Errorf("prune created file %s: %w", name, removeErr)
-		}
-	}
-
-	// backupEntries is sorted by os.ReadDir, so restoration order is
-	// deterministic and mirrors the backup order.
-	for _, entry := range backupEntries {
-		if !entry.Type().IsRegular() {
-			continue
-		}
-		if restoreBackupFileErr := restoreBackupFileInternal(ctx, backupRoot, projRoot, backup, entry.Name()); restoreBackupFileErr != nil {
-			return restoreBackupFileErr
-		}
-	}
-	return nil
-}
-
 // BackupProjectDirectory creates a scratch backup directory named by pattern
 // beside projectPath and backs up scope into it. The returned cleanup removes
 // the backup directory and runs even after ctx was cancelled, since acfs
@@ -533,7 +430,7 @@ func BackupProjectDirectory(ctx context.Context, projectsDirectory, projectPath,
 
 	backupLogical, err := acfs.MkdirTemp(ctx, rootAbs, "/", pattern)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create project backup directory: %w", err)
+		return nil, nil, FilesystemError(ctx, "create project backup directory", rootAbs, err)
 	}
 	backupPath := filepath.Join(rootAbs, filepath.FromSlash(strings.TrimPrefix(backupLogical, "/")))
 	cleanupCtx := context.WithoutCancel(ctx)
@@ -568,7 +465,7 @@ func RestoreProjectDirectoryBackup(ctx context.Context, projectsDirectory, proje
 
 	slog.DebugContext(ctx, "restoring project directory backup", "path", projectAbs, "backup", backup.BackupDir)
 	if mkdirAllErr := acfs.MkdirAll(ctx, rootAbs, projectLogical, utils.DirPerm); mkdirAllErr != nil {
-		return fmt.Errorf("failed to recreate project directory: %w", mkdirAllErr)
+		return FilesystemError(ctx, "recreate project directory", projectAbs, mkdirAllErr)
 	}
 	if restoreProjectUpdateBackupErr := RestoreProjectUpdateBackup(ctx, projectAbs, backup); restoreProjectUpdateBackupErr != nil {
 		return fmt.Errorf("failed to restore project backup: %w", restoreProjectUpdateBackupErr)

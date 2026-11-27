@@ -614,7 +614,11 @@ func (s *ContainerService) DeleteContainer(ctx context.Context, containerID stri
 		"containerId": containerID,
 	}
 
-	err = s.eventService.LogContainerEvent(ctx, event.EventTypeContainerDelete, containerID, "name", user.ID, user.Username, "0", metadata)
+	containerName := ""
+	if inspectErr == nil {
+		containerName = strings.TrimPrefix(containerJSON.Container.Name, "/")
+	}
+	err = s.eventService.LogContainerEvent(ctx, event.EventTypeContainerDelete, containerID, containerName, user.ID, user.Username, "0", metadata)
 	if err != nil {
 		return fmt.Errorf("failed to log action: %w", err)
 	}
@@ -754,7 +758,11 @@ func (
 		"containerId": resp.ID,
 	}
 
-	if logErr := s.eventService.LogContainerEvent(ctx, event.EventTypeContainerCreate, resp.ID, "name", user.ID, user.Username, "0", metadata); logErr != nil {
+	eventName := containerName
+	if eventName == "" {
+		eventName, _ = s.GetContainerNameByID(ctx, resp.ID)
+	}
+	if logErr := s.eventService.LogContainerEvent(ctx, event.EventTypeContainerCreate, resp.ID, eventName, user.ID, user.Username, "0", metadata); logErr != nil {
 		slog.WarnContext(ctx, "could not log container stop action", "error", logErr)
 	}
 

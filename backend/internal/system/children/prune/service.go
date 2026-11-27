@@ -523,7 +523,7 @@ func (s *Service) preparePrunePlanInternal(ctx context.Context, req system.Prune
 	if req.Volumes != nil {
 		s.volumeService.CleanupHelperContainers(ctx)
 	}
-	usage, err := dockerClient.DiskUsage(ctx, client.DiskUsageOptions{Containers: true, Images: true, Volumes: true, BuildCache: req.BuildCache != nil, Verbose: true})
+	usage, err := pruneDiskUsage(ctx, dockerClient, req.BuildCache != nil)
 	if err != nil {
 		return plan, err
 	}
@@ -761,7 +761,7 @@ func (s *Service) executePruneCacheInternal(ctx context.Context, dockerClient *c
 		return nil
 	}
 	if recovery {
-		usage, err := dockerClient.DiskUsage(ctx, client.DiskUsageOptions{BuildCache: true, Verbose: true})
+		usage, err := pruneDiskUsage(ctx, dockerClient, true)
 		if err != nil {
 			return err
 		}

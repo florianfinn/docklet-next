@@ -53,7 +53,7 @@ func proxyTerminalHTTP(w http.ResponseWriter, r *http.Request, address string, h
 	}
 	defer agent.CloseNow()
 	browser.SetReadLimit(BrowserFrameLimit)
-	agent.SetReadLimit(-1)
+	agent.SetReadLimit(AgentFrameLimit)
 	pump, cancelPump := context.WithCancel(context.WithoutCancel(viewer))
 	browserDone, agentDone := make(chan struct{}), make(chan struct{})
 	browserEnd := make(chan bool, 1)

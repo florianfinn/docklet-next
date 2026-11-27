@@ -31,6 +31,7 @@ import (
 	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/sys/cgroup"
 	"go.getarcane.app/updater/labels"
+	"go.getarcane.app/updater/refs"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
@@ -67,7 +68,24 @@ func (s *Service) ComposeContainers(ctx context.Context) ([]container.Summary, e
 		}
 		dockerClient = cli
 	}
-	return projects.ListGlobalComposeContainers(ctx, dockerClient, s.dockerService.DockerHost())
+	listed, err := projects.ListGlobalComposeContainers(ctx, dockerClient, s.dockerService.DockerHost())
+	if err != nil {
+		return nil, err
+	}
+	return normalizeRuntimeImages(ctx, dockerClient, listed), nil
+}
+
+func normalizeRuntimeImages(ctx context.Context, dockerClient client.APIClient, listed []container.Summary) []container.Summary {
+	for i := range listed {
+		if !refs.IsImageIDLikeReference(listed[i].Image) || dockerClient == nil {
+			continue
+		}
+		inspected, inspectErr := dockerClient.ContainerInspect(ctx, listed[i].ID, client.ContainerInspectOptions{})
+		if inspectErr == nil && inspected.Container.Config != nil {
+			listed[i].Image = inspected.Container.Config.Image
+		}
+	}
+	return listed
 }
 
 // ComposeServices reports every Compose service with its container state,
@@ -92,6 +110,7 @@ func (s *Service) ComposeServices(
 	// Compose ps omits image IDs, so one container list supplies them; a listing
 	// failure only leaves image-level checks unmatched.
 	imageIDs := make(map[string]string)
+	imageRefs := make(map[string]string)
 	if s.dockerService != nil {
 		if summaries, listErr := s.ComposeContainers(ctx); listErr != nil {
 			slog.WarnContext(ctx, "failed to list containers for project image identity", "projectName", composeProject.Name, "error", listErr)
@@ -99,6 +118,7 @@ func (s *Service) ComposeServices(
 			for _, c := range summaries {
 				if docker.ComposeProjectLabel(c.Labels) == composeProject.Name && c.ImageID != "" {
 					imageIDs[c.ID] = c.ImageID
+					imageRefs[c.ID] = c.Image
 				}
 			}
 		}
@@ -134,6 +154,9 @@ func (s *Service) ComposeServices(
 			meta.ServiceIconSets[c.Service],
 			meta.ProjectIcon,
 		))
+		if refs.IsImageIDLikeReference(c.Image) && imageRefs[c.ID] != "" {
+			c.Image = imageRefs[c.ID]
+		}
 		services = append(services, project.RuntimeService{
 			Name:             c.Service,
 			Image:            c.Image,
@@ -346,13 +369,13 @@ func mergeReplicaObservation(candidate, previous *imagetypes.UpdateInfo) imagety
 	// Replicas observed on different platforms share no build facts. A lent
 	// side without facts borrows them where both name the same native build.
 	if candidate.Platform != "" && previous.Platform != "" && candidate.Platform != previous.Platform {
-		merged.Platform, merged.CurrentCreated, merged.LatestCreated = "", nil, nil
+		merged.Platform, merged.CurrentCreated, merged.LatestCreated, merged.LatestManifest = "", nil, nil, ""
 	} else if merged.Platform == "" && candidate.CurrentDigest == previous.CurrentDigest && candidate.LatestDigest == previous.LatestDigest {
 		source := candidate
 		if source.Platform == "" {
 			source = previous
 		}
-		merged.Platform, merged.CurrentCreated, merged.LatestCreated = source.Platform, source.CurrentCreated, source.LatestCreated
+		merged.Platform, merged.CurrentCreated, merged.LatestCreated, merged.LatestManifest = source.Platform, source.CurrentCreated, source.LatestCreated, source.LatestManifest
 	}
 	return merged
 }
@@ -369,7 +392,7 @@ func mergeReplicaState(candidate, previous *imagetypes.UpdateInfo) imagetypes.Up
 		merged = *candidate
 	}
 	if candidate.HasUpdate && (candidate.LatestVersion != previous.LatestVersion || candidate.LatestDigest != previous.LatestDigest || candidate.UpdateType != previous.UpdateType) {
-		merged.LatestVersion, merged.LatestDigest, merged.UpdateType, merged.LatestCreated = "", "", "", nil
+		merged.LatestVersion, merged.LatestDigest, merged.UpdateType, merged.LatestCreated, merged.LatestManifest = "", "", "", nil, ""
 	}
 	if merged.Error == "" {
 		merged.Error = cmp.Or(candidate.Error, previous.Error)

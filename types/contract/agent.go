@@ -5,6 +5,6 @@
 // Deviations: Original implementation for issue 38; network contract v6 boundary for #203; M16 bind mounts and backup completion; M17 runtime history and personal preferences; M19 backend contracts and target identity integration; unreleased v17 Compose self-update recovery contract. M21 #437: advisory detail. M23 #435: active image summaries. M24 recovery evidence, validation and reason contracts. M26 volume collection routes and target identity code; optional-module foundation (#472). M36 #568 no-baseline deploy point reason (v21). M37 #586 tailnet setup test and candidate run read (v22). M38: proxy adoption, binding detail, update eligibility, onboarding IDs (v23). M41 #626: check plans, target names and the missing-local-image reason (v24). M44 #663: proxy metadata-loss acknowledgement (v25).
 package contract
 
-const AgentHubVersion = 25
+const AgentHubVersion = 26
 const MinimumAgentVersion = 18
-const AgentHubFingerprint = "3e0217be385b6cfe40199727ef6f5fbe61c8cd4df588254363fd86f39c2f8ab1"
+const AgentHubFingerprint = "eb977c7811d3bd19b40f1ea128097fe5ee386b7ee62fa0343d06b3d50fa9427a"

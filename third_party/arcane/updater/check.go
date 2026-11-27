@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed Swarm.
+// Deviations: functional cut: removed Swarm; optional platform candidate filtering with ordered tag fallback.
 
 package updater
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/moby/moby/api/types/container"
@@ -26,7 +27,7 @@ import (
 // CheckImageUpdate discovers an image update without pulling or changing state.
 // CurrentDigest should describe the image in use, not a separately cached tag.
 func (s *Service) CheckImageUpdate(ctx context.Context, request types.CheckRequest) (types.CheckResult, error) {
-	result, err := s.selectImageTagInternal(ctx, request.ImageRef, request.Policy)
+	result, err := s.selectImageTagInternal(ctx, request.ImageRef, request.Policy, request.ImageRef, request.Platform)
 	if err != nil || result.Reason != "" || result.UpdateAvailable {
 		return result, err
 	}
@@ -63,7 +64,7 @@ func (s *Service) CheckImageUpdate(ctx context.Context, request types.CheckReque
 	return result, nil
 }
 
-func (s *Service) selectImageTagInternal(ctx context.Context, imageRef string, policy types.Policy) (types.CheckResult, error) {
+func (s *Service) selectImageTagInternal(ctx context.Context, imageRef string, policy types.Policy, localReference ...string) (types.CheckResult, error) {
 	result := types.CheckResult{CurrentRef: imageRef, TargetRef: imageRef}
 	if err := ctx.Err(); err != nil {
 		return result, err
@@ -91,7 +92,20 @@ func (s *Service) selectImageTagInternal(ctx context.Context, imageRef string, p
 	if err != nil {
 		return result, fmt.Errorf("list image tags: %w", err)
 	}
-	selected, err := tagpolicy.Select(parsed.Tag, tags, policy)
+	selected, err := SelectTagCandidate(ctx, parsed.Tag, tags, policy, func(ctx context.Context, tag string) (bool, error) {
+		if s.config.TagCandidateFilter == nil {
+			return true, nil
+		}
+		current := imageRef
+		if len(localReference) > 0 && localReference[0] != "" {
+			current = localReference[0]
+		}
+		platform := ""
+		if len(localReference) > 1 {
+			platform = localReference[1]
+		}
+		return s.config.TagCandidateFilter.AcceptTag(ctx, types.TagCandidate{CurrentRef: current, Platform: platform, TargetRef: parsed.RegistryHost + "/" + parsed.Repository + ":" + tag})
+	})
 	if err != nil {
 		return result, err
 	}
@@ -136,7 +150,7 @@ func (s *Service) CheckContainerUpdate(ctx context.Context, containerID string) 
 		return result, nil
 	}
 	imageRef := inspect.Config.Image
-	result, err = s.selectImageTagInternal(ctx, imageRef, s.config.LabelPolicy.TagPolicy(inspect.Config.Labels))
+	result, err = s.selectImageTagInternal(ctx, imageRef, s.config.LabelPolicy.TagPolicy(inspect.Config.Labels), inspect.Image)
 	result.ContainerID = inspect.ID
 	if err != nil || result.Reason != "" || result.UpdateAvailable {
 		return result, err
@@ -195,4 +209,34 @@ func (s *Service) containerEligibilityInternal(ctx context.Context, inspect cont
 		return "container excluded by settings", nil
 	}
 	return "", nil
+}
+
+// maxRefusedTagCandidates bounds the platform lookups one check spends on
+// refused candidates; after that the next candidate is taken unchecked.
+const maxRefusedTagCandidates = 8
+
+// SelectTagCandidate tries acceptable tags newest first. Only an explicit
+// platform refusal advances to an older tag; lookup errors remain failures.
+func SelectTagCandidate(ctx context.Context, current string, tags []string, policy types.Policy, accept func(context.Context, string) (bool, error)) (string, error) {
+	remaining := slices.Clone(tags)
+	for refused := 0; ; refused++ {
+		selected, err := tagpolicy.Select(current, remaining, policy)
+		if err != nil || selected == current {
+			return selected, err
+		}
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		if refused == maxRefusedTagCandidates {
+			return selected, nil
+		}
+		ok, err := accept(ctx, selected)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return selected, nil
+		}
+		remaining = slices.DeleteFunc(remaining, func(tag string) bool { return tag == selected })
+	}
 }

@@ -311,10 +311,15 @@ func (
 		originalConfig.Hostname = ""
 	}
 
+	originalHostConfig, err := recreateVolumeHostConfig(ctx, containerInfo, containerInfo.HostConfig)
+	if err != nil {
+		return fmt.Errorf("failed to recreate original auto-remove container: %w", err)
+	}
+
 	defer s.eventService.BeginDockerResourceSuppressionWindow("container", "", containerName)()
 	createResp, err := compat.ContainerCreateWithCompatibilityForAPIVersion(ctx, dockerClient, client.ContainerCreateOptions{
 		Config:           &originalConfig,
-		HostConfig:       containerInfo.HostConfig,
+		HostConfig:       originalHostConfig,
 		NetworkingConfig: buildCleanNetworkingConfigInternal(containerInfo, apiVersion),
 		Name:             containerName,
 	}, apiVersion)
@@ -405,7 +410,8 @@ func (s *ContainerService) runContainerLifecycleActionInternal(ctx context.Conte
 	}
 	maps.Copy(metadata, cfg.metadata)
 
-	err = s.eventService.LogContainerEvent(ctx, cfg.eventType, containerID, "name", user.ID, user.Username, "0", metadata)
+	containerName, _ := s.GetContainerNameByID(ctx, containerID)
+	err = s.eventService.LogContainerEvent(ctx, cfg.eventType, containerID, containerName, user.ID, user.Username, "0", metadata)
 	if err != nil {
 		if !cfg.warnOnLogError {
 			return fmt.Errorf("failed to log action: %w", err)
@@ -754,6 +760,10 @@ func (
 	}
 	if updaterDTO.ExecutionIdentityFromContext(ctx).RunID != "" {
 		return s.recreateDurable(ctx, dockerClient, containerInfo, newName, newConfig, newHostConfig, networkingConfig, apiVersion)
+	}
+	newHostConfig, err := recreateVolumeHostConfig(ctx, containerInfo, newHostConfig)
+	if err != nil {
+		return "", err
 	}
 	containerID := containerInfo.ID
 	containerName := strings.TrimPrefix(containerInfo.Name, "/")

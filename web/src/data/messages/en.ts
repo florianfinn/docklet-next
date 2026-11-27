@@ -94,7 +94,7 @@ export const enBackend = {
       "not-found": "The restore point was not found. Refresh the point list.",
       "deploy-failed": "The restore deployment failed. Inspect its partial result before another recovery attempt."
     },
-    "update": {"unstable": "The updated version did not run stably.","auto-restored": "The update failed. The previous version is running again. Volume data was not restored.","auto-restore-failed": "The update and automatic restore failed. Action is needed. Volume data was not restored.","auto-restore-unavailable": "The update failed and automatic restore was unavailable. Volume data was not restored.","interrupted": "The update was interrupted. Check the target. Volume data was not restored.","candidate-failed": "This candidate previously failed and was restored. It will be skipped.",
+    "update": {"unstable": "The updated version did not run stably.","auto-restored": "The update failed. The previous version is running again. Volume data was not restored.","auto-restore-failed": "The update and automatic restore failed. Action is needed. Volume data was not restored.","auto-restore-unavailable": "The update failed and automatic restore was unavailable. Volume data was not restored.","interrupted": "The update was interrupted. Check the target. Volume data was not restored.","minimum-age": "The candidate is waiting for the minimum image age before a scheduled update.","candidate-failed": "This candidate previously failed and was restored. It will be skipped.",
       "candidate-changed": "The candidate image changed. Check it again before updating.",
       "service-coupled": "This service must be updated together with its stack.",
       "permission-denied": "The recorded actor no longer has the required permissions.",

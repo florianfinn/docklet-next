@@ -39,7 +39,7 @@ it.each(["en-US", "de"] as const)("goal 1: approved connected settings controls 
   await userEvent.click(screen.getByRole("switch", { name: msg.notify }));
   await userEvent.click(screen.getByRole("button", { name: locale === "de" ? "Speichern" : "Save" }));
   await waitFor(() => expect(f.writes().filter((w) => w.init.method === "PUT" && w.path.endsWith("/settings"))).toHaveLength(1));
-  expect(JSON.parse(String(f.writes().find((w) => w.path.endsWith("/settings"))!.init.body))).toEqual({ updateCheckInterval: "6h", updateNotify: "true" });
+  expect(JSON.parse(String(f.writes().find((w) => w.path.endsWith("/settings"))!.init.body))).toEqual({ updateCheckInterval: "6h", updateNotify: "true", updateMinimumAgeDays: "0" });
   expect(document.body.textContent).toContain("UTC");
   expect(screen.queryByRole("textbox", { name: /cron/i }) === null).toBe(true);
 });

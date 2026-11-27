@@ -26,6 +26,7 @@ export const enImageErrors = {
   "update_auto-restore-failed": "The update and automatic restore failed. Action is needed. Volume data was not restored.",
   "update_auto-restore-unavailable": "The update failed and automatic restore was unavailable. Volume data was not restored.",
   "update_interrupted": "The update was interrupted. Check the target. Volume data was not restored.",
+  "update_minimum-age": "The scheduled update is held back: the image is younger than the minimum age, or its age is unknown.",
   "update_candidate-failed": "This candidate previously failed and was restored. It will be skipped.",
   "restore_files-changed": "The stack files changed. Automatic restore is unavailable.",
   "container_auto-remove": "Automatic restore is unavailable for a running auto-remove container.",

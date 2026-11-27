@@ -20,6 +20,12 @@ import (
 )
 
 func validateSettingValueInternal(key, value string) error {
+	if key == "updateMinimumAgeDays" {
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 || n > 90 {
+			return common.Classify(common.ErrValidation, errors.New("updateMinimumAgeDays must be a whole number between 0 and 90"))
+		}
+	}
 	if key == "activityEventLimit" || key == "activityRunLimit" {
 		low, high := 50, 5000
 		if key == "activityRunLimit" {

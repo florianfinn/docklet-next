@@ -18,6 +18,7 @@ export const UPDATE_REASON_KEYS = {
   "update.auto-restore-failed": IMAGE_ERROR_KEYS["update.auto-restore-failed"],
   "update.auto-restore-unavailable": IMAGE_ERROR_KEYS["update.auto-restore-unavailable"],
   "update.interrupted": IMAGE_ERROR_KEYS["update.interrupted"],
+  "update.minimum-age": IMAGE_ERROR_KEYS["update.minimum-age"],
   "update.candidate-failed": IMAGE_ERROR_KEYS["update.candidate-failed"],
   "restore.files-changed": IMAGE_ERROR_KEYS["restore.files-changed"],
   "container.auto-remove": IMAGE_ERROR_KEYS["container.auto-remove"],

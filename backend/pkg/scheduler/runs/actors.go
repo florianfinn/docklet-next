@@ -152,108 +152,6 @@ func (a *coordinatorActorInternal) flushInternal(ctx context.Context, state *st.
 	return a.dispatchRunInternal(ctx, state, *selected, selected.AttemptCount+1)
 }
 
-// reconcileDispatchInternal recovers a lost job ID before considering redelivery.
-func (a *coordinatorActorInternal) reconcileDispatchInternal(ctx context.Context, state *st.CoordinatorState, run st.Run) (bool, error) {
-	key := fmt.Sprintf("%s-%d", run.ID, run.AttemptCount)
-	previous, exists := state.Dispatches[key]
-	if !exists {
-		return false, nil
-	}
-	if previous.JobID == "" {
-		command := st.ExecutionCommand{
-			EnvironmentID: run.EnvironmentID,
-			JobID:         run.JobID,
-			RunID:         run.ID,
-			Attempt:       run.AttemptCount,
-		}
-		actorType := executorTypeInternal
-		if strings.HasPrefix(run.JobID, "environment-health") || run.JobID == "docker-client-refresh" || run.JobID == "activity-sweep" {
-			actorType = healthExecutorTypeInternal
-		}
-		id, _, err := a.q.service.Dispatch(ctx, actorType, a.id, "execute", command, actor.WithIdempotencyKey(key))
-		if err != nil {
-			return false, err
-		}
-		previous.JobID = id
-		state.Dispatches[key] = previous
-		state.Revision++
-		if setStateErr := a.saveStateInternal(ctx, *state); setStateErr != nil {
-			return false, setStateErr
-		}
-	}
-	job, err := a.q.service.GetJob(ctx, previous.JobID)
-	if errors.Is(err, actor.ErrJobNotFound) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return !job.Status.IsTerminal(), nil
-}
-
-func (a *coordinatorActorInternal) dispatchRunInternal(ctx context.Context, state *st.CoordinatorState, run st.Run, attempt int) error {
-	key := fmt.Sprintf("%s-%d", run.ID, attempt)
-	if state.Dispatches == nil {
-		state.Dispatches = make(map[string]st.DispatchIntent)
-	}
-	actorType := executorTypeInternal
-	if strings.HasPrefix(run.JobID, "environment-health") || run.JobID == "docker-client-refresh" || run.JobID == "activity-sweep" {
-		actorType = healthExecutorTypeInternal
-	}
-	intent := state.Dispatches[key]
-	if intent.JobID != "" {
-		job, err := a.q.service.GetJob(ctx, intent.JobID)
-		if err == nil && !job.Status.IsTerminal() {
-			return nil
-		}
-		if err != nil && !errors.Is(err, actor.ErrJobNotFound) {
-			return err
-		}
-		if err == nil {
-			if deleteJobErr := a.q.service.DeleteJob(ctx, actorType, a.id, intent.JobID); deleteJobErr != nil && !errors.Is(deleteJobErr, actor.ErrJobNotFound) {
-				return deleteJobErr
-			}
-		}
-	}
-	intent = st.DispatchIntent{RunID: run.ID, Attempt: attempt}
-	state.Dispatches[key] = intent
-	state.Revision++
-	if err := a.saveStateInternal(ctx, *state); err != nil {
-		return err
-	}
-	options := []actor.JobOption{actor.WithIdempotencyKey(key)}
-	if run.NextAttempt != nil && run.NextAttempt.After(time.Now()) {
-		options = append(options, actor.WithJobDueTime(*run.NextAttempt))
-	}
-	command := st.ExecutionCommand{
-		EnvironmentID: run.EnvironmentID,
-		JobID:         run.JobID,
-		RunID:         run.ID,
-		Attempt:       attempt,
-	}
-	id, _, err := a.q.service.Dispatch(ctx, actorType, a.id, "execute", command, options...)
-	if err != nil {
-		return err
-	}
-	job, err := a.q.service.GetJob(ctx, id)
-	if err != nil {
-		return err
-	}
-	if job.Status.IsTerminal() {
-		if deleteJobErr2 := a.q.service.DeleteJob(ctx, actorType, a.id, id); deleteJobErr2 != nil && !errors.Is(deleteJobErr2, actor.ErrJobNotFound) {
-			return deleteJobErr2
-		}
-		id, _, err = a.q.service.Dispatch(ctx, actorType, a.id, "execute", command, options...)
-		if err != nil {
-			return err
-		}
-	}
-	intent.JobID = id
-	state.Dispatches[key] = intent
-	state.Revision++
-	return a.saveStateInternal(ctx, *state)
-}
-
 func (a *coordinatorActorInternal) Alarm(ctx context.Context, name string, data actor.Envelope) error {
 	if !a.q.enabled.Load() {
 		return nil
@@ -397,10 +295,12 @@ func (a *executorActorInternal) Job(ctx context.Context, _ string, data actor.En
 	if runErr != nil && outcome.Message == "" {
 		outcome.Message = runErr.Error()
 	}
-	if ctx.Err() != nil {
+	if runErr != nil && ctx.Err() != nil {
 		return ctx.Err()
 	}
-	q.persistOutcomeInternal(ctx, claim.Run, outcome)
+	persistCtx, cancel := q.outcomeContextInternal(ctx)
+	defer cancel()
+	q.persistOutcomeInternal(persistCtx, claim.Run, outcome)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}

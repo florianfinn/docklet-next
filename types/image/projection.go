@@ -157,5 +157,6 @@ func Lend(info *UpdateInfo) *UpdateInfo {
 	}
 	out := *info
 	out.Platform, out.CurrentCreated, out.LatestCreated = "", nil, nil
+	out.LatestManifest = ""
 	return &out
 }

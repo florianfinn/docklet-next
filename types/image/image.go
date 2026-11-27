@@ -65,6 +65,9 @@ type UpdateInfo struct {
 	// Required: true
 	CurrentDigest string `json:"currentDigest"`
 
+	// LatestManifest is the platform manifest digest of the checked candidate; empty from agents below contract 26.
+	LatestManifest string `json:"latestManifest,omitempty"`
+
 	// LatestDigest is the digest (hash) of the latest available image.
 	//
 	// Required: true

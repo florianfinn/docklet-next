@@ -181,6 +181,30 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	if err != nil {
 		return policyTarget(one.TargetID, st.Failed, "update.permission-denied"), false
 	}
+	var expected []dto.ExpectedCandidate
+	if days := s.minimumAgeDays(ctx); days > 0 {
+		if one.TargetKind != "container" && one.EnvironmentID != "0" {
+			if p.ports.contractVersion == nil {
+				return skip("update.minimum-age")
+			}
+			v, e := p.ports.contractVersion(ctx, one.EnvironmentID)
+			if e != nil || v < dto.MinimumAgeContractVersion {
+				return skip("update.minimum-age")
+			}
+		}
+		aged, e := p.store.AgeCandidates(ctx, candidates, days, *policyNow())
+		if e != nil {
+			return policyTarget(one.TargetID, st.Failed, "update.persistence-failed"), false
+		}
+		for _, c := range aged {
+			if dto.ValidManifest(c.Manifest) && c.EligibleAt == nil {
+				expected = append(expected, dto.ExpectedCandidate{Service: c.Service, Manifest: c.Manifest})
+			}
+		}
+		if len(expected) == 0 {
+			return skip("update.minimum-age")
+		}
+	}
 	// Read before PrepareChild: a failed read leaves no prepared child behind.
 	suppressed, err := p.store.FailedCandidates(actorCtx, one.ID, one.TargetIdentity)
 	if err != nil {
@@ -193,7 +217,7 @@ func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imageP
 	if !fresh {
 		return s.reconcileImagePolicyChild(ctx, p, one.EnvironmentID, one.TargetID, child)
 	}
-	binding := dto.PolicyBinding{PolicyID: one.ID, Revision: one.Revision, JobRunID: jobRun, ChildID: child.ID, Suppressed: suppressed}
+	binding := dto.PolicyBinding{PolicyID: one.ID, Revision: one.Revision, JobRunID: jobRun, ChildID: child.ID, Expected: expected, Suppressed: suppressed}
 	var accepted activity.RuntimeAdmissionResult
 	if one.TargetKind == "container" {
 		accepted, err = p.ports.admitContainer(actorCtx, one.EnvironmentID, resolved.ContainerID, child.ID, binding)
@@ -293,7 +317,7 @@ func imagePolicySnapshotTarget(target, id string, snapshot activityDTO.RuntimeSn
 			code = "update.auto-restore-unavailable"
 		}
 	}
-	if code == "image.busy" || code == "update.candidate-failed" {
+	if code == "image.busy" || code == "update.candidate-failed" || code == "update.minimum-age" {
 		status = st.Skipped
 	}
 
@@ -380,7 +404,15 @@ func (s *UpdaterService) observeImagePolicy(ctx context.Context, p *imagePolicyS
 		if parsed, e := semver.NewVersion(version); e == nil {
 			version = parsed.String()
 		}
-		c := dto.UpdateCandidate{Service: service, ImageRef: reference.TagNameOnly(named).String(), Version: version, Digest: candidateDigest.String(), Platform: platform.String()}
+		c := dto.UpdateCandidate{Service: service, ImageRef: reference.TagNameOnly(named).String(), Version: version, Digest: candidateDigest.String(), Platform: platform.String(), Manifest: info.LatestManifest}
+		if c.Manifest != "" && !dto.ValidManifest(c.Manifest) {
+			return nil, imageDTO.Failure("update.check-unavailable", 503)
+		}
+		if s.minimumAgeDays(ctx) > 0 {
+			if err := p.store.ObserveFirstSeen(ctx, c, *policyNow()); err != nil {
+				return nil, err
+			}
+		}
 		c, err = p.store.RecordCandidate(ctx, one, c, s.deps.Settings.GetBoolSetting(ctx, "updateNotify", false))
 		if err != nil {
 			return nil, err

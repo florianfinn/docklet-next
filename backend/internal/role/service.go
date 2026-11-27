@@ -91,20 +91,6 @@ func (s *RoleService) EnsureBuiltInRoles(ctx context.Context) error {
 	})
 }
 
-// AssertGlobalAdminExists returns common.ErrNoGlobalAdminRemains if zero
-// non-service users resolve to global administrator permissions. Called at boot
-// after role reconciliation; also called from inside mutation paths.
-func (s *RoleService) AssertGlobalAdminExists(ctx context.Context) error {
-	count, err := s.CountGlobalAdminsExcludingUserInDB(ctx, s.db.WithContext(ctx), "")
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return common.Classify(common.ErrNoGlobalAdminRemains, errors.New("At least one user must retain a global Admin role assignment")) //nolint:staticcheck // Preserve the existing error message.
-	}
-	return nil
-}
-
 func (s *RoleService) ListRoles(ctx context.Context, params pagination.QueryParams) ([]Role, pagination.Response, error) {
 	var roles []Role
 	query := s.db.WithContext(ctx).Model(&Role{})
@@ -249,7 +235,10 @@ func (s *RoleService) UpdateRole(ctx context.Context, id, name string, descripti
 		}
 		out = existing
 		isAdmin, err = s.adminStatusInDB(ctx, tx, ids)
-		return err
+		if err != nil || !demotesAdminInternal(wasAdmin, isAdmin) {
+			return err
+		}
+		return s.assertGlobalAdminExistsInDB(ctx, tx)
 	})
 	if err != nil {
 		return nil, err
@@ -292,7 +281,10 @@ func (s *RoleService) DeleteRole(ctx context.Context, id string) error {
 			return common.ErrRoleNotFound
 		}
 		isAdmin, err = s.adminStatusInDB(ctx, tx, ids)
-		return err
+		if err != nil || !demotesAdminInternal(wasAdmin, isAdmin) {
+			return err
+		}
+		return s.assertGlobalAdminExistsInDB(ctx, tx)
 	})
 	if err != nil {
 		return err
@@ -379,14 +371,7 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 		if actor, ok := userctx.CurrentUserFromContext(ctx); ok && actor.ID == userID && before.IsGlobalAdmin() != after.IsGlobalAdmin() {
 			return errors.New("cannot change your own administrator status")
 		}
-		count, err := s.CountGlobalAdminsExcludingUserInDB(ctx, tx, "")
-		if err != nil {
-			return err
-		}
-		if count == 0 {
-			return common.Classify(common.ErrNoGlobalAdminRemains, errors.New("At least one user must retain a global Admin role assignment")) //nolint:staticcheck // Preserve the existing error message.
-		}
-		return nil
+		return s.assertGlobalAdminExistsInDB(ctx, tx)
 	})
 	if err != nil {
 		return err

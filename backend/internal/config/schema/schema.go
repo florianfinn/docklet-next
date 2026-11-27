@@ -311,7 +311,7 @@ func collectSettingEnvOverridesInternal() ([]SettingOverrideEntry, error) {
 
 		key := tagParts[0]
 		switch key {
-		case "timeZone", "updateCheckInterval", "updateNotify", "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
+		case "timeZone", "updateCheckInterval", "updateNotify", "updateMinimumAgeDays", "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
 			continue
 		}
 		attrs := tagParts[1:]

@@ -19,6 +19,7 @@ func (s *UpdaterService) enrichPolicyObservation(ctx context.Context, ref, targe
 	fail := func() {
 		record.HasUpdate = false
 		record.Platform = nil
+		record.LatestManifest = nil
 		record.LastError = new(imageDTO.Failure("update.check-unavailable", 503).Error())
 	}
 	if s.deps.ImageUpdates == nil {
@@ -34,5 +35,6 @@ func (s *UpdaterService) enrichPolicyObservation(ctx context.Context, ref, targe
 	}
 	record.SetNativeObservation(observed.Observation)
 	record.CurrentCreated, record.LatestCreated = observed.CurrentCreated, observed.LatestCreated
+	record.LatestManifest = new(observed.LatestManifest)
 	record.HasUpdate = record.UpdateInfo().HasUpdate
 }

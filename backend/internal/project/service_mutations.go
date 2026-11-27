@@ -267,7 +267,7 @@ func (s *ProjectService) DestroyProject(ctx context.Context, projectID string, r
 		// parent directory and names the project directory itself.
 		if removeAllErr := acfs.RemoveAll(ctx, filepath.Dir(proj.Path), "/"+filepath.Base(proj.Path)); removeAllErr != nil {
 			slog.ErrorContext(ctx, "Failed to remove project files", "path", proj.Path, "error", removeAllErr)
-			return fmt.Errorf("failed to remove project files: %w", removeAllErr)
+			return projects.FilesystemError(ctx, "remove project directory", proj.Path, removeAllErr)
 		}
 		slog.InfoContext(ctx, "Project files removed successfully", "path", proj.Path)
 	}

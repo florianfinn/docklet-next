@@ -33,6 +33,9 @@ func (o *operationOwnership) Release(context.Context) {
 }
 
 func (s *Service) acquireOperation(ctx context.Context, source, destination string) (context.Context, *operationOwnership, error) {
+	if destination == "" && s.owns(ctx, source) {
+		return ctx, &operationOwnership{ctx: ctx, release: func() {}}, nil
+	}
 	names := []string{source}
 	if destination != "" && destination != source {
 		names = append(names, destination)

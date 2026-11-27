@@ -67,7 +67,7 @@ func (s *Service) runScheduledBackup(ctx context.Context, id string) (scheduler.
 	run, err := s.CreateBackup(ctx, usertypes.SystemUser, backuptypes.SystemBackupTriggerScheduled,
 		backuptypes.CreateSystemBackupRequest{PolicyID: id})
 	if errors.Is(err, ErrSystemBackupAlreadyRunning) {
-		return scheduler.Outcome{Status: scheduler.Skipped}, nil
+		return scheduler.Outcome{Status: scheduler.Waiting, Code: "run.busy"}, nil
 	}
 	if errors.Is(err, ErrSystemBackupRetention) {
 		return scheduler.Outcome{Status: scheduler.Partial, ActivityID: run.ActivityID, Message: "backup.retention_failed"}, nil

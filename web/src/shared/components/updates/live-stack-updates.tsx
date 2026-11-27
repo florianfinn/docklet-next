@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
+import { PolicyCandidates } from "./policy-candidates";
 import { PolicyControl } from "./policy-control";
 import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { formatDateTime } from "@/domain/format";
@@ -41,7 +42,7 @@ export function LiveStackUpdates({ stackId }: { stackId: string }) {
       <p>{t("checked")}: {p.checkedAt ? formatDateTime(p.checkedAt) : t("unknown")} {p.code && errorText(p.code)}</p>
       <p>{t("applied")}: {p.applyCheckedAt ? formatDateTime(p.applyCheckedAt) : t("unknown")} {p.applyCode && errorText(p.applyCode)}</p>
       {p.bookkeepingCode && <p role="status">{errorText(p.bookkeepingCode)}</p>}
-      {p.candidates.map((c) => <p key={`${c.service}:${c.digest}`}>{c.service}: {c.version || c.imageRef} · {t(`notification.${c.notificationState}`)}</p>)}
+      <PolicyCandidates policy={p} timeZone={timeZone} />
       <PolicyControl policy={p} timeZone={timeZone} saved={() => { void policy.refetch(); }} />
     </> : <p>{t("loading")}</p>}
     <Button disabled={!check.available || action.busy} title={check.reason} onClick={() => void action.run(() => adapter.checkStackUpdates!(stackId), () => { void policy.refetch(); })}>{t("check")}</Button>

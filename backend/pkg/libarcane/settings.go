@@ -43,6 +43,8 @@ var timeoutSettingKeys = []string{
 }
 
 var cronSettingKeys = []string{
+	"autoHealInterval",
+	"imageAutoPatchInterval",
 	"scheduledPruneInterval",
 	"environmentHealthInterval",
 	"eventCleanupInterval",
@@ -66,6 +68,17 @@ func AgentSyncedSettingKeys() []string {
 
 func IsCronSettingKey(key string) bool {
 	return slices.Contains(cronSettingKeys, key)
+}
+
+// ParseCronSetting reports whether the scheduler can run a stored cron value.
+// Unlike ValidateCronSetting it accepts descriptors such as @daily, which the
+// job-schedule route stores.
+func ParseCronSetting(key, value string) error {
+	if value == "" || !IsCronSettingKey(key) {
+		return nil
+	}
+	_, err := schedule.Parse(value, nil)
+	return err
 }
 
 func ValidateCronSetting(key, value string) error {

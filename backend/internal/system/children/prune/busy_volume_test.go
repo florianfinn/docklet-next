@@ -19,20 +19,26 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestScheduledBusyVolumeIsSkippedInUse(t *testing.T) {
 	held, release := make(chan struct{}), make(chan struct{})
+	var inspections atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/volumes/busy"):
-			close(held)
-			<-release
-			w.WriteHeader(404)
-			_, _ = w.Write([]byte(`{"message":"removed externally"}`))
+			if inspections.Add(1) == 1 {
+				close(held)
+				<-release
+				w.WriteHeader(404)
+				_, _ = w.Write([]byte(`{"message":"removed externally"}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"Name":"busy","Driver":"local"}`))
 		case strings.HasSuffix(r.URL.Path, "/system/df"):
 			_, _ = w.Write([]byte(`{"Volumes":[{"Name":"busy","Driver":"local","UsageData":{"RefCount":0,"Size":1}}]}`))
 		case strings.HasSuffix(r.URL.Path, "/containers/json"):

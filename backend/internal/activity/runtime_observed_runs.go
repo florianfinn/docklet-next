@@ -33,7 +33,7 @@ func runtimeObservedExecution(command RuntimeCommand) (dto.ObservedExecution, bo
 		}
 	}
 	if binding != nil {
-		return dto.ObservedExecution{Mode: "scheduled", PolicyID: binding.PolicyID, ChildID: binding.ChildID, Suppressed: slices.Clone(binding.Suppressed)}, true
+		return dto.ObservedExecution{Mode: "scheduled", PolicyID: binding.PolicyID, ChildID: binding.ChildID, Expected: slices.Clone(binding.Expected), Suppressed: slices.Clone(binding.Suppressed)}, true
 	}
 	if manual {
 		return dto.ObservedExecution{Mode: "manual"}, true

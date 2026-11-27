@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; clean only observations with a stale policy key.
+// Deviations: Local module namespace; clean only observations with a stale policy key.; Filter tag candidates against native platform manifests.
 
 package tags
 
@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/florianfinn/docklet-next/types/imageupdate"
 	"github.com/moby/moby/api/types/container"
@@ -21,6 +22,7 @@ import (
 	"go.getarcane.app/updater"
 	"go.getarcane.app/updater/pkg/utils/tagpolicy"
 	"go.getarcane.app/updater/refs"
+	updatertypes "go.getarcane.app/updater/types"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 
@@ -73,7 +75,7 @@ func (s *Service) Check(
 	// label opts a container out of monitoring, so no Settings provider is wired.
 	adapter := newTagRegistryInternal(s.registry, credentials, s.docker, s.settings)
 	checkPolicy := updater.LabelPolicy{IsUpdateDisabledFunc: imageref.IsUpdateCheckDisabled}
-	engine, err := updater.New(updater.Config{RegistryTagLister: adapter, RegistryDigestResolver: adapter, DockerClientProvider: adapter, LabelPolicy: checkPolicy})
+	engine, err := updater.New(updater.Config{RegistryTagLister: adapter, TagCandidateFilter: adapter, RegistryDigestResolver: adapter, DockerClientProvider: adapter, LabelPolicy: checkPolicy})
 	if err != nil {
 		return results, err
 	}
@@ -336,4 +338,47 @@ func AttachContainerUpdates(results, containerUpdates map[string]*imageupdate.Re
 			result.HasUpdate = true
 		}
 	}
+}
+
+// AcceptTag skips a candidate only when the registry proves it has no manifest
+// for the local platform. A failed lookup keeps the candidate, so the check
+// behaves as before the filter and its observation reports the failure.
+func (r tagRegistryInternal) AcceptTag(ctx context.Context, candidate updatertypes.TagCandidate) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	cli, err := r.DockerClient(ctx)
+	if err != nil {
+		return true, nil
+	}
+	accepted, err := AcceptTag(ctx, cli, r.service, candidate.CurrentRef, candidate.TargetRef, candidate.Platform, r.credentials)
+	if err != nil {
+		slog.DebugContext(ctx, "Platform candidate lookup failed; keeping the tag", "target", candidate.TargetRef, "error", err)
+		return true, nil
+	}
+	return accepted, nil
+}
+
+// AcceptTag shares platform filtering between container scans and project checks.
+func AcceptTag(ctx context.Context, cli *client.Client, registryService *registry.ContainerRegistryService, current, target, platform string, credentials ...[]containerregistry.Credential) (bool, error) {
+	img, err := cli.ImageInspect(ctx, current)
+	if err != nil {
+		return false, err
+	}
+	if platform == "" && img.Os != "" && img.Architecture != "" {
+		platform = img.Os + "/" + img.Architecture
+		if img.Variant != "" {
+			platform += "/" + img.Variant
+		}
+	}
+	local, err := identity.Resolve(ctx, cli, img.InspectResponse, platform, nil)
+	if err != nil {
+		return false, err
+	}
+	return registryService.HasImagePlatform(ctx, target, local.Platform.Registry(), credentials...)
+}
+
+// NewCandidateFilter uses the same native-platform check as container tag scans.
+func NewCandidateFilter(dockerService *docker.DockerClientService, registryService *registry.ContainerRegistryService) updatertypes.TagCandidateFilter {
+	return newTagRegistryInternal(registryService, nil, dockerService, nil)
 }

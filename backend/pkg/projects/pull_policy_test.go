@@ -216,6 +216,15 @@ func TestDecideDeployImageAction(t *testing.T) {
 		assert.False(t, decision.Build)
 	})
 
+	t.Run("build service without pull_policy keeps the fallback under the deploy default", func(t *testing.T) {
+		svc := composetypes.ServiceConfig{Build: &composetypes.BuildConfig{Context: "."}}
+		for _, override := range []string{"missing", "always"} {
+			assert.True(t, DecideDeployImageAction(svc, override).FallbackBuildOnPullFail, override)
+		}
+		svc.PullPolicy = "missing"
+		assert.False(t, DecideDeployImageAction(svc, "missing").FallbackBuildOnPullFail, "an explicit policy has no fallback")
+	})
+
 	t.Run("non-build service never policy requires local only", func(t *testing.T) {
 		svc := composetypes.ServiceConfig{PullPolicy: "never"}
 		decision := DecideDeployImageAction(svc, "")

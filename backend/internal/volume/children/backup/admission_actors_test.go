@@ -98,7 +98,8 @@ func TestEveryBackupActorRefusesBothVolumeOwnershipBoundaries(t *testing.T) {
 				for _, job := range jobs.jobs {
 					outcome, err := job.Run(t.Context())
 					require.NoError(t, err)
-					require.Equal(t, scheduler.Skipped, outcome.Status)
+					require.Equal(t, scheduler.Waiting, outcome.Status)
+					require.Equal(t, "run.busy", outcome.Code)
 				}
 				require.Empty(t, f.creates, "refused work cannot start an engine or helper")
 				var count int64

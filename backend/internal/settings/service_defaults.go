@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/types/features"
 	"log/slog"
 	"maps"
@@ -29,6 +30,7 @@ import (
 func DefaultSettingsConfig() *Settings {
 	cfg := &Settings{
 		UpdateCheckInterval:                   SettingVariable{Value: "12h"},
+		UpdateMinimumAgeDays:                  SettingVariable{Value: "0"},
 		UpdateNotify:                          SettingVariable{Value: "false"},
 		TimeZone:                              SettingVariable{Value: ""},
 		LoadAlertsEnabled:                     SettingVariable{Value: "true"},
@@ -174,7 +176,8 @@ func (s *SettingsService) EnsureDefaultSettings(ctx context.Context) error {
 				}
 			case err != nil:
 				return fmt.Errorf("failed to check for existing setting %s: %w", defaultSetting.Key, err)
-			case slices.Contains(retiredSettingValuesInternal[defaultSetting.Key], existing.Value):
+			case libarcane.ParseCronSetting(defaultSetting.Key, existing.Value) != nil || slices.Contains(retiredSettingValuesInternal[defaultSetting.Key], existing.Value):
+				slog.WarnContext(ctx, "Resetting invalid or retired setting to default", "key", defaultSetting.Key)
 				if replaceDefaultSettingErr := tx.Model(&SettingVariable{}).Where("key = ?", defaultSetting.Key).Update("value", defaultSetting.Value).Error; replaceDefaultSettingErr != nil {
 					return fmt.Errorf("failed to replace retired default for setting %s: %w", defaultSetting.Key, replaceDefaultSettingErr)
 				}
@@ -292,7 +295,7 @@ func (s *SettingsService) processEnvField(ctx context.Context, tx *gorm.DB, fiel
 }
 
 func (s *SettingsService) shouldProcessField(key, attrs string, isEnvOnlyMode bool) bool {
-	if key == "" || strings.Contains(attrs, "internal") || key == "timeZone" || key == "updateCheckInterval" || key == "updateNotify" {
+	if key == "" || strings.Contains(attrs, "internal") || key == "timeZone" || key == "updateCheckInterval" || key == "updateNotify" || key == "updateMinimumAgeDays" {
 		return false
 	}
 

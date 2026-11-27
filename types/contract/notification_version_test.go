@@ -14,9 +14,9 @@ import (
 )
 
 func TestNotificationAutoHealBoundaryVersion(t *testing.T) {
-	require.Equal(t, 25, AgentHubVersion)
+	require.Equal(t, 26, AgentHubVersion)
 	require.Equal(t, 18, MinimumAgentVersion)
-	b, e := os.ReadFile("testdata/agent-hub-v25.json")
+	b, e := os.ReadFile("testdata/agent-hub-v26.json")
 	require.NoError(t, e)
 	var fixture struct {
 		Minimum int `json:"minimumAgentContractVersion"`

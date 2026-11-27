@@ -27,6 +27,7 @@ func TestS4MigrationPreservesLegacyReceiptsAndReopenedConfirmation(t *testing.T)
 	// same forward migrator used at startup. No earlier migration is edited.
 	// Later migrations are undone first so the version history stays contiguous.
 	for _, sql := range []string{
+		"ALTER TABLE image_updates DROP COLUMN latest_manifest", "DROP TABLE image_update_first_seen", "DELETE FROM goose_db_version WHERE version_id = 9",
 		"ALTER TABLE image_updates DROP COLUMN current_created", "ALTER TABLE image_updates DROP COLUMN latest_created",
 		"DELETE FROM goose_db_version WHERE version_id = 8",
 		"ALTER TABLE environments DROP COLUMN network_route", "ALTER TABLE environments DROP COLUMN tailnet_node_id",

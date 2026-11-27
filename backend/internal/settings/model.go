@@ -69,9 +69,10 @@ func (s SettingVariable) AsDurationSeconds() time.Duration {
 
 //nolint:lll // Reflection metadata must remain in single struct-tag literals.
 type Settings struct {
-	UpdateCheckInterval SettingVariable `key:"updateCheckInterval,authrequired" meta:"label=Update check interval;type=select;category=updates;description=Check all eligible targets every 6, 12 or 24 hours"`
-	UpdateNotify        SettingVariable `key:"updateNotify,authrequired" meta:"label=Update notifications;type=boolean;category=updates;description=Notify once for each update candidate"`
-	TimeZone            SettingVariable `key:"timeZone,authrequired" meta:"label=Time zone;type=text;category=general;description=Hub schedule zone; empty uses TZ"`
+	UpdateCheckInterval  SettingVariable `key:"updateCheckInterval,authrequired" meta:"label=Update check interval;type=select;category=updates;description=Check all eligible targets every 6, 12 or 24 hours"`
+	UpdateMinimumAgeDays SettingVariable `key:"updateMinimumAgeDays,authrequired" meta:"label=Minimum image age;type=number;category=updates;description=Days since first observation before scheduled updates"`
+	UpdateNotify         SettingVariable `key:"updateNotify,authrequired" meta:"label=Update notifications;type=boolean;category=updates;description=Notify once for each update candidate"`
+	TimeZone             SettingVariable `key:"timeZone,authrequired" meta:"label=Time zone;type=text;category=general;description=Hub schedule zone; empty uses TZ"`
 	// General category
 	ProjectsDirectory           SettingVariable `key:"projectsDirectory,envOverride" meta:"label=Projects Directory;type=text;keywords=projects,directory,path,folder,location,storage,files,compose,docker-compose;category=internal;description=Configure where project files are stored"`
 	FollowProjectSymlinks       SettingVariable `key:"followProjectSymlinks,envOverride" meta:"label=Follow Project Symlinks;type=boolean;keywords=projects,symlink,symlinks,symbolic links,compose,directory,discovery;category=general;description=Treat symlinked child directories inside the projects directory as Docker Compose projects"`

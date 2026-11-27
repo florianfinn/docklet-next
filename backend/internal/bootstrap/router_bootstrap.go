@@ -237,6 +237,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	hubMode := !cfg.AgentMode && !cfg.EdgeAgent
 
 	e := newEchoInternal()
+	e.Use(middleware.SecurityHeaders())
 	if hubMode {
 		controller := resourceAccessController(deps)
 		e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -254,7 +255,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	if len(trustedProxyNets) == 0 {
 		e.IPExtractor = echo.ExtractIPDirect()
 	} else {
-		opts := make([]echo.TrustOption, 0, len(trustedProxyNets))
+		opts := []echo.TrustOption{echo.TrustLoopback(false), echo.TrustLinkLocal(false), echo.TrustPrivateNet(false)}
 		for _, ipnet := range trustedProxyNets {
 			opts = append(opts, echo.TrustIPRange(ipnet))
 		}

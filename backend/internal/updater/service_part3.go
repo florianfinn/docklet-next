@@ -180,7 +180,7 @@ func (s *UpdaterService) checkProjectServiceInternal(ctx context.Context, projec
 	if imageref.IsUpdateCheckDisabled(service.Labels) {
 		return record
 	}
-	check, err := s.engine.CheckImageUpdate(ctx, updatertypes.CheckRequest{ImageRef: service.Image, Policy: updater.DefaultLabelPolicy().TagPolicy(service.Labels)})
+	check, err := s.engine.CheckImageUpdate(ctx, updatertypes.CheckRequest{ImageRef: service.Image, Platform: service.Platform, Policy: updater.DefaultLabelPolicy().TagPolicy(service.Labels)})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
 			record.UpdateType = imageupdate.UpdateTypeNotPulled

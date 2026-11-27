@@ -41,11 +41,12 @@ func (s *ImageUpdateService) readImageObservationAt(ctx context.Context, ref, re
 			if e != nil {
 				return nil, imageDTO.Failure("image.invalid-reference", 400)
 			}
-			record := ImageUpdateRecord{ID: observedID, ImageID: observedID, Repository: reference.TrimNamed(named).String(), Tag: "latest", CheckTime: info.CheckTime, CurrentVersion: info.CurrentVersion, LatestVersion: &info.LatestVersion, CurrentDigest: &info.CurrentDigest, LatestDigest: &info.LatestDigest, UpdateType: info.UpdateType, HasUpdate: info.HasUpdate, Platform: &info.Platform, AuthMethod: &info.AuthState, UsedCredential: info.UsedCredential, CurrentCreated: info.CurrentCreated, LatestCreated: info.LatestCreated}
+			record := ImageUpdateRecord{ID: observedID, ImageID: observedID, Repository: reference.TrimNamed(named).String(), Tag: "latest", CheckTime: info.CheckTime, CurrentVersion: info.CurrentVersion, LatestVersion: &info.LatestVersion, CurrentDigest: &info.CurrentDigest, LatestDigest: &info.LatestDigest, UpdateType: info.UpdateType, HasUpdate: info.HasUpdate, Platform: &info.Platform, AuthMethod: &info.AuthState, UsedCredential: info.UsedCredential, CurrentCreated: info.CurrentCreated, LatestCreated: info.LatestCreated, LatestManifest: new(info.LatestManifest)}
 			if native != nil {
 				record.SetNativeObservation(*native)
 			} else {
 				record.Platform = nil
+				record.LatestManifest = nil
 			}
 			if info.Error != "" {
 				record.LastError = &info.Error
@@ -60,7 +61,7 @@ func (s *ImageUpdateService) readImageObservationAt(ctx context.Context, ref, re
 				if info.Error != "" {
 					lastError = info.Error
 				}
-				e = s.db.WithContext(ctx).Model(&ImageUpdateRecord{}).Where("repository = ? AND tag = ?", record.Repository, record.Tag).Updates(map[string]any{"platform": nil, "current_digest": nil, "latest_digest": nil, "last_error": lastError, "check_time": info.CheckTime, "has_update": false, "update_type": info.UpdateType, "auth_method": info.AuthState, "current_created": nil, "latest_created": nil}).Error
+				e = s.db.WithContext(ctx).Model(&ImageUpdateRecord{}).Where("repository = ? AND tag = ?", record.Repository, record.Tag).Updates(map[string]any{"platform": nil, "current_digest": nil, "latest_digest": nil, "last_error": lastError, "check_time": info.CheckTime, "has_update": false, "update_type": info.UpdateType, "auth_method": info.AuthState, "current_created": nil, "latest_created": nil, "latest_manifest": nil}).Error
 			} else {
 				e = s.db.WithContext(ctx).Save(&record).Error
 			}
@@ -136,6 +137,7 @@ func (s *ImageUpdateService) readImageObservationAt(ctx context.Context, ref, re
 	_, info.CurrentDigest, info.LatestDigest = observation.Storage()
 	info.LatestVersion = next.Version
 	info.LatestCreated = imageDTO.BuildTime(next.Created)
+	info.LatestManifest = next.Digest
 	if info.LatestVersion == "" {
 		info.LatestVersion = info.CurrentVersion
 	}
