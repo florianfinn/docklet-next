@@ -889,6 +889,11 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		})
 	}
 
+	if req.Body != nil && req.Body != http.NoBody {
+		if err := http.NewResponseController(c.Response()).EnableFullDuplex(); err != nil {
+			slog.DebugContext(c.Request().Context(), "could not enable proxy full duplex", "error", err)
+		}
+	}
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
 		if isVulnerabilityOperation(c) {
