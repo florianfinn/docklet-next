@@ -286,6 +286,9 @@ func TestContainerTagChecksSeparateMonitoringFromInstallationInternal(t *testing
 			) {
 				return
 			}
+		case strings.Contains(r.URL.Path, "/images/"):
+			// The platform candidate filter's lookup is unavailable here; it keeps the tag.
+			http.NotFound(w, r)
 		default:
 			t.Errorf("unexpected Docker request %s", r.URL.Path)
 			http.NotFound(w, r)

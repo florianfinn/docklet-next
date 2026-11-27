@@ -340,12 +340,23 @@ func AttachContainerUpdates(results, containerUpdates map[string]*imageupdate.Re
 	}
 }
 
+// AcceptTag skips a candidate only when the registry proves it has no manifest
+// for the local platform. A failed lookup keeps the candidate, so the check
+// behaves as before the filter and its observation reports the failure.
 func (r tagRegistryInternal) AcceptTag(ctx context.Context, candidate updatertypes.TagCandidate) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
 	cli, err := r.DockerClient(ctx)
 	if err != nil {
-		return false, err
+		return true, nil
 	}
-	return AcceptTag(ctx, cli, r.service, candidate.CurrentRef, candidate.TargetRef, candidate.Platform, r.credentials)
+	accepted, err := AcceptTag(ctx, cli, r.service, candidate.CurrentRef, candidate.TargetRef, candidate.Platform, r.credentials)
+	if err != nil {
+		slog.DebugContext(ctx, "Platform candidate lookup failed; keeping the tag", "target", candidate.TargetRef, "error", err)
+		return true, nil
+	}
+	return accepted, nil
 }
 
 // AcceptTag shares platform filtering between container scans and project checks.
