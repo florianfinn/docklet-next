@@ -636,6 +636,7 @@ func (s *EnvironmentService) ResolveEnvironmentByAccessToken(ctx context.Context
 	var env Environment
 	if err := s.db.WithContext(ctx).
 		Where("access_token = ?", token).
+		Where("enabled = ?", true).
 		First(&env).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrInvalidEnvironmentAccessToken
