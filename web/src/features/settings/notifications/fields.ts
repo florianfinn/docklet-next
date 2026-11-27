@@ -64,9 +64,9 @@ export const DEFAULTS: { [P in NotificationProvider]: NotificationConfig } = {
 /** The address whose change requires re-entering a stored secret (producer rule). */
 export const TARGET_FIELD: Partial<Record<NotificationProvider, string>> = { email: "smtpHost", signal: "host", ntfy: "host", gotify: "host", matrix: "host" };
 
-/** Splits a Discord webhook address (https://discord.com/api/webhooks/<id>/<token>). */
+/** Splits a Discord webhook address (https://discord.com/api/webhooks/<id>/<token>); query options such as thread_id have no config key and are rejected. */
 export function parseDiscordWebhook(value: string): { webhookId: string; token: string } | undefined {
-  const match = value.trim().match(/^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api(?:\/v\d+)?\/webhooks\/(\d+)\/([\w-]+)\/?(?:\?.*)?$/);
+  const match = value.trim().match(/^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api(?:\/v\d+)?\/webhooks\/(\d+)\/([\w-]+)\/?$/);
   return match ? { webhookId: match[1]!, token: match[2]! } : undefined;
 }
 

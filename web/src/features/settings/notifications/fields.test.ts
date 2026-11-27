@@ -54,8 +54,8 @@ describe("notification config tables", () => {
   it("split Discord webhook addresses and reject anything else", () => {
     const id = "123456789012345678", value = "abc-DEF_9";
     expect(parseDiscordWebhook(` https://discord.com/api/webhooks/${id}/${value} `)).toEqual({ webhookId: id, token: value });
-    expect(parseDiscordWebhook(`https://canary.discordapp.com/api/v10/webhooks/${id}/${value}/?wait=true`)).toEqual({ webhookId: id, token: value });
-    for (const bad of [`${id}/abc`, `http://discord.com/api/webhooks/${id}/abc`, `https://discord.example.com/api/webhooks/${id}/abc`, `https://discord.com/api/webhooks/${id}`])
+    expect(parseDiscordWebhook(`https://canary.discordapp.com/api/v10/webhooks/${id}/${value}/`)).toEqual({ webhookId: id, token: value });
+    for (const bad of [`${id}/abc`, `http://discord.com/api/webhooks/${id}/abc`, `https://discord.example.com/api/webhooks/${id}/abc`, `https://discord.com/api/webhooks/${id}`, `https://discord.com/api/webhooks/${id}/${value}?thread_id=1`])
       expect([bad, parseDiscordWebhook(bad)]).toEqual([bad, undefined]);
   });
 });
