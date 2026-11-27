@@ -46,7 +46,7 @@ func GetProjectsDirectory(ctx context.Context, projectsDir string) (string, erro
 	// has to exist before acfs can open it.
 	if _, err := os.Stat(projectsDirectory); os.IsNotExist(err) {
 		if mkdirAllErr := os.MkdirAll(projectsDirectory, utils.DirPerm); mkdirAllErr != nil {
-			return "", mkdirAllErr
+			return "", FilesystemError(ctx, "create projects root", projectsDirectory, mkdirAllErr)
 		}
 		slog.InfoContext(ctx, "Created projects directory", "path", projectsDirectory)
 	}
@@ -201,7 +201,7 @@ func CreateUniqueDir(ctx context.Context, projectsRoot, basePath, name string, p
 			return candidate, folderName, nil
 		}
 		if !errors.Is(mkErr, os.ErrExist) {
-			return "", "", mkErr
+			return "", "", FilesystemError(ctx, "create project directory", candidate, mkErr)
 		}
 
 		candidate = fmt.Sprintf("%s-%d", basePath, counter)
@@ -230,7 +230,7 @@ func CreateExactDir(ctx context.Context, projectsRoot, basePath, name string, pe
 	}
 
 	if mkdirErr := acfs.Mkdir(ctx, projectsRoot, logicalPath, perm); mkdirErr != nil {
-		return "", "", kit.Ternary[error](errors.Is(mkdirErr, os.ErrExist), ErrProjectDirExists, mkdirErr)
+		return "", "", kit.Ternary[error](errors.Is(mkdirErr, os.ErrExist), ErrProjectDirExists, FilesystemError(ctx, "create project directory", basePath, mkdirErr))
 	}
 
 	return basePath, sanitized, nil
@@ -291,3 +291,20 @@ func ResolvePathWithinDir(baseDir, path string) (string, error) {
 
 	return resolvedPath, nil
 }
+
+// FilesystemError logs only filesystem context; client text stays neutral and
+// the cause remains available for errors.Is classification.
+func FilesystemError(ctx context.Context, operation, path string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, os.ErrPermission) {
+		slog.ErrorContext(ctx, "project filesystem permission denied", "operation", operation, "path", path, "uid", os.Getuid(), "gid", os.Getgid())
+	}
+	return &projectFilesystemError{cause: err}
+}
+
+type projectFilesystemError struct{ cause error }
+
+func (e *projectFilesystemError) Error() string { return "project filesystem operation failed" }
+func (e *projectFilesystemError) Unwrap() error { return e.cause }

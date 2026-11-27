@@ -470,13 +470,11 @@ func (s *ProjectService) refreshProjectImageRefs(ctx context.Context, proj *Proj
 			Model(&Project{}).
 			Where("id = ?", proj.ID).
 			Updates(map[string]any{
-				"image_refs_json":       "",
-				"build_image_refs_json": nil,
+				"image_refs_json": "",
 			}).Error; dbErr != nil {
 			slog.WarnContext(ctx, "failed to clear stale project image refs", "projectId", proj.ID, "error", dbErr)
 		}
 		proj.ImageRefsJSON = ""
-		proj.BuildImageRefsJSON = nil
 		slog.WarnContext(ctx, "failed to refresh project image refs", "projectId", proj.ID, "projectName", proj.Name, "problem", projects.ClassifyLoadError(err).String())
 		return
 	}
