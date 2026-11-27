@@ -144,6 +144,7 @@ export const PROXY_REASON_KEYS = {
   "agent-unavailable": "proxyContract.reasons.agent-unavailable",
   "engine-unavailable": "proxyContract.reasons.engine-unavailable",
   "target-changed": "proxyContract.reasons.target-changed",
+  "metadata-loss": "proxyContract.reasons.metadata-loss",
 } satisfies Record<Schema["ProxyProblem"]["code"], CatalogueKey>;
 
 export const PROXY_LAYOUT_REASON_KEYS = {

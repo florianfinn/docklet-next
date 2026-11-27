@@ -432,6 +432,7 @@ export const enProxyContract = {
     "admin-unavailable": "The active configuration cannot be read.",
     "agent-unavailable": "The host cannot be reached.",
     "engine-unavailable": "This proxy engine is unavailable.",
-    "target-changed": "The target differs from both recorded states."
+    "target-changed": "The target differs from both recorded states.",
+    "metadata-loss": "Replacing the file would lose extended attributes or other hard links."
   }
 };
