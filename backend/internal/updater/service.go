@@ -32,8 +32,6 @@ import (
 	"go.getarcane.app/sys/cgroup"
 	"go.getarcane.app/updater"
 
-	"go.getarcane.app/updater/refs"
-
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -42,6 +40,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
+	tagchecks "github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/tags"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
 	projectpkg "github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
@@ -51,10 +50,10 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/updater/children/recovery"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
+	"go.getarcane.app/updater/refs"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
-
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 )
 
@@ -168,6 +167,7 @@ func (s *UpdaterService) configInternal() updater.Config {
 		Settings:               s,
 		RegistryDigestResolver: s.registryDigestResolverInternal(),
 		RegistryTagLister:      s,
+		TagCandidateFilter:     tagchecks.NewCandidateFilter(s.deps.Docker, s.deps.RegistryDigestResolver),
 		ProjectUpdater:         s,
 		Notifier:               s,
 		EventRecorder:          s,

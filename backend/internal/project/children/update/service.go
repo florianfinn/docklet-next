@@ -25,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/compose-spec/compose-go/v2/types"
+	tagchecks "github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/tags"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/florianfinn/docklet-next/types/project"
 	"github.com/florianfinn/docklet-next/types/volume"
@@ -609,7 +610,13 @@ func (s *Service) ImageChanges(ctx context.Context, effective *types.Project) (m
 		if err != nil {
 			return nil, fmt.Errorf("list service %s image tags: %w", name, err)
 		}
-		selected, err := tagpolicy.Select(parsed.Tag, tags, tagPolicy)
+		selected, err := updater.SelectTagCandidate(ctx, parsed.Tag, tags, tagPolicy, func(ctx context.Context, tag string) (bool, error) {
+			cli, err := s.dockerClient(ctx, true)
+			if err != nil {
+				return false, err
+			}
+			return tagchecks.AcceptTag(ctx, cli, s.registryService, service.Image, parsed.RegistryHost+"/"+parsed.Repository+":"+tag, service.Platform, credentials)
+		})
 		if err != nil {
 			return nil, fmt.Errorf("select service %s image tag: %w", name, err)
 		}

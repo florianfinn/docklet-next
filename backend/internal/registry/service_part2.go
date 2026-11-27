@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; extract ECR request from persistence for bounded read-only stack imports; M26 #445 candidate credential revision on agent sync.
+// Deviations: Local module namespace; extract ECR request from persistence for bounded read-only stack imports; M26 #445 candidate credential revision on agent sync.; Reserve daemon deadline budget and filter platform-incompatible tags.
 
 package registry
 
@@ -21,9 +21,14 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/distribution/reference"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/moby/moby/client"
 
@@ -690,7 +695,8 @@ func isDistributionFallbackEligibleInternal(err error) bool {
 	errLower := strings.ToLower(err.Error())
 	return strings.Contains(errLower, "context deadline exceeded") ||
 		strings.Contains(errLower, "client.timeout exceeded") ||
-		strings.Contains(errLower, "i/o timeout")
+		strings.Contains(errLower, "i/o timeout") ||
+		strings.Contains(errLower, "tls handshake timeout")
 }
 
 func (
@@ -713,7 +719,13 @@ func (
 		inspectOptions.EncodedRegistryAuth = authHeader
 	}
 
-	inspectResult, err := dockerClient.DistributionInspect(ctx, normalizedRef, inspectOptions)
+	daemonCtx := ctx
+	cancel := func() {}
+	if deadline, ok := ctx.Deadline(); ok {
+		daemonCtx, cancel = context.WithTimeout(ctx, max(time.Until(deadline)/2, 0))
+	}
+	defer cancel()
+	inspectResult, err := dockerClient.DistributionInspect(daemonCtx, normalizedRef, inspectOptions)
 	if err != nil {
 		return "", err
 	}
@@ -853,3 +865,81 @@ const (
 // ErrNoVersionLabel is returned when the remote image config carries no
 // org.opencontainers.image.version label.
 var ErrNoVersionLabel = errors.New("image config has no version label")
+
+// HasImagePlatform separates a missing platform from registry transport/auth
+// failures so tag policies only fall back on an explicit incompatibility.
+func (s *ContainerRegistryService) HasImagePlatform(ctx context.Context, raw string, platform v1.Platform, external ...[]containerregistry.Credential) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeouts.DefaultRegistry)
+	defer cancel()
+	if len(external) > 0 && len(external[0]) > 0 {
+		parsed, err := name.ParseReference(raw)
+		if err != nil {
+			return false, err
+		}
+		accepted, _, err := registryOperationWithCredentialsInternal(ctx, s, parsed.Context().RegistryStr(), "platform candidate lookup", external[0], func(ctx context.Context, credential *resolvedRegistryCredential) (bool, error) {
+			opts := []remote.Option{remote.WithContext(ctx), remote.WithPlatform(platform)}
+			if s.distributionHTTPClient.Transport != nil {
+				opts = append(opts, remote.WithTransport(s.distributionHTTPClient.Transport))
+			}
+			if credential != nil {
+				opts = append(opts, remote.WithAuth(authn.FromConfig(authn.AuthConfig{Username: credential.Username, Password: credential.Token})))
+			}
+			return imagePlatformAvailable(parsed, opts, platform)
+		})
+		return accepted, err
+	}
+	parsed, opts, _, err := s.platformOptionsInternal(ctx, raw, platform, false)
+	if err != nil {
+		return false, err
+	}
+	return imagePlatformAvailable(parsed, opts, platform)
+}
+func imagePlatformAvailable(parsed name.Reference, opts []remote.Option, platform v1.Platform) (bool, error) {
+	desc, err := remote.Get(parsed, opts...)
+	if err != nil {
+		return false, err
+	}
+	if desc.MediaType.IsIndex() {
+		index, err := desc.ImageIndex()
+		if err != nil {
+			return false, err
+		}
+		return indexHasPlatform(index, platform, 0)
+	}
+	img, err := desc.Image()
+	if err != nil {
+		return false, err
+	}
+	cfg, err := img.ConfigFile()
+	if err != nil {
+		return false, err
+	}
+	return platformmatch.Equal(ocispec.Platform{OS: cfg.OS, Architecture: cfg.Architecture, Variant: cfg.Variant}, ocispec.Platform{OS: platform.OS, Architecture: platform.Architecture, Variant: platform.Variant}), nil
+}
+func indexHasPlatform(index v1.ImageIndex, wanted v1.Platform, depth int) (bool, error) {
+	if depth > 8 {
+		return false, errors.New("registry index nesting exceeds limit")
+	}
+	manifest, err := index.IndexManifest()
+	if err != nil {
+		return false, err
+	}
+	for _, child := range manifest.Manifests {
+		if child.Platform != nil && !platformmatch.Equal(ocispec.Platform{OS: child.Platform.OS, Architecture: child.Platform.Architecture, Variant: child.Platform.Variant}, ocispec.Platform{OS: wanted.OS, Architecture: wanted.Architecture, Variant: wanted.Variant}) {
+			continue
+		}
+		if child.MediaType.IsIndex() {
+			nested, err := index.ImageIndex(child.Digest)
+			if err != nil {
+				return false, err
+			}
+			ok, err := indexHasPlatform(nested, wanted, depth+1)
+			if err != nil || ok {
+				return ok, err
+			}
+		} else if child.MediaType.IsImage() && child.Platform != nil {
+			return true, nil
+		}
+	}
+	return false, nil
+}

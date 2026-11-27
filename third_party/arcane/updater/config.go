@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Optional platform candidate filter port.
 
 package updater
 
@@ -30,7 +30,8 @@ type Config struct {
 	// NewRegistryDigestResolver(), which uses the local Docker credentials.
 	RegistryDigestResolver RegistryDigestResolver
 	// RegistryTagLister discovers version tags. Defaults to Docker-config credentials.
-	RegistryTagLister types.RegistryTagLister
+	RegistryTagLister  types.RegistryTagLister
+	TagCandidateFilter types.TagCandidateFilter
 	// ProjectUpdater updates Docker Compose services. Defaults to
 	// NewDockerComposeProjectUpdater(DockerClientProvider), which shells out to
 	// the docker compose CLI.

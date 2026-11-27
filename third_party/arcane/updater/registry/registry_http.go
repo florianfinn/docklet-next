@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Treat TLS handshake timeouts as transient while retaining certificate refusals.
 
 // Package registry talks to container registries through go-containerregistry
 // to list tags, resolve image digests and read pull rate limits.
@@ -50,7 +50,7 @@ func IsFallbackEligibleDaemonError(err error) bool {
 	errLower := strings.ToLower(err.Error())
 	for _, blocked := range []string{
 		"unauthorized", "authentication required", "no basic auth credentials", "access denied",
-		"incorrect username or password", "status: 401", "status 401", "x509", "certificate", "tls",
+		"incorrect username or password", "status: 401", "status 401", "x509", "certificate",
 	} {
 		if strings.Contains(errLower, blocked) {
 			return false
@@ -60,7 +60,7 @@ func IsFallbackEligibleDaemonError(err error) bool {
 	for _, indicator := range []string{
 		"not found", " 404 ", "status: 404", "status 404", "403 forbidden", "status: 403",
 		"status 403", "administrative rules", "not implemented", "unsupported",
-		"distribution disabled", "distribution api", daemonProxyConnectIndicator,
+		"distribution disabled", "distribution api", daemonProxyConnectIndicator, "tls handshake timeout",
 	} {
 		if strings.Contains(errLower, indicator) {
 			return true

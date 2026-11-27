@@ -3,7 +3,7 @@ Source: getarcaneapp/kit/updater/README.md
 Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 Retrieved: 2026-10-13
 License: BSD-3-Clause
-Deviations: None
+Deviations: Document Docklet-owned optional platform filtering extension.
 -->
 
 <div align="center">
@@ -288,3 +288,12 @@ reference through `SelfUpdater`.
 ## License
 
 Arcane Updater is released under the BSD 3-Clause License.
+
+## Local platform candidate filtering
+
+Docklet extends `Config` with an optional `TagCandidateFilter`. It tries policy
+candidates from newest to oldest and advances only when the filter explicitly
+rejects a candidate. Registry failures remain errors. The implementation is
+original Docklet code for issue 677. `CheckRequest.Platform` carries explicit
+Compose platforms into the filter, including foreign architectures; no additional upstream Kit code was copied.
+The source revision and BSD-3-Clause notice above cover the original import.
