@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; frozen Compose self-update recovery contract and hub-owned dispatch; hub-only release list refresh for explicit rechecks
+// Deviations: Local module namespace; frozen Compose self-update recovery contract and hub-owned dispatch; hub-only release list refresh for explicit rechecks; combined hub-then-agents update (#682).
 
 package upgrade
 
@@ -84,4 +84,36 @@ func wireError(err error) error {
 		return huma.NewError(status.GetStatus(), err.Error())
 	}
 	return huma.Error503ServiceUnavailable("update.check-unavailable")
+}
+
+type StartFleetInput struct {
+	Body dto.FleetUpdateRequest
+}
+type StartFleetOutput struct{ Body dto.FleetUpdateResponse }
+type FleetStatusOutput struct{ Body dto.FleetUpdateStatus }
+
+// StartFleet admits the combined update; the hub and agents follow durably.
+func (h *Handler) StartFleet(ctx context.Context, input *StartFleetInput) (*StartFleetOutput, error) {
+	user, err := handlerutil.RequireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if h.service == nil {
+		return nil, huma.Error503ServiceUnavailable("update.check-unavailable")
+	}
+	out, err := h.service.StartFleet(ctx, input.Body, user.ID, user.Username)
+	if err != nil {
+		return nil, wireError(err)
+	}
+	return &StartFleetOutput{Body: out}, nil
+}
+func (h *Handler) FleetStatus(ctx context.Context, _ *struct{}) (*FleetStatusOutput, error) {
+	if h.service == nil {
+		return nil, huma.Error503ServiceUnavailable("update.check-unavailable")
+	}
+	out, err := h.service.FleetStatus(ctx)
+	if err != nil {
+		return nil, wireError(err)
+	}
+	return &FleetStatusOutput{Body: out}, nil
 }

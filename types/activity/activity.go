@@ -16,6 +16,7 @@ type Status string
 const (
 	TypeHubUpdate     Type   = "hub.update"
 	TypeAgentUpdate   Type   = "agent.update"
+	TypeFleetUpdate   Type   = "system.update-all"
 	TypeJobRun        Type   = "job_run"
 	TypeLoadSustained Type   = "load_sustained"
 	StatusQueued      Status = "queued"

@@ -10,6 +10,8 @@ import type { HubUpdateSession } from "@/data/http/hub-update-session";
 import { useAuthMode } from "@/data/queries";
 import { useAdapter } from "@/data/use-adapter";
 import { selfUpdateCodeKey } from "@/domain/self-update";
+import { FLEET_CODE_KEYS } from "@/data/wire-catalogue-self-update";
+import { wireKey } from "@/data/wire-catalogue";
 import { openActivity } from "@/features/activity/activity-store";
 import { BrandLoader } from "@/shared/brand/BrandLoader";
 import { BrandLogo } from "@/shared/brand/BrandLogo";
@@ -54,7 +56,7 @@ export function HubUpdateOverlay({ reload = reloadDocument }: { reload?: () => v
   const canClose = state.phase === "failed" || state.phase === "unknown" || state.phase === "running" && elapsed >= UPDATE_CLOSE_AFTER;
   const runId = "runId" in state ? state.runId : undefined;
   const showRun = !!runId && "authenticated" in state && state.authenticated && (!progressing || elapsed >= UPDATE_CLOSE_AFTER);
-  const code = state.phase === "failed" ? selfUpdateCodeKey(state.code) : undefined;
+  const code = state.phase === "failed" ? selfUpdateCodeKey(state.code) ?? wireKey(FLEET_CODE_KEYS, state.code) : undefined;
   const status = state.phase === "starting" ? "preparing" : state.phase === "running" ? !state.online ? "offline" : state.targetSeen ? "checking" : "waiting" : undefined;
   return <Dialog open modal>
     <DialogContent aria-modal="true" showCloseButton={false} data-hub-update-overlay="" className="inset-0 top-0 left-0 z-[120] h-svh w-screen max-w-none grid-cols-[minmax(0,1fr)] translate-x-0 translate-y-0 place-content-center justify-items-center rounded-none border-0 bg-background p-6 text-center font-sans sm:max-w-none" style={{ fontFamily: "system-ui, sans-serif" }} onOpenAutoFocus={() => { previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {
@@ -64,7 +66,7 @@ export function HubUpdateOverlay({ reload = reloadDocument }: { reload?: () => v
     }} onEscapeKeyDown={event => event.preventDefault()} onPointerDownOutside={event => event.preventDefault()} onInteractOutside={event => event.preventDefault()}>
       {progressing ? <BrandLoader size={48} /> : <BrandLogo size={48} motion={false} />}
       <DialogTitle className="max-w-xl text-2xl">{state.phase === "starting" ? t("preparing") : t(state.phase === "running" ? "running" : state.phase, { version: state.target })}</DialogTitle>
-      <DialogDescription className="max-w-xl">{state.phase === "signin" ? t(mode.data === "proxy" ? "signinProxy" : "signinHelp", { version: state.versionSeen ?? t("versionUnknown") }) : state.phase === "unknown" ? t("unknownHelp") : progressing ? t("estimate") : state.phase === "done" ? t("doneHelp") : t("failedHelp")}</DialogDescription>
+      <DialogDescription className="max-w-xl">{state.phase === "signin" ? t(mode.data === "proxy" ? "signinProxy" : "signinHelp", { version: state.versionSeen ?? t("versionUnknown") }) : state.phase === "unknown" ? t("unknownHelp") : progressing ? t("estimate") : state.phase === "done" ? (session.isCombined() ? all("settings.updates.fleet.doneHelp") : t("doneHelp")) : t("failedHelp")}</DialogDescription>
       {progressing && <>
         <div role="progressbar" aria-label={t("progress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={updateProgress(elapsed)} className="h-2 w-full max-w-md overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-[width] motion-reduce:transition-none" style={{ width: `${updateProgress(elapsed)}%` }} /></div>
         <p role="status">{status && t(status)} · {t("elapsed", { time: `${Math.floor(elapsed / 60_000)}:${String(Math.floor(elapsed / 1000) % 60).padStart(2, "0")}` })}</p>

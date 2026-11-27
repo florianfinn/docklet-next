@@ -2,6 +2,7 @@ export const deRunMessages = {
   activityTitles: {
     "hubUpdate": "Hub-Update",
     "agentUpdate": "Agent-Update",
+    "updateAll": "Alles aktualisieren",
     "job": "Geplante Aufgabe",
     "action": "Aktion",
     "imagePatch": "Image patchen",
@@ -77,6 +78,7 @@ export const deRunMessages = {
     "minutes": "{minutes} min"
   },
 
+  fleet: {"hub": "Hub wird aktualisiert", "agents": "Agenten werden aktualisiert", "settled": "Abgeschlossen", "success": "Alle Hosts aktualisiert oder aktuell", "partial": "Mit Ausnahmen abgeschlossen", "failed": "Aktualisierung fehlgeschlagen", "pending": "Wartet", "reserved": "Wird aktualisiert", "skipped": "Übersprungen"},
   selfUpdate: {
     "available": "Update verfügbar",
     "current": "Aktuell",

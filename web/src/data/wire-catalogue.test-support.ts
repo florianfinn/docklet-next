@@ -15,8 +15,16 @@ import { IMPORT_PROBLEM_KEYS } from "./wire-catalogue-import";
 import { MESSAGE_CODE_KEYS } from "./wire-catalogue-messages";
 import { CANDIDATE_STATE_KEYS, CANDIDATE_RUN_STATUS_KEYS, BACKUP_STATUS_KEYS, BACKUP_TARGET_KIND_KEYS, MAINTENANCE_PHASE_KEYS, HUB_BACKUP_STATUS_KEYS, BACKUP_DELIVERY_STATE_KEYS, RESTART_STATE_KEYS, HISTORY_STATE_KEYS, PRUNE_FAILURE_KEYS, PRUNE_CANDIDATE_KEYS, PRUNE_SKIP_KEYS, SCAN_STATUS_KEYS, SYSTEM_HINT_STATE_KEYS, SYSTEM_HINT_KIND_KEYS } from "./wire-catalogue-states";
 
+import { FLEET_CODE_KEYS, FLEET_PHASE_KEYS, FLEET_OUTCOME_KEYS, FLEET_STATE_KEYS, FLEET_TARGET_OUTCOME_KEYS } from "./wire-catalogue-self-update";
+
 /** Exact property identities are pinned, including equivalent unions on different DTOs. */
 export const GUARDED_WIRE_ENUMS = [
+  { name: "FLEET_CODE_KEYS", keys: FLEET_CODE_KEYS, properties: ["SystemFleetUpdateTarget.code"] },
+  { name: "FLEET_PHASE_KEYS", keys: FLEET_PHASE_KEYS, properties: ["SystemFleetUpdateStatus.phase"] },
+  { name: "FLEET_OUTCOME_KEYS", keys: FLEET_OUTCOME_KEYS, properties: ["SystemFleetUpdateStatus.outcome"] },
+  { name: "FLEET_STATE_KEYS", keys: FLEET_STATE_KEYS, properties: ["SystemFleetUpdateTarget.state"] },
+  { name: "FLEET_TARGET_OUTCOME_KEYS", keys: FLEET_TARGET_OUTCOME_KEYS, properties: ["SystemFleetUpdateTarget.outcome"] },
+
  { name: "IMAGE_BINDING_KEYS", keys: IMAGE_BINDING_KEYS, properties: ["ImageBinding.reason"] },
 {name:"PROXY_ADOPTION_REASON_KEYS",keys:PROXY_ADOPTION_REASON_KEYS,properties:["ProxyAdoption.reason"]},
 {name:"PROXY_ADOPTION_OUTCOME_KEYS",keys:PROXY_ADOPTION_OUTCOME_KEYS,properties:["ProxyAdoption.outcome"]},
