@@ -33,6 +33,8 @@ export function UpdateEverything() {
   const submitting = useRef(false);
   useEffect(() => identityLifetime(adapter).listen(() => { setConfirmation(undefined); setError(undefined); setDismissed(undefined); dismissedPlans.delete(adapter.subscribeChanges); setBusy(false); submitting.current = false; }), [adapter]);
   const availableAgents = checks.filter(q => q.isSuccess && q.data?.eligibility.state === "available").length;
+  // With a hub update, agents waiting for the hub follow too.
+  const followingAgents = checks.filter(q => q.isSuccess && (q.data?.eligibility.state === "available" || q.data?.eligibility.state === "not-eligible" && q.data.eligibility.code === "update.requires-hub-update")).length;
   const state = hub.isSuccess ? hub.data?.eligibility.state : undefined;
   const target = state === "available" ? hub.data?.eligibility.candidate?.version : state === "current" && availableAgents > 0 ? hub.data?.version : undefined;
   const disabled = busy || !cap.available || !hub.isSuccess || hub.isFetching || !progress.isSuccess || progress.data?.active === true || !!hub.data?.operation && hub.data.operation.phase !== "settled";
@@ -45,7 +47,7 @@ export function UpdateEverything() {
     finally { if (owner === identityLifetime(adapter).version()) { submitting.current = false; setBusy(false); } }
   };
   return <>
-    {progress.allowed && target && <Button type="button" variant="outline" disabled={disabled} onClick={() => setConfirmation({ version: target, hub: state === "available", count: agents.length })}>{t("title")}</Button>}
+    {progress.allowed && target && <Button type="button" variant="outline" disabled={disabled} onClick={() => setConfirmation({ version: target, hub: state === "available", count: state === "available" ? followingAgents : availableAgents })}>{t("title")}</Button>}
     {error !== undefined && <p role="alert">{errorText(error)}</p>}
     {progress.allowed && progress.isError && <QueryError error={progress.error} onRetry={() => void progress.refetch()} />}
     {progress.data?.fleetId && (progress.data.active || dismissed !== progress.data.fleetId) && <FleetProgressCard status={progress.data} hosts={hosts.data} dismiss={() => { const fleetId = progress.data!.fleetId!; dismissedPlans.set(adapter.subscribeChanges, { version: progress.version, fleetId }); setDismissed(fleetId); }} />}

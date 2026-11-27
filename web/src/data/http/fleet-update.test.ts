@@ -71,3 +71,23 @@ it("fences a delayed POST after identity replacement", async () => {
   const task = f.api.updateEverything("1.0.1"); await Promise.resolve(); f.identity(); answer(json(response, 202));
   await expect(task).rejects.toBeInstanceOf(CancelledError); expect(f.start).not.toHaveBeenCalled();
 });
+it("ends the combined view with the plan's reason when the hub is skipped before any operation", async () => {
+  const skipped: FleetStatus = { ...active, phase: "settled", outcome: "failed", active: false, hub: { environmentId: "0", opId: "hub-operation", state: "skipped", outcome: "skipped", code: "update.permission-denied", runId: "hub-skip" } };
+  const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+    if (init?.method === "POST") return json(response, 202);
+    if (String(url).endsWith("/system/upgrade/all")) return json(skipped);
+    if (String(url).includes("/system/upgrade/check")) return json({ version: "1.0.0", eligibility: { state: "available", candidate: { version: "1.0.1" }, manual: [] } });
+    return json({ currentVersion: "1.0.0" });
+  });
+  const session = createHubUpdateSession({ baseUrl: "/api", client: { fetch: fetcher, token: async () => "example" }, publicFetch: fetcher, readRun: vi.fn() });
+  session.establish("operator");
+  const api = createFleetUpdates({ baseUrl: "/api", client: { fetch: fetcher, token: async () => "example" }, generation: () => 0, capability: async () => ({ available: true }), hubSession: session });
+  await api.updateEverything("1.0.1");
+  await vi.waitFor(() => expect(session.get().state).toMatchObject({ phase: "failed", code: "update.permission-denied", runId: "hub-skip" }), { timeout: 8000 });
+  session.clear();
+});
+it("keeps the hub's own refusal reason on a 503", async () => {
+  const f = fixture(); f.fetcher.mockImplementation(async (_url, init) => init?.method === "POST" ? json({ code: "update.check-unavailable" }, 503) : json({ ...active, active: false }));
+  await expect(f.api.updateEverything("1.0.1")).rejects.toMatchObject({ outcome: { code: "update.check-unavailable", status: 503 } });
+  expect(f.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
+});

@@ -265,6 +265,7 @@ export const deSettings: typeof enSettings = {
       check: "Erneut prüfen",
       checkedAt: "zuletzt geprüft {time}",
       viewRun: "Update-Aktivität anzeigen",
+      viewRunFor: "Update-Aktivität für {host} anzeigen",
       manual: "Manueller Befehl {number}",
       confirmHub: "Docklet auf {version} aktualisieren. Ein Hilfscontainer aktualisiert diesen Compose-Dienst und seine Image-Referenz. Die Verbindung pausiert beim Neustart von Docklet. Diese Seite wird neu geladen, sobald die neue Version als gesund bestätigt ist.",
       confirmAgent: "Diesen Agent auf {version} aktualisieren. Ein Hilfscontainer aktualisiert seinen Compose-Dienst und seine Image-Referenz. Der Agent trennt kurz die Verbindung; der Fortschritt bleibt unter Aktivitäten verfügbar.",

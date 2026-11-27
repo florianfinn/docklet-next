@@ -10,6 +10,8 @@ import type { HubUpdateSession } from "@/data/http/hub-update-session";
 import { useAuthMode } from "@/data/queries";
 import { useAdapter } from "@/data/use-adapter";
 import { selfUpdateCodeKey } from "@/domain/self-update";
+import { FLEET_CODE_KEYS } from "@/data/wire-catalogue-self-update";
+import { wireKey } from "@/data/wire-catalogue";
 import { openActivity } from "@/features/activity/activity-store";
 import { BrandLoader } from "@/shared/brand/BrandLoader";
 import { BrandLogo } from "@/shared/brand/BrandLogo";
@@ -54,7 +56,7 @@ export function HubUpdateOverlay({ reload = reloadDocument }: { reload?: () => v
   const canClose = state.phase === "failed" || state.phase === "unknown" || state.phase === "running" && elapsed >= UPDATE_CLOSE_AFTER;
   const runId = "runId" in state ? state.runId : undefined;
   const showRun = !!runId && "authenticated" in state && state.authenticated && (!progressing || elapsed >= UPDATE_CLOSE_AFTER);
-  const code = state.phase === "failed" ? selfUpdateCodeKey(state.code) : undefined;
+  const code = state.phase === "failed" ? selfUpdateCodeKey(state.code) ?? wireKey(FLEET_CODE_KEYS, state.code) : undefined;
   const status = state.phase === "starting" ? "preparing" : state.phase === "running" ? !state.online ? "offline" : state.targetSeen ? "checking" : "waiting" : undefined;
   return <Dialog open modal>
     <DialogContent aria-modal="true" showCloseButton={false} data-hub-update-overlay="" className="inset-0 top-0 left-0 z-[120] h-svh w-screen max-w-none grid-cols-[minmax(0,1fr)] translate-x-0 translate-y-0 place-content-center justify-items-center rounded-none border-0 bg-background p-6 text-center font-sans sm:max-w-none" style={{ fontFamily: "system-ui, sans-serif" }} onOpenAutoFocus={() => { previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => {

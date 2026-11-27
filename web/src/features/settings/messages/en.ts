@@ -264,6 +264,7 @@ export const enSettings = {
       check: "Check again",
       checkedAt: "last checked {time}",
       viewRun: "View update activity",
+      viewRunFor: "View update activity for {host}",
       manual: "Manual command {number}",
       confirmHub: "Update Docklet to {version}. A helper updates this Compose service and its image pin. The connection will pause while Docklet restarts. This page reloads after the new version is confirmed healthy.",
       confirmAgent: "Update this agent to {version}. A helper updates its Compose service and image pin. The agent disconnects briefly; progress remains available in Activity.",

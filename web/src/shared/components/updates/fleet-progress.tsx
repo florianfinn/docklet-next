@@ -16,11 +16,13 @@ import { Button } from "@/shared/ui/button";
 
 export function FleetTargetRow({ target, hosts = [] }: { target: FleetTarget; hosts?: Host[] }) {
   const all = useTranslations(), t = useTranslations("settings.updates.selfUpdate");
-  const code = wireKey(FLEET_CODE_KEYS, target.code);
+  const code = wireKey(FLEET_CODE_KEYS, target.code), name = hosts.find(h => h.id === target.environmentId)?.name ?? target.environmentId;
+  // A skipped target carries the same outcome; the reason line says why.
+  const outcome = target.outcome && !(target.state === "skipped" && target.outcome === "skipped") ? target.outcome : undefined;
   return <div className="rounded-lg border p-3 text-sm" data-fleet-target={target.environmentId}>
-    <p>{hosts.find(h => h.id === target.environmentId)?.name ?? target.environmentId} · {all(FLEET_STATE_KEYS[target.state])}{target.outcome && <> · {all(FLEET_TARGET_OUTCOME_KEYS[target.outcome])}</>}</p>
+    <p>{name} · {all(FLEET_STATE_KEYS[target.state])}{outcome && <> · {all(FLEET_TARGET_OUTCOME_KEYS[outcome])}</>}</p>
     {code && <p>{all(code)}</p>}
-    {target.runId && <Button type="button" variant="link" onClick={() => openActionDialog(target.runId!)}>{t("viewRun")}</Button>}
+    {target.runId && <Button type="button" variant="link" aria-label={t("viewRunFor", { host: name })} onClick={() => openActionDialog(target.runId!)}>{t("viewRun")}</Button>}
   </div>;
 }
 export function FleetProgressCard({ status, hosts = [], dismiss }: { status: FleetStatus; hosts?: Host[]; dismiss?: () => void }) {

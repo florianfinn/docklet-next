@@ -13,7 +13,6 @@ import { AdapterOutcomeError, unavailable } from "../capability";
 import type { CsrfClient } from "./csrf-client";
 import type { HubUpdateSession } from "./hub-update-session";
 import { object, runtimeError } from "./runtime-mapping";
-import { discardResponse } from "./identity-reads";
 
 interface Options {
   baseUrl: string; client: CsrfClient; generation: () => number;
@@ -33,7 +32,11 @@ export function createFleetUpdates({ baseUrl, client, generation, capability, hu
           headers: { Accept: "application/json", ...(targetVersion === undefined ? {} : { "Content-Type": "application/json" }) },
           ...(targetVersion === undefined ? {} : { body: JSON.stringify({ targetVersion }) }) });
         fence(owner);
-        if ([502, 503, 504].includes(response.status)) { discardResponse(response); throw runtimeError("http.error", response.status); }
+        // A gateway reply is ambiguous; only a hub problem with a known code is a refusal.
+        if ([502, 503, 504].includes(response.status)) {
+          const problem = object(await response.json().catch(() => undefined)); fence(owner);
+          throw runtimeError(wireKey(FLEET_CODE_KEYS, String(problem.code)) ? String(problem.code) : "http.error", response.status);
+        }
         const body: unknown = await response.json(); fence(owner);
         if (!response.ok) { const problem = object(body), code = wireKey(FLEET_CODE_KEYS, String(problem.code)) ? problem.code : wireKey(FLEET_CODE_KEYS, String(problem.detail)) ? problem.detail : "http.error"; throw runtimeError(String(code), response.status); }
         return body;
@@ -45,6 +48,7 @@ export function createFleetUpdates({ baseUrl, client, generation, capability, hu
     if (!validFleetStatus(row)) throw runtimeError("http.invalid-response");
     return row;
   }
+  hubSession.readFleetHub(async () => (await getFleetUpdate()).hub);
   return {
     getFleetUpdate,
     updateEverything(targetVersion: string): Promise<FleetResponse> {
@@ -58,7 +62,7 @@ export function createFleetUpdates({ baseUrl, client, generation, capability, hu
         try { row = await request(targetVersion) as FleetResponse; }
         catch (error) {
           fence(owner);
-          const ambiguous = error instanceof TypeError || error instanceof DOMException && error.name === "AbortError" || error instanceof AdapterOutcomeError && error.outcome.kind === "error" && [502, 503, 504].includes(error.outcome.status ?? 0);
+          const ambiguous = error instanceof TypeError || error instanceof DOMException && error.name === "AbortError" || error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "http.error" && [502, 503, 504].includes(error.outcome.status ?? 0);
           if (!ambiguous) throw error;
           const status = await getFleetUpdate().catch(() => undefined); fence(owner);
           if (!status?.active || !sameProductVersion(status.targetVersion, targetVersion)) throw error;

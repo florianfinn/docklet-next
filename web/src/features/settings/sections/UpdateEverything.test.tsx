@@ -21,13 +21,13 @@ import { UpdateEverything } from "./UpdateEverything";
 const active: FleetStatus = { active: true, fleetId: "fleet", runId: "parent", phase: "agents", targetVersion: "1.0.1", hub: { environmentId: "0", opId: "hub", state: "skipped", outcome: "current" }, agents: [{ environmentId: "example", opId: "agent", runId: "child", state: "skipped", outcome: "skipped", code: "update.hub-failed" }] };
 const cleanups: (() => void)[] = [];
 afterEach(() => { cleanup(); cleanups.splice(0).forEach(f => f()); vi.useRealTimers(); });
-function mount(hubState: "available" | "current" = "available", agentAvailable = true, status: FleetStatus = { active: false, agents: [] }, admin = true) {
+function mount(hubState: "available" | "current" = "available", agentAvailable = true, status: FleetStatus = { active: false, agents: [] }, admin = true, currentAgents = 0) {
   let epoch = 0, enabled = true; const listeners = new Set<() => void>();
   const adapter = { ...createDisconnectedAdapter(), kind: "http" as const,
     getCurrentUser: vi.fn(async () => ({ id: "operator", isAdmin: admin }) as never),
-    listHosts: vi.fn(async () => [{ id: "0", name: "Hub" }, { id: "example", name: "Example agent" }] as Host[]),
+    listHosts: vi.fn(async () => [{ id: "0", name: "Hub" }, { id: "example", name: "Example agent" }, ...Array.from({ length: currentAgents }, (_, i) => ({ id: `current-${i}`, name: `Current ${i}` }))] as Host[]),
     getCapability: vi.fn(async (operationId: string, resourceRef = { kind: "hub" as const, id: "0" }) => ({ operationId, resourceRef, available: admin })),
-    getSelfUpdate: vi.fn(async (host: string): Promise<SelfUpdateCheck> => ({ version: "1.0.0", eligibility: { state: host === "0" ? hubState : agentAvailable ? "available" : "current", candidate: { version: "1.0.1" }, manual: [] } })),
+    getSelfUpdate: vi.fn(async (host: string): Promise<SelfUpdateCheck> => ({ version: "1.0.0", eligibility: { state: host === "0" ? hubState : host.startsWith("current-") ? "current" : agentAvailable ? "available" : "current", candidate: { version: "1.0.1" }, manual: [] } })),
     getFleetUpdate: vi.fn(async () => status),
     updateEverything: vi.fn(async () => ({ fleetId: "fleet", runId: "parent", hubPhase: "current" as const })),
   };
@@ -58,9 +58,10 @@ it("confirms the shown target once with no-rollback and backup link", async () =
 it("renders names, German reason, child link and settled result; dismissal hides it", async () => {
   mount("current", true, { ...active, active: false, phase: "settled", outcome: "partial" });
   await screen.findByText(catalogs.de.runMessages.fleet.partial);
-  expect(screen.getByText(/Example agent/).textContent).toContain("Übersprungen");
+  // The skipped state is named once; the reason line says why.
+  expect(screen.getByText(/Example agent/).textContent?.split("Übersprungen").length).toBe(2);
   expect(screen.queryByText(catalogs.de.images.errors["update_hub-failed"]) !== null).toBe(true);
-  expect(screen.queryByRole("button", { name: catalogs.de.settings.updates.selfUpdate.viewRun }) !== null).toBe(true);
+  expect(screen.queryByRole("button", { name: "Update-Aktivität für Example agent anzeigen" }) !== null).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Ausblenden" }));
   expect(screen.queryByText(catalogs.de.runMessages.fleet.partial) !== null).toBe(false);
 });
@@ -77,4 +78,12 @@ it("polls active status at 3 seconds, stops at settlement and clears on logout",
   expect(f.adapter.getFleetUpdate).toHaveBeenCalledTimes(2);
   act(() => f.logout()); expect(screen.queryByText(/Example agent/) !== null).toBe(false);
   await act(async () => { await vi.advanceTimersByTimeAsync(6000); }); expect(f.adapter.getFleetUpdate).toHaveBeenCalledTimes(2);
+});
+it.each([["current", 1], ["available", 1]] as const)("counts only the agents that will follow (hub %s)", async (hub, count) => {
+  mount(hub, true, undefined, true, 2);
+  const button = await screen.findByRole("button", { name: "Alles aktualisieren" });
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(button);
+  const text = screen.getByRole("alertdialog").textContent ?? "";
+  expect(text.includes(`${count} Agenten`)).toBe(true);
+  expect(text.includes("3 Agenten")).toBe(false);
 });
