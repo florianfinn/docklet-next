@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/types/features"
 	"log/slog"
 	"maps"
@@ -174,7 +175,8 @@ func (s *SettingsService) EnsureDefaultSettings(ctx context.Context) error {
 				}
 			case err != nil:
 				return fmt.Errorf("failed to check for existing setting %s: %w", defaultSetting.Key, err)
-			case slices.Contains(retiredSettingValuesInternal[defaultSetting.Key], existing.Value):
+			case libarcane.ValidateCronSetting(defaultSetting.Key, existing.Value) != nil || slices.Contains(retiredSettingValuesInternal[defaultSetting.Key], existing.Value):
+				slog.WarnContext(ctx, "Resetting invalid or retired setting to default", "key", defaultSetting.Key)
 				if replaceDefaultSettingErr := tx.Model(&SettingVariable{}).Where("key = ?", defaultSetting.Key).Update("value", defaultSetting.Value).Error; replaceDefaultSettingErr != nil {
 					return fmt.Errorf("failed to replace retired default for setting %s: %w", defaultSetting.Key, replaceDefaultSettingErr)
 				}

@@ -43,6 +43,8 @@ var timeoutSettingKeys = []string{
 }
 
 var cronSettingKeys = []string{
+	"autoHealInterval",
+	"imageAutoPatchInterval",
 	"scheduledPruneInterval",
 	"environmentHealthInterval",
 	"eventCleanupInterval",

@@ -35,6 +35,7 @@ type Coordinator struct {
 	owner        string
 	mu           sync.Mutex
 	checkpointed map[string]bool
+	stopDeadline time.Time
 	stopping     bool
 	started      bool
 	cancel       context.CancelFunc
@@ -292,28 +293,6 @@ func (q *Coordinator) Start(ctx, appCtx context.Context) error {
 	q.started = true
 	go q.dispatchInternal(runCtx)
 	return nil
-}
-
-// Stop rejects new submissions, cancels execution, and waits for workers until
-// ctx expires. Unfinished claims remain persisted for startup reconciliation.
-func (q *Coordinator) Stop(ctx context.Context) error {
-	q.mu.Lock()
-	q.stopping = true
-	q.enabled.Store(false)
-	started := q.started
-	if q.cancel != nil {
-		q.cancel()
-	}
-	q.mu.Unlock()
-	if !started {
-		return nil
-	}
-	select {
-	case <-q.done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }
 
 // PauseAndDrain stops admission and dispatch, cancels local executions, and
