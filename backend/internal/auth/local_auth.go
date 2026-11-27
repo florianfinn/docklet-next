@@ -17,6 +17,18 @@ import (
 	"time"
 )
 
+// Build one dummy credential at process startup using the same hashing policy as real users.
+var dummyLocalPasswordHash = func() string {
+	hash, err := user.NewUserService(nil, nil, nil).HashPassword("dummy-local-credential")
+	if err != nil {
+		panic(fmt.Errorf("initialize dummy local credential: %w", err))
+	}
+	return hash
+}()
+
+// This seam counts comparisons in regression tests without timing assertions.
+var validateLocalPassword = (*user.UserService).ValidatePassword
+
 func (s *AuthService) AuthenticateLocalPrimary(ctx context.Context, username, password string) (*user.User, error) {
 	localEnabled, err := s.IsLocalAuthEnabled(ctx)
 	if err != nil {
@@ -50,9 +62,10 @@ func (s *AuthService) AuthenticateLocalPrimary(ctx context.Context, username, pa
 		}
 	}
 	if localUser == nil || localUser.DisabledAt != nil {
+		_ = validateLocalPassword(s.userService, dummyLocalPasswordHash, password)
 		return nil, ErrInvalidCredentials
 	}
-	if validatePasswordErr := s.userService.ValidatePassword(localUser.PasswordHash, password); validatePasswordErr != nil {
+	if validatePasswordErr := validateLocalPassword(s.userService, localUser.PasswordHash, password); validatePasswordErr != nil {
 		return nil, ErrInvalidCredentials
 	}
 
