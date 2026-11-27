@@ -15,6 +15,10 @@ import (
 	"testing"
 
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	images "github.com/florianfinn/docklet-next/backend/internal/image"
+	"github.com/florianfinn/docklet-next/backend/internal/registry"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	dto "github.com/florianfinn/docklet-next/types/container"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
@@ -182,4 +186,70 @@ func TestAutoRemoveStartFailureRestoreKeepsVolumes(t *testing.T) {
 	require.Error(t, recreateWithoutRun(t, d, info))
 	require.Len(t, d.creates, 2, "the failed start must rebuild the auto-removed original")
 	requireVolumeMount(t, &d.creates[1], imageVolumeName, "/cache")
+}
+
+func volumeBearingOriginal(d *updateDaemon) {
+	old := d.containers[updateOldID]
+	old.HostConfig.Binds = []string{"data:/data", "/scratch"}
+	old.Mounts = volumeMountPoints()
+	d.containers[updateOldID] = old
+}
+
+func TestEditKeepsAnonymousVolumesUnlessRetargeted(t *testing.T) {
+	s, d, _, _ := updateFixture(t)
+	volumeBearingOriginal(d)
+	_, err := s.EditContainer(updateContext(t), updateOldID, dto.Edit{}, user.Actor{})
+	require.NoError(t, err)
+	replacement := d.containers[updateNewID]
+	require.Equal(t, []string{"data:/data", anonBindName + ":/scratch"}, replacement.HostConfig.Binds)
+	requireVolumeMount(t, replacement.HostConfig, imageVolumeName, "/cache")
+
+	s, d, _, _ = updateFixture(t)
+	volumeBearingOriginal(d)
+	binds := []string{"data:/data", "other:/scratch"}
+	_, err = s.EditContainer(updateContext(t), updateOldID, dto.Edit{HostConfig: &dto.HostConfigEdit{Binds: &binds}}, user.Actor{})
+	require.NoError(t, err)
+	replacement = d.containers[updateNewID]
+	require.Equal(t, binds, replacement.HostConfig.Binds, "a retargeted destination keeps the requested volume")
+	requireVolumeMount(t, replacement.HostConfig, imageVolumeName, "/cache")
+}
+
+func TestRedeployKeepsAnonymousVolumes(t *testing.T) {
+	s, d, _, db := updateFixture(t)
+	volumeBearingOriginal(d)
+	cfg, err := settings.NewSettingsService(t.Context(), db)
+	require.NoError(t, err)
+	t.Cleanup(func() { cfg.Stop(t.Context()) })
+	s.settingsService = cfg
+	s.imageService = images.NewImageService(db, s.dockerService, registry.NewContainerRegistryService(db, nil, nil, nil), nil, nil, nil, cfg, nil)
+	_, err = s.RedeployContainer(updateContext(t), updateOldID, user.Actor{})
+	require.NoError(t, err)
+	require.Equal(t, 1, d.counts["pull"])
+	replacement := d.containers[updateNewID]
+	require.Equal(t, []string{"data:/data", anonBindName + ":/scratch"}, replacement.HostConfig.Binds)
+	requireVolumeMount(t, replacement.HostConfig, imageVolumeName, "/cache")
+}
+
+// Startup recovery after a crash past start keeps the replacement the
+// durable create produced and removes the original without its volumes.
+func TestStartupRecoveryKeepsPreservedReplacementAndVolumes(t *testing.T) {
+	f := effectFixture(t, "remove-old")
+	old := f.d.containers[updateOldID]
+	old.HostConfig = &container.HostConfig{Binds: []string{"/scratch"}}
+	old.Mounts = volumeMountPoints()[:2]
+	f.d.containers[updateOldID] = old
+	host, err := recreateVolumeHostConfig(t.Context(), old, old.HostConfig)
+	require.NoError(t, err)
+	replacement := f.d.containers[updateNewID]
+	replacement.HostConfig = host
+	f.d.containers[updateNewID] = replacement
+
+	require.NoError(t, f.rt.InitializeLocalStartup(t.Context(), f.store))
+	require.Equal(t, "done", f.journalPhase(t, "app"))
+	require.Zero(t, f.d.counts["create"], "recovery never creates")
+	require.NotContains(t, f.d.containers, updateOldID)
+	require.Equal(t, []string{""}, f.d.removeVolumes, "the original is removed without its volumes")
+	kept := f.d.containers[updateNewID]
+	require.Equal(t, []string{anonBindName + ":/scratch"}, kept.HostConfig.Binds)
+	requireVolumeMount(t, kept.HostConfig, imageVolumeName, "/cache")
 }

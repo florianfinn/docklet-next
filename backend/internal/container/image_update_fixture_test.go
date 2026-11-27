@@ -57,6 +57,8 @@ type updateDaemon struct {
 	// named effect, then answers with an error (the daemon completed it).
 	inspect   func(id string, item *dc.InspectResponse)
 	failAfter string
+	// removeVolumes records the v query of every container removal.
+	removeVolumes []string
 }
 
 func newUpdateDaemon() *updateDaemon {
@@ -198,6 +200,7 @@ func (d *updateDaemon) serve(w http.ResponseWriter, r *http.Request) {
 			// An API start resets the restart counter, as the engine does.
 			item.State.Running, item.State.StartedAt, item.RestartCount = true, time.Now().UTC().Format(time.RFC3339Nano), 0
 		case "remove":
+			d.removeVolumes = append(d.removeVolumes, r.URL.Query().Get("v"))
 			delete(d.containers, id)
 			if d.failAfter == op {
 				d.failAfter = ""
