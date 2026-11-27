@@ -9,8 +9,8 @@ package proxy
 import (
 	"context"
 	"errors"
-	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"github.com/florianfinn/docklet-next/types/contract"
+	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"github.com/stretchr/testify/require"
 	"sync/atomic"
 	"testing"

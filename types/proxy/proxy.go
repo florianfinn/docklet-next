@@ -217,6 +217,7 @@ func NormaliseAcknowledgements(a Acknowledgements) Acknowledgements {
 	}
 	return a
 }
+
 type ApplyRequest struct {
 	Kind             OperationKind     `json:"kind,omitempty" enum:"route"`
 	ID               string            `json:"id" minLength:"1" maxLength:"128"`

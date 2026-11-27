@@ -49,6 +49,7 @@ func metadataLossSupported(ctx context.Context, t Transport, environmentID strin
 	}
 	return nil
 }
+
 type Hub struct {
 	DB        *gorm.DB
 	Modules   *modules.Service
