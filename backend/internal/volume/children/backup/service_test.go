@@ -14,7 +14,6 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
-	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/user"
@@ -106,7 +105,7 @@ func TestVolumeBackupPolicy_RetentionIgnoresFailedRuns(t *testing.T) {
 	require.Equal(t, backuptypes.VolumeBackupStatusFailed, backups[1].Status)
 }
 
-func TestVolumeBackupPolicy_ScheduledRunCreatesActivity(t *testing.T) {
+func TestVolumeBackupPolicy_BusyScheduledRunCreatesNoActivity(t *testing.T) {
 	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:volume-backup-scheduled-activity?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}))
@@ -135,8 +134,7 @@ func TestVolumeBackupPolicy_ScheduledRunCreatesActivity(t *testing.T) {
 	service.RegisterJobsOnStartup(t.Context())
 	job, registered := jobScheduler.jobs["volume-backup:"+policy.ID]
 	require.True(t, registered)
-	// Holding the volume's admission lease makes the scheduled run fail with
-	// "already running", which still must record a failed activity.
+	// Busy admission waits without creating a misleading failed activity.
 	lease, admitted, err := engine.TryAcquireRun(t.Context(), backup.VolumeAdmissionScope, policy.VolumeName)
 	require.NoError(t, err)
 	require.True(t, admitted)
@@ -144,13 +142,11 @@ func TestVolumeBackupPolicy_ScheduledRunCreatesActivity(t *testing.T) {
 
 	outcome, scheduledBackupErr := job.Run(t.Context())
 	require.NoError(t, scheduledBackupErr)
-	require.Equal(t, scheduler.Skipped, outcome.Status)
-
-	var backupActivity activity.Activity
-	require.NoError(t, gormDB.Where("resource_type = ?", "volume_backup").First(&backupActivity).Error)
-	require.Equal(t, activitytypes.StatusFailed, backupActivity.Status)
-	require.Equal(t, "scheduled_volume_backup", backupActivity.Metadata["action"])
-	require.Equal(t, policy.Schedule, backupActivity.Metadata["schedule"])
+	require.Equal(t, scheduler.Waiting, outcome.Status)
+	require.Equal(t, "run.busy", outcome.Code)
+	var count int64
+	require.NoError(t, gormDB.Model(&activity.Activity{}).Where("resource_type = ?", "volume_backup").Count(&count).Error)
+	require.Zero(t, count)
 }
 
 func TestVolumeBackup_ValidationErrors(t *testing.T) {

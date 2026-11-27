@@ -6,11 +6,19 @@
 
 package backup
 
+import "context"
 import "github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 
 func (s *Service) newPolicies(deps Dependencies) *policies.Service {
 	return policies.NewService(policies.Dependencies{
-		DB:             deps.DB,
+		DB: deps.DB,
+		Acquire: func(ctx context.Context, name string) (context.Context, func(), error) {
+			owned, owner, err := s.acquireOperation(ctx, name, "")
+			if err != nil {
+				return ctx, nil, err
+			}
+			return owned, func() { owner.Release(ctx) }, nil
+		},
 		ValidateTarget: s.validatePolicyTarget,
 		Location:       deps.Location,
 		ZoneProvider:   deps.ZoneProvider,
