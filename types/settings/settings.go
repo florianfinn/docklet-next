@@ -73,8 +73,9 @@ type Update struct {
 	// Required: false
 	DiskUsagePath *string `json:"diskUsagePath,omitzero"`
 
-	UpdateCheckInterval *string `json:"updateCheckInterval,omitzero" enum:"6h,12h,24h"`
-	UpdateNotify        *string `json:"updateNotify,omitzero" enum:"true,false"`
+	UpdateCheckInterval  *string `json:"updateCheckInterval,omitzero" enum:"6h,12h,24h"`
+	UpdateMinimumAgeDays *string `json:"updateMinimumAgeDays,omitzero"`
+	UpdateNotify         *string `json:"updateNotify,omitzero" enum:"true,false"`
 
 	// ImageEventWatcherEnabled indicates if Docker image events trigger image checks.
 	//

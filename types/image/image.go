@@ -68,7 +68,8 @@ type UpdateInfo struct {
 	// LatestDigest is the digest (hash) of the latest available image.
 	//
 	// Required: true
-	LatestDigest string `json:"latestDigest"`
+	LatestManifest string `json:"latestManifest,omitempty"`
+	LatestDigest   string `json:"latestDigest"`
 
 	// Error contains any error message from the update check.
 	//

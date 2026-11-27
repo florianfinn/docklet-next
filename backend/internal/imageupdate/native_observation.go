@@ -31,6 +31,7 @@ func (s *ImageUpdateService) ResolveLocal(ctx context.Context, ref, platform str
 // NativeResult carries a native observation with the image config build times
 // of the local image and the candidate.
 type NativeResult struct {
+	LatestManifest                string
 	Observation                   identity.NativeObservation
 	CurrentCreated, LatestCreated *time.Time
 }
@@ -58,7 +59,7 @@ func (s *ImageUpdateService) NativeObservation(ctx context.Context, ref, target,
 	if err != nil {
 		return NativeResult{}, err
 	}
-	return NativeResult{Observation: observed, CurrentCreated: local.Created, LatestCreated: imageDTO.BuildTime(candidate.Created)}, nil
+	return NativeResult{Observation: observed, CurrentCreated: local.Created, LatestManifest: candidate.Digest, LatestCreated: imageDTO.BuildTime(candidate.Created)}, nil
 }
 func (i *ImageUpdateRecord) SetNativeObservation(n identity.NativeObservation) {
 	p, current, latest := n.Storage()
@@ -128,7 +129,7 @@ func (s *ImageUpdateService) NativeServiceObservation(ctx context.Context, ref, 
 	if err != nil {
 		return NativeResult{}, err
 	}
-	return NativeResult{Observation: observed, CurrentCreated: current.Created, LatestCreated: imageDTO.BuildTime(next.Created)}, nil
+	return NativeResult{Observation: observed, CurrentCreated: current.Created, LatestManifest: next.Digest, LatestCreated: imageDTO.BuildTime(next.Created)}, nil
 }
 
 func repositoryEvidence(ref string, digests []string) bool {

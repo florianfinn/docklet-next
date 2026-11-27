@@ -30,6 +30,7 @@ import (
 func DefaultSettingsConfig() *Settings {
 	cfg := &Settings{
 		UpdateCheckInterval:                   SettingVariable{Value: "12h"},
+		UpdateMinimumAgeDays:                  SettingVariable{Value: "0"},
 		UpdateNotify:                          SettingVariable{Value: "false"},
 		TimeZone:                              SettingVariable{Value: ""},
 		LoadAlertsEnabled:                     SettingVariable{Value: "true"},
@@ -294,7 +295,7 @@ func (s *SettingsService) processEnvField(ctx context.Context, tx *gorm.DB, fiel
 }
 
 func (s *SettingsService) shouldProcessField(key, attrs string, isEnvOnlyMode bool) bool {
-	if key == "" || strings.Contains(attrs, "internal") || key == "timeZone" || key == "updateCheckInterval" || key == "updateNotify" {
+	if key == "" || strings.Contains(attrs, "internal") || key == "timeZone" || key == "updateCheckInterval" || key == "updateNotify" || key == "updateMinimumAgeDays" {
 		return false
 	}
 

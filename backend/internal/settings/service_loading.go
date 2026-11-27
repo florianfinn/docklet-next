@@ -92,7 +92,7 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 		if retiredVulnerabilitySetting(key) {
 			continue
 		}
-		isInternal := slices.Contains(tagParts[1:], "internal") || key == "timeZone" || key == "updateCheckInterval" || key == "updateNotify"
+		isInternal := slices.Contains(tagParts[1:], "internal") || key == "timeZone" || key == "updateCheckInterval" || key == "updateNotify" || key == "updateMinimumAgeDays"
 
 		if isInternal {
 			if val, ok := settingsMap[key]; ok {

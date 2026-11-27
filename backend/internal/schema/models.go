@@ -59,7 +59,7 @@ func Models() []any {
 			models[i] = &imageupdate.ImageUpdateRecord{}
 		}
 	}
-	return append(append(append(models, candidates.Models()...), proxy.Models()...), &activity.RuntimeObservedRun{}, &updatepolicies.FailedCandidate{})
+	return append(append(append(models, candidates.Models()...), proxy.Models()...), &activity.RuntimeObservedRun{}, &updatepolicies.FailedCandidate{}, &updatepolicies.FirstSeen{})
 }
 
 // BaselineModels freezes the model list used to generate release migration 001.

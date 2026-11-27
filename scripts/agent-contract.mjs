@@ -76,6 +76,9 @@ export function agentFixture(spec, fixture) {
     displayPeers: 16, receiptPeers: 64,
     schemas: Object.fromEntries(["ImageRuntimeIdentityBlocker", "ImageRuntimeUncertainty", "ImageRuntimeIdentityPeer", "ActivityRuntimePeerAdmissionRequest", "ActivityRuntimeDeployAdmissionRequest", "ActivityRuntimeLifecycleAdmissionRequest"].map((name) => [name, { sha256: createHash("sha256").update(JSON.stringify(schemas[name])).digest("hex") }])),
   };
+  if (!schemas.ImageUpdateInfo.properties.latestManifest) throw new Error("missing platform manifest producer");
+  manifest.imageSafety.updateInfoFields = Object.keys(schemas.ImageUpdateInfo.properties);
+  manifest.imageSafety.ageObservationSchemas = Object.fromEntries(["ImageUpdateInfo","ImageupdateResponse","ProjectServiceUpdateInfo","SettingsUpdate"].map(name=>[name,{sha256:createHash("sha256").update(JSON.stringify(schemas[name])).digest("hex")}]));
   manifest.imageSafety.errorCodes = schemas.ImageProblem.properties.code.enum;
   // Referenced schemas are not hashed recursively: the binding detail an agent sends is hashed by name (#594).
   manifest.imageSafety.binding = { sha256: createHash("sha256").update(JSON.stringify(schemas.ImageBinding)).digest("hex") };
@@ -91,7 +94,7 @@ export function agentFixture(spec, fixture) {
     if (!operations?.includes("update-project") || !operations.includes("restore-project") || !operations.includes("update-container") || !operations.includes("restore-container-image"))
       throw new Error("missing lifecycle execution producer");
     manifest.lifecycleOperations = operations;
-    const schemaNames = ["ContainerImageRequest", "LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RecoveryResult", "AppliedCandidate", "VerifiedImageRequest", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata", "UpdateEligibility", "ServiceEligibility"];
+    const schemaNames = ["ContainerImageRequest", "LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ExpectedCandidate", "ImageSelection", "LifecycleResult", "RecoveryResult", "AppliedCandidate", "VerifiedImageRequest", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata", "UpdateEligibility", "ServiceEligibility"];
     const source = readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8");
     const edgeRoutes = [...source.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)]
       .filter((match) => /^(updater\.restore\.|updater\.project\.)/.test(match[3]))
@@ -322,7 +325,7 @@ function formatFixture(value, depth = 0) {
     return `[\n${value.map((item) => child + formatFixture(item, depth + 1)).join(",\n")}\n${indent}]`;
   }
   if (Object.values(value).every((item) => item === null || typeof item !== "object")) return JSON.stringify(value);
-  if (depth >= 3 && JSON.stringify(value).length <= 800) return JSON.stringify(value);
+  if (depth >= 3 && JSON.stringify(value).length <= 1000) return JSON.stringify(value);
   const entries = Object.entries(value);
   if (!entries.length) return "{}";
   return `{\n${entries.map(([key, item]) => `${child}${JSON.stringify(key)}: ${formatFixture(item, depth + 1)}`).join(",\n")}\n${indent}}`;

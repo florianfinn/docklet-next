@@ -433,7 +433,7 @@ func (s *ImageUpdateService) markLegacyImageRefAfterPull(ctx context.Context, im
 					"current_digest": record.CurrentDigest, "last_error": record.LastError, "has_update": record.HasUpdate,
 				}).
 				Updates(map[string]any{
-					"has_update":      false,
+					"has_update": false, "latest_manifest": nil,
 					"update_type":     UpdateTypeDigest,
 					"current_version": tag,
 					"latest_version":  tag,

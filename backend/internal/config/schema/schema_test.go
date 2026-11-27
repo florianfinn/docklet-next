@@ -200,7 +200,7 @@ func countDocumentedSettingOverrides() int {
 		}
 
 		switch tagParts[0] {
-		case "timeZone", "updateCheckInterval", "updateNotify", "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
+		case "timeZone", "updateCheckInterval", "updateNotify", "updateMinimumAgeDays", "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
 			continue
 		}
 		attrs := tagParts[1:]

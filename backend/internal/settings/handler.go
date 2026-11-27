@@ -283,7 +283,7 @@ func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSetti
 	if input.Body.BackupDefaultRetentionCount != nil && (input.EnvironmentID != "0" || h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent)) {
 		return nil, huma.Error400BadRequest("backupDefaultRetentionCount is a hub-only setting")
 	}
-	if (input.Body.TimeZone != nil || input.Body.UpdateCheckInterval != nil || input.Body.UpdateNotify != nil || input.Body.StackStopMode != nil) && (input.EnvironmentID != "0" || (h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent))) {
+	if (input.Body.TimeZone != nil || input.Body.UpdateCheckInterval != nil || input.Body.UpdateNotify != nil || input.Body.UpdateMinimumAgeDays != nil || input.Body.StackStopMode != nil) && (input.EnvironmentID != "0" || (h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent))) {
 		return nil, huma.Error400BadRequest("This setting is hub-only")
 	}
 	if err := h.validateSettingsUpdateInput(ctx, input.Body); err != nil {
@@ -400,7 +400,7 @@ func hasAuthSettingsUpdateInternal(req settings.Update) bool {
 func withoutStackStopMode(values []settings.PublicSetting) []settings.PublicSetting {
 	out := make([]settings.PublicSetting, 0, len(values))
 	for _, setting := range values {
-		if setting.Key != "timeZone" && setting.Key != "updateCheckInterval" && setting.Key != "updateNotify" && setting.Key != "stackStopMode" && setting.Key != "backupDefaultRetentionCount" {
+		if setting.Key != "timeZone" && setting.Key != "updateCheckInterval" && setting.Key != "updateNotify" && setting.Key != "updateMinimumAgeDays" && setting.Key != "stackStopMode" && setting.Key != "backupDefaultRetentionCount" {
 			out = append(out, setting)
 		}
 	}

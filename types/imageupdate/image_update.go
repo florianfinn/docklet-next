@@ -65,7 +65,8 @@ type Response struct {
 	// LatestDigest is the digest (hash) of the latest available image.
 	//
 	// Required: false
-	LatestDigest string `json:"latestDigest,omitempty"`
+	LatestManifest string `json:"latestManifest,omitempty"`
+	LatestDigest   string `json:"latestDigest,omitempty"`
 
 	// Error contains any error message from the update check.
 	//
@@ -149,7 +150,7 @@ type CheckAllImagesRequest struct {
 type BatchResponse map[string]*Response
 
 func FromInfo(i *imageDTO.UpdateInfo) *Response {
-	return &Response{State: i.State, CheckedAt: i.CheckedAt, ImageRef: i.ImageRef, Platform: i.Platform, AuthState: i.AuthState, Code: i.Code, CheckTime: i.CheckTime, HasUpdate: i.HasUpdate, UpdateType: i.UpdateType, CurrentVersion: i.CurrentVersion, LatestVersion: i.LatestVersion, CurrentCreated: i.CurrentCreated, LatestCreated: i.LatestCreated, CurrentDigest: i.CurrentDigest, LatestDigest: i.LatestDigest, Error: i.Error, AuthMethod: i.AuthMethod, UsedCredential: i.UsedCredential}
+	return &Response{State: i.State, CheckedAt: i.CheckedAt, ImageRef: i.ImageRef, Platform: i.Platform, AuthState: i.AuthState, Code: i.Code, CheckTime: i.CheckTime, HasUpdate: i.HasUpdate, UpdateType: i.UpdateType, CurrentVersion: i.CurrentVersion, LatestVersion: i.LatestVersion, CurrentCreated: i.CurrentCreated, LatestCreated: i.LatestCreated, CurrentDigest: i.CurrentDigest, LatestDigest: i.LatestDigest, LatestManifest: i.LatestManifest, Error: i.Error, AuthMethod: i.AuthMethod, UsedCredential: i.UsedCredential}
 }
 
 func (p *BatchImageUpdateRequest) UnmarshalJSON(data []byte) error {

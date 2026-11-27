@@ -31,8 +31,13 @@ const AgentHubV23Fingerprint = "7f484ee06162f4c9fa320d0d7f22c5be1931c8aa1654970b
 // sends it to a v24 agent (update-required instead), which still refuses such targets with unsupported-metadata.
 const AgentHubV24Fingerprint = "549960ad70ae87d655e8f2531ee1e6b727e21fb7e7b3f97f6ec835bbeb09c1ca"
 
+const AgentHubV25Fingerprint = "3e0217be385b6cfe40199727ef6f5fbe61c8cd4df588254363fd86f39c2f8ab1"
+
 // AgentCompatible rejects older contracts and a changed schema at the same version.
 func AgentCompatible(version int, fingerprint string) bool {
+	if version == 25 {
+		return fingerprint == AgentHubV25Fingerprint
+	}
 	if version == 24 {
 		return fingerprint == AgentHubV24Fingerprint
 	}
@@ -75,5 +80,5 @@ func AgentRecoveryRoute(method, path string) bool {
 func ModuleCompatible(version int, fingerprint string) bool {
 	// Proxy module requests changed in contract 20 (M28: resolvers, certificate check,
 	// operation kind), so v19 agents get update-required for every module request.
-	return (version == 20 && fingerprint == AgentHubV20Fingerprint) || (version == 21 && fingerprint == AgentHubV21Fingerprint) || (version == 22 && fingerprint == AgentHubV22Fingerprint) || (version == 23 && fingerprint == AgentHubV23Fingerprint) || (version == 24 && fingerprint == AgentHubV24Fingerprint) || (version >= 25 && fingerprint == AgentHubFingerprint)
+	return (version == 20 && fingerprint == AgentHubV20Fingerprint) || (version == 21 && fingerprint == AgentHubV21Fingerprint) || (version == 22 && fingerprint == AgentHubV22Fingerprint) || (version == 23 && fingerprint == AgentHubV23Fingerprint) || (version == 24 && fingerprint == AgentHubV24Fingerprint) || (version == 25 && fingerprint == AgentHubV25Fingerprint) || (version >= 26 && fingerprint == AgentHubFingerprint)
 }

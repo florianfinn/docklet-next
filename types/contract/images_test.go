@@ -18,10 +18,11 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
-	body, err := os.ReadFile("testdata/agent-hub-v25.json")
+	body, err := os.ReadFile("testdata/agent-hub-v26.json")
 	require.NoError(t, err)
 	sum := sha256.Sum256(body)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(sum[:]))
@@ -31,7 +32,7 @@ func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
 		ImageSafety struct{ RegistryTestFields, RegistryPublicFields, UpdateInfoFields, PruneFields, ProtectionFields, ErrorCodes, InactiveCapabilities, Capabilities, UpdateStates []string }
 	}
 	require.NoError(t, json.Unmarshal(body, &fixture))
-	require.Equal(t, 25, AgentHubVersion)
+	require.Equal(t, 26, AgentHubVersion)
 	require.Equal(t, 18, MinimumAgentVersion)
 	require.Equal(t, AgentHubVersion, fixture.Version)
 	require.Equal(t, MinimumAgentVersion, fixture.Minimum)
@@ -44,7 +45,7 @@ func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
 	for _, entry := range []struct {
 		value  any
 		fields []string
-	}{{containerregistry.RegistryTestResult{Code: "registry.authentication-failed"}, fixture.ImageSafety.RegistryTestFields}, {containerregistry.ContainerRegistry{Description: &description, AWSRegion: "example-region"}, fixture.ImageSafety.RegistryPublicFields}, {imageDTO.UpdateInfo{Platform: "linux/amd64", Code: "update.check-unavailable", AuthMethod: "anonymous", AuthRegistry: "registry.example.com", UsedCredential: true}, fixture.ImageSafety.UpdateInfoFields}, {imageDTO.PruneReport{ImagesDeleted: []string{}, Skipped: []imageDTO.PruneItem{}, Failed: []imageDTO.PruneItem{}}, fixture.ImageSafety.PruneFields}, {imageDTO.Protection{Reason: "restore-point", OwnerID: "point"}, fixture.ImageSafety.ProtectionFields}} {
+	}{{containerregistry.RegistryTestResult{Code: "registry.authentication-failed"}, fixture.ImageSafety.RegistryTestFields}, {containerregistry.ContainerRegistry{Description: &description, AWSRegion: "example-region"}, fixture.ImageSafety.RegistryPublicFields}, {imageDTO.UpdateInfo{CurrentCreated: new(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)), LatestCreated: new(time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)), LatestManifest: "sha256:" + strings.Repeat("a", 64), Platform: "linux/amd64", Code: "update.check-unavailable", AuthMethod: "anonymous", AuthRegistry: "registry.example.com", UsedCredential: true}, fixture.ImageSafety.UpdateInfoFields}, {imageDTO.PruneReport{ImagesDeleted: []string{}, Skipped: []imageDTO.PruneItem{}, Failed: []imageDTO.PruneItem{}}, fixture.ImageSafety.PruneFields}, {imageDTO.Protection{Reason: "restore-point", OwnerID: "point"}, fixture.ImageSafety.ProtectionFields}} {
 		encoded, e := json.Marshal(entry.value)
 		require.NoError(t, e)
 		var actual map[string]json.RawMessage
