@@ -78,6 +78,32 @@ func TestSuccessfulCanceledWorkPersistsAndTerminalRedeliveryDoesNothing(t *testi
 	}
 }
 
+// A cancelled job that reports incomplete work without an error stays claimed for startup reconciliation.
+func TestCanceledIncompleteOutcomeIsLeftForReconciliation(t *testing.T) {
+	for _, status := range []st.RunStatus{st.Partial, st.Failed} {
+		t.Run(string(status), func(t *testing.T) {
+			q := newResolutionQueueInternal(t)
+			entered := make(chan struct{})
+			q.SetExecutor(func(ctx context.Context, _ st.Run) (st.Outcome, error) {
+				close(entered)
+				<-ctx.Done()
+				return st.Outcome{Status: status}, nil
+			}, nil)
+			run, err := q.Submit(t.Context(), st.Request{JobID: "shutdown-incomplete"})
+			require.NoError(t, err)
+			require.NoError(t, q.Start(t.Context(), t.Context()))
+			q.Activate()
+			<-entered
+			stopCtx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+			defer cancel()
+			require.NoError(t, q.Stop(stopCtx))
+			stored, err := q.Get(t.Context(), "0", run.JobID, run.ID)
+			require.NoError(t, err)
+			require.Equal(t, st.Running, stored.Status)
+		})
+	}
+}
+
 func TestOutcomeContextRespectsStopBudgetAndDrain(t *testing.T) {
 	q := newResolutionQueueInternal(t)
 	ctx, cancel := context.WithCancel(t.Context())

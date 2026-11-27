@@ -295,7 +295,8 @@ func (a *executorActorInternal) Job(ctx context.Context, _ string, data actor.En
 	if runErr != nil && outcome.Message == "" {
 		outcome.Message = runErr.Error()
 	}
-	if runErr != nil && ctx.Err() != nil {
+	// After cancellation only completed work is persisted; anything else stays claimed for reconciliation.
+	if ctx.Err() != nil && (runErr != nil || (outcome.Status != st.Succeeded && outcome.Status != st.Skipped)) {
 		return ctx.Err()
 	}
 	persistCtx, cancel := q.outcomeContextInternal(ctx)
