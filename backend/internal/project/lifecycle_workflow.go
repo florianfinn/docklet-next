@@ -253,6 +253,13 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	// Deploy from actual freshly loaded files, with complete frozen service IDs.
 	desired.Model = fresh.Model
 	desired.SavedRevision = fresh.SavedRevision
+	// Restart dependents join the deploy with their current images: they are
+	// verified before any effect and checked after the deploy like the
+	// requested services, while image selection stays on the request.
+	services, err = lifecycleWithRestartDependents(desired, services, intent.Request.PointID != "")
+	if err != nil {
+		return result, err
+	}
 	if err = s.verifyLifecycleReferences(ctx, desired, services...); err != nil {
 		return result, err
 	}
@@ -366,27 +373,6 @@ func (s *ProjectService) verifyLifecycleReferences(ctx context.Context, snap *li
 func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapshot, restore bool, source *life.Snapshot, services ...string) error {
 	if err := s.checkLifecycleExternal(ctx, snap, source); err != nil {
 		return err
-	}
-	if len(services) > 0 && !restore {
-		dependencyModel, err := lifecycleDeployModel(snap, nil)
-		if err != nil {
-			return err
-		}
-		for changed := true; changed; {
-			changed = false
-			for name, svc := range dependencyModel.Services {
-				if slices.Contains(services, name) {
-					continue
-				}
-				for dependency, condition := range svc.DependsOn {
-					if condition.Restart && slices.Contains(services, dependency) {
-						services = append(services, name)
-						changed = true
-						break
-					}
-				}
-			}
-		}
 	}
 	// This model is ephemeral: actual files remain the sole source on later deploy.
 	model, orderErr := lifecycleDeployModel(snap, services)
@@ -566,4 +552,34 @@ func (s *ProjectService) recordLifecycleResult(ctx context.Context, run string, 
 	if result != nil && result.RunID == run {
 		dto.RecordLifecycleResult(ctx, *result)
 	}
+}
+
+// lifecycleWithRestartDependents adds every service that depends on a selected
+// service with `restart: true`, transitively. A whole-stack or restore scope is
+// returned unchanged.
+func lifecycleWithRestartDependents(snap *life.Snapshot, services []string, restore bool) ([]string, error) {
+	if len(services) == 0 || restore {
+		return services, nil
+	}
+	model, err := lifecycleDeployModel(snap, nil)
+	if err != nil {
+		return nil, err
+	}
+	scope := slices.Clone(services)
+	for changed := true; changed; {
+		changed = false
+		for name, svc := range model.Services {
+			if slices.Contains(scope, name) {
+				continue
+			}
+			for dependency, condition := range svc.DependsOn {
+				if condition.Restart && slices.Contains(scope, dependency) {
+					scope = append(scope, name)
+					changed = true
+					break
+				}
+			}
+		}
+	}
+	return scope, nil
 }
