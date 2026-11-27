@@ -29,3 +29,15 @@ func (s *RoleService) assertGlobalAdminExistsInDB(ctx context.Context, tx *gorm.
 	}
 	return nil
 }
+
+// demotesAdminInternal reports whether a role change removed global admin
+// rights from at least one affected user; only such a change can leave the
+// hub without an administrator.
+func demotesAdminInternal(wasAdmin, isAdmin []bool) bool {
+	for i := range wasAdmin {
+		if wasAdmin[i] && !isAdmin[i] {
+			return true
+		}
+	}
+	return false
+}

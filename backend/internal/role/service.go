@@ -235,7 +235,7 @@ func (s *RoleService) UpdateRole(ctx context.Context, id, name string, descripti
 		}
 		out = existing
 		isAdmin, err = s.adminStatusInDB(ctx, tx, ids)
-		if err != nil {
+		if err != nil || !demotesAdminInternal(wasAdmin, isAdmin) {
 			return err
 		}
 		return s.assertGlobalAdminExistsInDB(ctx, tx)
@@ -281,7 +281,7 @@ func (s *RoleService) DeleteRole(ctx context.Context, id string) error {
 			return common.ErrRoleNotFound
 		}
 		isAdmin, err = s.adminStatusInDB(ctx, tx, ids)
-		if err != nil {
+		if err != nil || !demotesAdminInternal(wasAdmin, isAdmin) {
 			return err
 		}
 		return s.assertGlobalAdminExistsInDB(ctx, tx)
