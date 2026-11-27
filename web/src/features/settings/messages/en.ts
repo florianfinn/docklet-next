@@ -429,6 +429,13 @@ export const enSettings = {
       customHeaders: "Headers",
     },
     tlsModes: { starttls: "STARTTLS", ssl: "TLS (SSL)", none: "None" },
+    nameHint: "Shown only in Docklet to tell targets apart.",
+    hints: {
+      discordWebhook: "Paste the webhook address from Discord (channel settings → Integrations → Webhooks → Copy webhook URL).",
+      discordUsername: "Optional. Replaces the name set for the webhook in Discord; leave empty to keep it.",
+      slackCredential: "Bot token (xoxb-…) or the full incoming webhook address from Slack.",
+    },
+    discordWebhookInvalid: "Enter the full Discord webhook address: https://discord.com/api/webhooks/…",
     hostHint: "Host name or IP address only, without https:// or a path.",
     listHint: "One entry per line or separated by commas.",
     headersHint: "One header per line as Name: value.",

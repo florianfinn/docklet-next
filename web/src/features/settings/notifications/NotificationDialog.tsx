@@ -23,7 +23,7 @@ import { Spinner } from "@/shared/ui/spinner";
 import { Switch } from "@/shared/ui/switch";
 import { Textarea } from "@/shared/ui/textarea";
 
-import { DEFAULTS, FIELDS, TARGET_FIELD, fromText, toText, type FieldSpec } from "./fields";
+import { DEFAULTS, FIELDS, TARGET_FIELD, fromText, parseDiscordWebhook, toText, type FieldSpec } from "./fields";
 import { ProviderIcon } from "./ProviderIcon";
 
 /**
@@ -70,9 +70,14 @@ export function NotificationDialog({ target, available, names = [], save, onClos
   const secretsMissing = addressChanged && [...stored].some((key) => !config[key]);
 
   const value = (spec: FieldSpec) => texts[spec.key] ?? toText(spec.kind, config[spec.key]);
+  // An empty Discord address keeps the stored webhook; an unparsable one blocks saving.
+  const webhookInvalid = provider === "discord" && !!texts.token?.trim() && !parseDiscordWebhook(texts.token);
   const set = (spec: FieldSpec, text: string) => {
     setTexts((old) => ({ ...old, [spec.key]: text }));
-    setConfig((old) => ({ ...old, [spec.key]: fromText(spec.kind, text, provider!, spec.key) }));
+    if (spec.kind === "discordWebhook") {
+      const parsed = parseDiscordWebhook(text);
+      setConfig((old) => ({ ...old, webhookId: parsed?.webhookId ?? target?.config.webhookId ?? "", token: parsed?.token ?? "" }));
+    } else setConfig((old) => ({ ...old, [spec.key]: fromText(spec.kind, text, provider!, spec.key) }));
     if (error?.field === spec.key) setError(undefined);
   };
   const fieldError = (key: string) => (error?.field === key ? t("fieldInvalid") : undefined);
@@ -117,20 +122,20 @@ export function NotificationDialog({ target, available, names = [], save, onClos
           {fieldError(spec.key) && <p className="text-sm text-destructive">{fieldError(spec.key)}</p>}
         </Field>
       );
-    const secret = spec.kind === "secret";
+    const secret = spec.kind === "secret" || spec.kind === "discordWebhook";
     return (
       <TextField
         key={spec.key}
         id={id}
-        label={label}
+        label={spec.kind === "discordWebhook" ? t("fields.webhookUrl") : label}
         type={secret ? "password" : spec.kind === "number" ? "number" : "text"}
         mono={spec.kind !== "text"}
         value={value(spec)}
         onChange={(v) => set(spec, v)}
         autoComplete={secret ? "new-password" : undefined}
         help={secret ? "settingsNotifications.secret" : undefined}
-        description={secret && stored.has(spec.key) ? t("secretKeep") : spec.kind === "host" ? t("hostHint") : undefined}
-        error={fieldError(spec.key)}
+        description={secret && stored.has(spec.key) ? t("secretKeep") : spec.hint ? t(`hints.${spec.hint}`) : spec.kind === "host" ? t("hostHint") : undefined}
+        error={spec.kind === "discordWebhook" && webhookInvalid ? t("discordWebhookInvalid") : fieldError(spec.key)}
       />
     );
   };
@@ -163,14 +168,15 @@ export function NotificationDialog({ target, available, names = [], save, onClos
                 onSaved();
               } catch (cause) {
                 if (cause instanceof CancelledError) return;
-                const pointer = cause instanceof SettingsProblemError ? cause.field?.match(/^\/config\/([^/]+)/)?.[1] : undefined;
+                const raw = cause instanceof SettingsProblemError ? cause.field?.match(/^\/config\/([^/]+)/)?.[1] : undefined;
+                const pointer = provider === "discord" && raw === "webhookId" ? "token" : raw;
                 setError({ message: settingsErrorMessage(cause, all), field: pointer });
               } finally {
                 setBusy(false);
               }
             }}
           >
-            <TextField id="nt-name" label={t("name")} value={name} onChange={setName} error={fieldError("name")} />
+            <TextField id="nt-name" label={t("name")} value={name} onChange={setName} description={t("nameHint")} error={fieldError("name")} />
             {provider === "generic" && <p className="rounded-lg border bg-card/40 p-3 text-xs text-muted-foreground">{t("genericVisible")}</p>}
             {FIELDS[provider].map(field)}
             {secretsMissing && <p className="text-xs text-warning">{t("addressNeedsSecret")}</p>}
@@ -196,7 +202,7 @@ export function NotificationDialog({ target, available, names = [], save, onClos
                   {t("back")}
                 </Button>
               ) : <span />}
-              <Button type="submit" disabled={busy || !name.trim() || [...name.trim()].length > 64}>
+              <Button type="submit" disabled={busy || webhookInvalid || !name.trim() || [...name.trim()].length > 64}>
                 {busy && <Spinner data-icon="inline-start" />}
                 {t("save")}
               </Button>

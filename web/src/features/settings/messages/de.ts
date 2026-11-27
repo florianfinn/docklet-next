@@ -430,6 +430,13 @@ export const deSettings: typeof enSettings = {
       customHeaders: "Header",
     },
     tlsModes: { starttls: "STARTTLS", ssl: "TLS (SSL)", none: "Keine" },
+    nameHint: "Nur in Docklet sichtbar, um Ziele zu unterscheiden.",
+    hints: {
+      discordWebhook: "Webhook-Adresse aus Discord einfügen (Kanaleinstellungen → Integrationen → Webhooks → Webhook-URL kopieren).",
+      discordUsername: "Optional. Ersetzt den in Discord für den Webhook festgelegten Namen; leer lassen, um ihn zu behalten.",
+      slackCredential: "Bot-Token (xoxb-…) oder die vollständige Webhook-Adresse aus Slack.",
+    },
+    discordWebhookInvalid: "Bitte die vollständige Discord-Webhook-Adresse eintragen: https://discord.com/api/webhooks/…",
     hostHint: "Nur Hostname oder IP-Adresse, ohne https:// und Pfad.",
     listHint: "Ein Eintrag je Zeile oder durch Kommas getrennt.",
     headersHint: "Ein Header je Zeile als Name: Wert.",
