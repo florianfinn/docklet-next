@@ -7,6 +7,7 @@
 package runs
 
 import (
+	"cmp"
 	"context"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
@@ -78,18 +79,22 @@ func TestSuccessfulCanceledWorkPersistsAndTerminalRedeliveryDoesNothing(t *testi
 	}
 }
 
-// A cancelled job that reports incomplete work without an error stays claimed for startup reconciliation.
-func TestCanceledIncompleteOutcomeIsLeftForReconciliation(t *testing.T) {
-	for _, status := range []st.RunStatus{st.Partial, st.Failed} {
-		t.Run(string(status), func(t *testing.T) {
+// After the shutdown cancel a determined nil-error result persists whatever its status; a cancellation
+// error leaves the claim for startup reconciliation.
+func TestCanceledOutcomeKeepsDeterminedResultsAndLeavesInterruptions(t *testing.T) {
+	for _, status := range []st.RunStatus{st.Partial, st.Failed, ""} {
+		t.Run(cmp.Or(string(status), "interrupted"), func(t *testing.T) {
 			q := newResolutionQueueInternal(t)
 			entered := make(chan struct{})
 			q.SetExecutor(func(ctx context.Context, _ st.Run) (st.Outcome, error) {
 				close(entered)
 				<-ctx.Done()
+				if status == "" {
+					return st.Outcome{Status: st.Partial}, ctx.Err()
+				}
 				return st.Outcome{Status: status}, nil
 			}, nil)
-			run, err := q.Submit(t.Context(), st.Request{JobID: "shutdown-incomplete"})
+			run, err := q.Submit(t.Context(), st.Request{JobID: "shutdown-determined"})
 			require.NoError(t, err)
 			require.NoError(t, q.Start(t.Context(), t.Context()))
 			q.Activate()
@@ -99,7 +104,7 @@ func TestCanceledIncompleteOutcomeIsLeftForReconciliation(t *testing.T) {
 			require.NoError(t, q.Stop(stopCtx))
 			stored, err := q.Get(t.Context(), "0", run.JobID, run.ID)
 			require.NoError(t, err)
-			require.Equal(t, st.Running, stored.Status)
+			require.Equal(t, cmp.Or(status, st.Running), stored.Status)
 		})
 	}
 }

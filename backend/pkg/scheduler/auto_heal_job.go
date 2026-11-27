@@ -174,6 +174,14 @@ func (j *AutoHealJob) Run(ctx context.Context) (st.Outcome, error) {
 		// A worker error, including a recovered panic, fails the run; the scheduler keeps a set status.
 		outcome.Status = st.Failed
 	}
+	return autoHealResultInternal(ctx, outcome, err)
+}
+
+// An attempt interrupted by shutdown reports cancellation, so the claim stays for startup reconciliation.
+func autoHealResultInternal(ctx context.Context, outcome st.Outcome, err error) (st.Outcome, error) {
+	if err == nil && ctx.Err() != nil && outcome.Status == st.Partial {
+		return outcome, ctx.Err()
+	}
 	return outcome, err
 }
 func (j *AutoHealJob) recover(ctx context.Context, cli *client.Client) error {
@@ -486,5 +494,5 @@ func (j *AutoHealJob) resumeHealingPlanInternal(ctx context.Context, cli *client
 			outcome.Status = st.Partial
 		}
 	}
-	return outcome, nil
+	return autoHealResultInternal(ctx, outcome, nil)
 }
