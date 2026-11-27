@@ -28,6 +28,7 @@ export function decodeProxyOperation(body: unknown): ProxyOperation {
   if (v.kind === "adoption" && !validAdoptionRecord(v)) throw new Error("proxy.invalid-response");
   if (typeof v.digest !== "string" || (v.digest === "" && !validAdoptionRecord(v))) throw new Error("proxy.invalid-response");
   if (!["id", "instanceId", "generation", "registration", "createdAt"].every((k) => typeof v[k] === "string" && v[k] !== "") || !fileState(v.old) || !fileState(v.new) || (v.current !== undefined && !fileState(v.current)) || (v.diagnostic !== undefined && !diagnostic(v.diagnostic))) throw new Error("proxy.invalid-response");
+  if (v.metadataLoss !== undefined && !metadataLoss(v.metadataLoss)) throw new Error("proxy.invalid-response");
   return v as ProxyOperation;
 }
 // Presentation retains route verification and resolver application as distinct outcomes.
@@ -90,4 +91,14 @@ function validAdoptionRecord(v: Record<string, unknown>): boolean {
  const a=v.adoption;
  return v.kind==="adoption" && v.state==="applied" && v.phase==="applied" && timestamp(v.finishedAt) && record(a) &&
  [a.previousContainerId,a.containerId].every(x=>typeof x==="string" && x.length>0 && x.length<=128) && a.previousContainerId!==a.containerId && timestamp(a.startedAt);
+}
+
+/** Loss details are untrusted agent data; values never include attribute contents. */
+function metadataLoss(v: unknown): boolean {
+ return Array.isArray(v) && v.length <= 16 && v.every(x =>
+  record(x) && typeof x.path === "string" && x.path.length <= 1024 &&
+  (x.attributes === undefined || (Array.isArray(x.attributes) && x.attributes.length <= 64 &&
+   x.attributes.every(n => typeof n === "string" && new TextEncoder().encode(n).length <= 255 && /^[^\p{C}]+$/u.test(n)))) &&
+  (x.links === undefined || (Number.isInteger(x.links) && (x.links as number) >= 0 && (x.links as number) <= 1024)) &&
+  typeof x.token === "string" && /^[a-f0-9]{64}$/.test(x.token));
 }

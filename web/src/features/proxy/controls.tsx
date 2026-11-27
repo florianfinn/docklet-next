@@ -5,8 +5,10 @@
 // Deviations: Original production proxy Manager implementation. M34 #549: hidden select labels, wide dialog and eligibility badge.
 
 import { ToneBadge } from "@/shared/components/tone";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
+import { Button } from "@/shared/ui/button";
+import { MODULE_CODE_KEYS } from "@/data/wire-catalogue-modules";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Label } from "@/shared/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
@@ -133,7 +135,7 @@ export function Diagnostic({ value }: { value?: { path?: string; line?: number; 
 export function Reason({ code }: { code?: string }) {
   const t = useTranslations();
   if (!code) return null;
-  const key = PROXY_REASON_KEYS[code as keyof typeof PROXY_REASON_KEYS];
+  const key = PROXY_REASON_KEYS[code as keyof typeof PROXY_REASON_KEYS] ?? MODULE_CODE_KEYS[code as keyof typeof MODULE_CODE_KEYS];
   return <span>{key ? t(key) : t("proxyContract.ui.unknownReason", { code })}</span>;
 }
 export function EligibilityView({ value }: { value: Eligibility }) {
@@ -162,7 +164,7 @@ export function ErrorView({ error }: { error: unknown }) {
   );
 }
 /** A definite refusal shown inside the open dialog so the draft can be corrected. */
-export function RefusalView({ refusal }: { refusal?: unknown }) {
+export function RefusalView({ refusal, retry, busy }: { refusal?: unknown; retry?: () => void; busy?: boolean }) {
   const t = useTranslations("proxyContract.ui");
   if (refusal === undefined) return null;
   if (refusal instanceof Error) return <ErrorView error={refusal} />;
@@ -172,6 +174,9 @@ export function RefusalView({ refusal }: { refusal?: unknown }) {
       <p>{t("refused")}</p>
       <Reason code={op.reason} />
       <Diagnostic value={op.diagnostic} />
+      <MetadataLossList loss={op.metadataLoss} />
+      {op.state === "rejected" && op.reason === "metadata-loss" && !!op.metadataLoss?.length && retry &&
+        <MetadataRetry key={JSON.stringify(op)} retry={retry} busy={busy} />}
     </div>
   );
 }
@@ -215,4 +220,25 @@ export function AcknowledgementFields({
       )}
     </div>
   );
+}
+
+export function MetadataLossList({ loss }: { loss?: Operation["metadataLoss"] }) {
+  const t = useTranslations("proxyContract.ui");
+  if (!loss?.length) return null;
+  return <div className="space-y-2 [overflow-wrap:anywhere]">
+    <p>{t("metadataPermanent")}</p>
+    <ul className="space-y-2">{loss.map((entry, i) => <li key={i}>
+      <p className="font-mono text-xs">{entry.path}</p>
+      <ul>{entry.attributes?.map(name => <li key={name} className="font-mono text-xs">{name}</li>)}</ul>
+      {!!entry.links && <p>{t("metadataLinks", { count: entry.links })}</p>}
+    </li>)}</ul>
+  </div>;
+}
+function MetadataRetry({ retry, busy }: { retry: () => void; busy?: boolean }) {
+  const t = useTranslations("proxyContract.ui");
+  const [confirmed, setConfirmed] = useState(false);
+  return <div className="grid gap-3">
+    <ConfirmCheck checked={confirmed} onChange={setConfirmed} disabled={busy}>{t("metadataAck")}</ConfirmCheck>
+    <Button type="button" disabled={!confirmed || busy} onClick={() => { if (confirmed && !busy) retry(); }}>{t("metadataRetry")}</Button>
+  </div>;
 }

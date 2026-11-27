@@ -10,7 +10,7 @@ import { CertificateObservation } from "./CertificateObservation";
 import { proxyOutcome } from "@/data/http/proxy-decoder";
 import { Button } from "@/shared/ui/button";
 import { ToneBadge } from "@/shared/components/tone";
-import { ConfirmCheck, Diagnostic, ProxyDialog, Reason } from "./controls";
+import { ConfirmCheck, Diagnostic, MetadataLossList, ProxyDialog, Reason } from "./controls";
 import type { FileState, Operation, Release } from "./types";
 
 function TargetState({ title, state }: { title: string; state?: FileState }) {
@@ -85,6 +85,7 @@ export function Operations({
             <p className="break-all font-mono text-xs">{row.target}</p>
             <Reason code={row.reason} />
             <Diagnostic value={row.diagnostic} />
+            <MetadataLossList loss={row.metadataLoss} />
             {row.probe?.client === "wget" && <p className="text-xs">{ui("certificateUnavailable")}</p>}
             {row.certificate && <CertificateObservation value={row.certificate} />}
             {row.state === "recovery-required" && (
