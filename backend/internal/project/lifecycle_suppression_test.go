@@ -102,6 +102,7 @@ func TestObservedStackMixedSuppressionRetainsExistingGuards(t *testing.T) {
 			}
 			intent.Selections = append(intent.Selections, dto.ImageSelection{Service: "running", SourceReference: sourceRef, Reference: reference, Digest: lifecycleDigest, ImageID: lifecycleNewID, Platform: "linux/amd64", Kind: kind})
 			intent.Policy.Suppressed = []dto.SuppressedCandidate{{Service: "app", Repository: "registry.example.com/app", Platform: "linux/amd64", Manifest: lifecycleDigest}}
+			intent.Policy.Expected = []dto.ExpectedCandidate{{Service: "app", Manifest: lifecycleDigest}, {Service: "running", Manifest: lifecycleDigest}}
 			f.up = func(_ context.Context, model *compose.Project) error {
 				require.Len(t, model.Services, 1)
 				require.Contains(t, model.Services, "running")

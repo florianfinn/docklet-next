@@ -177,10 +177,11 @@ func TestObservedCommandValidationAndHash(t *testing.T) {
 			} else {
 				c.Options.ContainerImage.AutoRestore = false
 			}
+			binding.Expected = []dto.ExpectedCandidate{{Service: "app", Manifest: "sha256:" + strings.Repeat("a", 64)}}
 			binding.Suppressed = []dto.SuppressedCandidate{{Repository: "registry.example.com/app", Platform: "linux/amd64", Manifest: "sha256:" + strings.Repeat("b", 64)}}
 			canonical, err := runtimeCanonicalizeInternal(c)
 			require.NoError(t, err)
-			binding.Suppressed[0].Manifest = "sha256:" + strings.Repeat("c", 64)
+			binding.Expected[0].Manifest = "sha256:" + strings.Repeat("c", 64)
 			changed, err := runtimeCanonicalizeInternal(c)
 			require.NoError(t, err)
 			require.NotEqual(t, canonical.digest, changed.digest)

@@ -21,7 +21,13 @@ func (s *ActivityService) AdmitPolicyContainerUpdate(ctx context.Context, env, t
 	if s == nil || s.runtimeHTTP == nil {
 		return RuntimeAdmissionResult{}, ErrRuntimeNotReady
 	}
-	admitted, _, err := s.runtimeHTTP.admit(ctx, env, key, RuntimeUpdateContainer, RuntimeTarget{Kind: "container", ID: target}, RuntimeOptions{ContainerImage: &dto.ContainerImageRequest{Policy: &binding}})
+	expected := ""
+	if len(binding.Expected) == 1 {
+		expected = binding.Expected[0].Manifest
+	}
+	// Containers use the established manifest pin, including on older agents.
+	binding.Expected = nil
+	admitted, _, err := s.runtimeHTTP.admit(ctx, env, key, RuntimeUpdateContainer, RuntimeTarget{Kind: "container", ID: target}, RuntimeOptions{ContainerImage: &dto.ContainerImageRequest{Policy: &binding, ExpectedManifest: expected}})
 	return admitted, err
 }
 

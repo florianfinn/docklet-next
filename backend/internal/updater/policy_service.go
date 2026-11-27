@@ -30,18 +30,19 @@ import (
 )
 
 type imagePolicyPorts struct {
-	targets        func(context.Context, string) ([]updateTarget, error)
-	checkContainer func(context.Context, string, updateTarget) (*projectDTO.UpdateInfo, error)
-	admitContainer func(context.Context, string, string, string, dto.PolicyBinding) (activity.RuntimeAdmissionResult, error)
-	hints          func(context.Context, string) (dto.SystemImageHints, error)
-	host           func(context.Context, string) (string, error)
-	actor          func(context.Context, string, string, string, bool) (context.Context, error)
-	baseline       func(context.Context, string, string) (dto.BaselineStatus, error)
-	check          func(context.Context, string, string) (*projectDTO.UpdateInfo, error)
-	admit          func(context.Context, string, string, string, dto.LifecycleRequest, dto.PolicyBinding) (activity.RuntimeAdmissionResult, error)
-	wait           func(context.Context, string, string) (activityDTO.RuntimeSnapshot, error)
-	snapshot       func(context.Context, string, string) (activityDTO.RuntimeSnapshot, bool, error)
-	notify         func(context.Context, string, string, dto.UpdateCandidate) (int, error)
+	contractVersion func(context.Context, string) (int, error)
+	targets         func(context.Context, string) ([]updateTarget, error)
+	checkContainer  func(context.Context, string, updateTarget) (*projectDTO.UpdateInfo, error)
+	admitContainer  func(context.Context, string, string, string, dto.PolicyBinding) (activity.RuntimeAdmissionResult, error)
+	hints           func(context.Context, string) (dto.SystemImageHints, error)
+	host            func(context.Context, string) (string, error)
+	actor           func(context.Context, string, string, string, bool) (context.Context, error)
+	baseline        func(context.Context, string, string) (dto.BaselineStatus, error)
+	check           func(context.Context, string, string) (*projectDTO.UpdateInfo, error)
+	admit           func(context.Context, string, string, string, dto.LifecycleRequest, dto.PolicyBinding) (activity.RuntimeAdmissionResult, error)
+	wait            func(context.Context, string, string) (activityDTO.RuntimeSnapshot, error)
+	snapshot        func(context.Context, string, string) (activityDTO.RuntimeSnapshot, bool, error)
+	notify          func(context.Context, string, string, dto.UpdateCandidate) (int, error)
 }
 
 func UpdateWindowJobKey(env, kind, target string) string {
@@ -105,6 +106,22 @@ func (s *UpdaterService) ConfigureImagePolicies(envs *environment.EnvironmentSer
 		}
 		_, err := envs.GetEnvironmentByID(ctx, env)
 		return env, err
+	}
+	p.ports.contractVersion = func(ctx context.Context, env string) (int, error) {
+		if env == "0" {
+			return dto.MinimumAgeContractVersion, nil
+		}
+		if envs == nil {
+			return 0, environment.ErrAgentUpdateRequired
+		}
+		info, err := envs.CheckAgentCompatibility(ctx, env)
+		if err != nil {
+			return 0, err
+		}
+		if info == nil {
+			return 0, environment.ErrAgentUpdateRequired
+		}
+		return info.AgentContractVersion, nil
 	}
 	p.ports.actor = s.imagePolicyActor
 	p.ports.baseline = s.imagePolicyBaseline(envs)
@@ -207,7 +224,8 @@ func (s *UpdaterService) imagePolicy(ctx context.Context, env, target string, li
 	if row.Candidates != "" && json.Unmarshal([]byte(row.Candidates), &out.Candidates) != nil {
 		return out, imageDTO.Failure("update.persistence-failed", 500)
 	}
-	return out, nil
+	out.Candidates, err = p.store.AgeCandidates(ctx, out.Candidates, s.minimumAgeDays(ctx), *policyNow())
+	return out, err
 }
 func (s *UpdaterService) SaveImagePolicy(ctx context.Context, env, target string, in dto.UpdatePolicyInput, actor, key string, kinds ...string) (dto.AutoUpdatePolicy, error) {
 	p, err := s.hubPolicies()

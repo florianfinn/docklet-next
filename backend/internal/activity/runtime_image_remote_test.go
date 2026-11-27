@@ -110,7 +110,8 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 		}
 		return id
 	}
-	verified := len(verifiedMode) > 0
+	expectedOnly := len(verifiedMode) > 0 && strings.HasPrefix(verifiedMode[0], "expected")
+	verified := len(verifiedMode) > 0 && !expectedOnly
 	repository := "registry.example.com/app"
 	var candidateTag name.Tag
 	var movedImage v1.Image
@@ -358,6 +359,13 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 			require.NoError(t, err)
 			require.True(t, fresh)
 			intent.Policy = &dto.PolicyBinding{PolicyID: one.ID, Revision: 1, JobRunID: child.JobRunID, ChildID: child.ID}
+			if expectedOnly {
+				manifest := digest
+				if verifiedMode[0] == "expected-miss" {
+					manifest = "sha256:" + strings.Repeat("a", 64)
+				}
+				intent.Policy.Expected = []dto.ExpectedCandidate{{Service: "app", Manifest: manifest}}
+			}
 			command.ProposedRunID, command.Key = child.ID, child.ID
 		}
 		admitted, err := f.hub.Admit(t.Context(), command)
@@ -373,6 +381,12 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 		require.NoError(t, f.control.WaitDispatch(ctx, ref.RunID))
 		agent, err := f.agent.waitLocal(ref.RunID)
 		require.NoError(t, err)
+		if expectedOnly && verifiedMode[0] == "expected-miss" {
+			require.Equal(t, activityDTO.StatusFailed, agent.Status)
+			require.Equal(t, "update.minimum-age", agent.ImageLifecycle.Code)
+			require.Equal(t, beforeEffects, len(runtimeEffectEvents(f.agent.http.snapshot())))
+			return agent
+		}
 		if verified && verifiedMode[0] == "moved" {
 			require.Equal(t, activityDTO.StatusFailed, agent.Status)
 			require.NotNil(t, agent.ImageLifecycle)
@@ -395,7 +409,7 @@ func testRuntimeImagePlatform(t *testing.T, store string, isEdge bool, requested
 	}
 	f.loseAck.Store(true)
 	updated := run(activity.RuntimeUpdateProject, intent)
-	if verified {
+	if verified || expectedOnly {
 		return
 	}
 	body, err := os.ReadFile(filepath.Join(path, "compose.yaml"))
@@ -439,6 +453,14 @@ func TestVerifiedServiceDirectEdgeMovedAndPinned(t *testing.T) {
 	for _, edge := range []bool{false, true} {
 		for _, mode := range []string{"moved", "stable"} {
 			t.Run(fmt.Sprint(edge)+"/"+mode, func(t *testing.T) { testRuntimeImagePlatform(t, "classic", edge, "linux/amd64", false, mode) })
+		}
+	}
+}
+
+func TestExpectedManifestActualDirectEdge(t *testing.T) {
+	for _, edge := range []bool{false, true} {
+		for _, mode := range []string{"expected-match", "expected-miss"} {
+			t.Run(fmt.Sprint(edge)+mode, func(t *testing.T) { testRuntimeImagePlatform(t, "classic", edge, "linux/amd64", false, mode) })
 		}
 	}
 }

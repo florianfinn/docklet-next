@@ -9,6 +9,7 @@ package updater
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -16,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"io"
 	"log"
 	"net/http"
@@ -211,6 +213,17 @@ func TestDefaultChecksAndHubNotificationsDirectEdge(t *testing.T) {
 			var n int64
 			require.NoError(t, hub.db.Model(&policy.Policy{}).Count(&n).Error)
 			require.EqualValues(t, 3, n)
+			var observed []policy.Policy
+			require.NoError(t, hub.db.Find(&observed).Error)
+			candidateManifest, e := after.Digest()
+			require.NoError(t, e)
+			for _, row := range observed {
+				var candidates []updaterDTO.UpdateCandidate
+				require.NoError(t, json.Unmarshal([]byte(row.Candidates), &candidates))
+				for _, candidate := range candidates {
+					require.Equal(t, candidateManifest.String(), candidate.Manifest)
+				}
+			}
 			require.NoError(t, hub.db.Model(&policy.Notice{}).Count(&n).Error)
 			require.Zero(t, n)
 			require.NoError(t, hub.s.deps.Settings.UpdateSetting(t.Context(), "updateNotify", "true"))

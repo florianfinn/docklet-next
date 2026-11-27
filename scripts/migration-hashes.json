@@ -7,5 +7,5 @@
   "sqlite/006_runtime_peer_uncertainty.sql": "b405c4f10e7eca407b3d22bf5b1ef949feb8e956a9aaad234d84bfa1434a4f33",
   "sqlite/007_tailnet_route.sql": "41efb57d1e8283af4f6b4e01dbc5421f8a0de755afc359788d1d22de0e55edb5",
   "sqlite/008_image_build_dates.sql": "e55e995b316f26d2a6d92a7859e12b03740976fdbfbe52e9f75d7ab7d8efcb36",
-  "sqlite/009_image_update_age.sql": "823b78d81490f11882f51c79b0c76607cd4ed54ceb161d72f7bd1aee05dd0222"
+  "sqlite/009_image_update_age.sql": "5c0c988d9035189247c38eb2469a54fad822c1c8294877dc7243c5ec9b4180e4"
 }
