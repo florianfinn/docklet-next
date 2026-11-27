@@ -63,6 +63,46 @@ describe("provider choice in the add dialog", () => {
     expect((within(dialog).getByLabelText("Webhook-Adresse") as HTMLInputElement).value).toBe("");
   });
 
+  it("splits a pasted Discord webhook address into webhook ID and token", async () => {
+    const adapter = createDemoAdapter();
+    const save = vi.spyOn(adapter, "saveNotificationTarget");
+    renderRoutes(routes, ["/settings/notifications"], adapter);
+    await waitFor(() => expect(disabled("Ziel hinzufügen")).toBe(false));
+    await userEvent.click(screen.getByRole("button", { name: "Ziel hinzufügen" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Discord" }));
+    const address = within(dialog).getByLabelText("Webhook-Adresse");
+    await userEvent.type(address, "123456789012345678/example-token");
+    expect(within(dialog).queryByText(/vollständige Discord-Webhook-Adresse/) !== null).toBe(true);
+    expect(disabled("Speichern")).toBe(true);
+    await userEvent.clear(address);
+    const value = "example_1";
+    await userEvent.type(address, `https://discord.com/api/webhooks/123456789012345678/${value}`);
+    expect(disabled("Speichern")).toBe(false);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0]![0].config).toMatchObject({ webhookId: "123456789012345678", token: value });
+
+    // Edit: a blank address keeps the stored webhook; a new address replaces both parts.
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+    await userEvent.click(await screen.findByRole("button", { name: "Bearbeiten: Discord" }));
+    let edit = await screen.findByRole("dialog");
+    await userEvent.click(within(edit).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1]![0].config).toMatchObject({ webhookId: "123456789012345678", token: "" });
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+    await userEvent.click(screen.getByRole("button", { name: "Bearbeiten: Discord" }));
+    edit = await screen.findByRole("dialog");
+    const next = within(edit).getByLabelText("Webhook-Adresse");
+    await userEvent.type(next, `https://discord.com/api/webhooks/223456789012345678/${value}x`);
+    await userEvent.clear(next);
+    const replaced = `${value}y`;
+    await userEvent.type(next, `https://discord.com/api/webhooks/323456789012345678/${replaced}`);
+    await userEvent.click(within(edit).getByRole("button", { name: "Speichern" }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+    expect(save.mock.calls[2]![0].config).toMatchObject({ webhookId: "323456789012345678", token: replaced });
+  });
+
   it("keeps the provider choice while its save is pending", async () => {
     const adapter = createDemoAdapter();
     const save = adapter.saveNotificationTarget.bind(adapter);

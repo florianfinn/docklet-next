@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { CONFIG_KEYS, EVENT_KEYS, NOTIFICATION_PROVIDERS } from "@/domain/notifications";
 
-import { DEFAULTS, FIELDS, fromText, toText } from "./fields";
+import { DEFAULTS, FIELDS, fromText, parseDiscordWebhook, toText } from "./fields";
 
 const SCHEMA: Record<string, string> = {
   email: "NotificationConfigEmail", discord: "NotificationConfigDiscord", telegram: "NotificationConfigTelegram", signal: "NotificationConfigSignal",
@@ -49,5 +49,13 @@ describe("notification config tables", () => {
     expect(fromText("headers", "X-One: 1\nX-Two: a:b", "generic", "customHeaders")).toEqual({ "X-One": "1", "X-Two": "a:b" });
     expect(fromText("number", "", "email", "smtpPort")).toBe(0);
     expect(fromText("host", " mail.example.com ", "email", "smtpHost")).toBe("mail.example.com");
+  });
+
+  it("split Discord webhook addresses and reject anything else", () => {
+    const id = "123456789012345678", value = "abc-DEF_9";
+    expect(parseDiscordWebhook(` https://discord.com/api/webhooks/${id}/${value} `)).toEqual({ webhookId: id, token: value });
+    expect(parseDiscordWebhook(`https://canary.discordapp.com/api/v10/webhooks/${id}/${value}/`)).toEqual({ webhookId: id, token: value });
+    for (const bad of [`${id}/abc`, `http://discord.com/api/webhooks/${id}/abc`, `https://discord.example.com/api/webhooks/${id}/abc`, `https://discord.com/api/webhooks/${id}`, `https://discord.com/api/webhooks/${id}/${value}?thread_id=1`])
+      expect([bad, parseDiscordWebhook(bad)]).toEqual([bad, undefined]);
   });
 });

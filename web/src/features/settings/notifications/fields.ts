@@ -7,14 +7,17 @@
 import type { NotificationConfig, NotificationProvider, ProviderConfigs } from "@/domain/notifications";
 
 /** host: a bare host name; list: one entry per line; headers: "Name: value" lines. */
-export type FieldKind = "text" | "host" | "url" | "number" | "secret" | "list" | "headers" | "switch" | "select";
+/** discordWebhook: the full webhook address, split into webhookId and token. */
+export type FieldKind = "text" | "host" | "url" | "number" | "secret" | "list" | "headers" | "switch" | "select" | "discordWebhook";
+export type FieldHint = "discordWebhook" | "discordUsername" | "slackCredential";
 export interface FieldSpec {
   key: string;
   kind: FieldKind;
   options?: readonly string[];
+  hint?: FieldHint;
 }
 
-const f = <P extends NotificationProvider>(...specs: { key: keyof ProviderConfigs[P] & string; kind: FieldKind; options?: readonly string[] }[]) => specs;
+const f = <P extends NotificationProvider>(...specs: { key: keyof ProviderConfigs[P] & string; kind: FieldKind; options?: readonly string[]; hint?: FieldHint }[]) => specs;
 
 /** Fields the dialog edits; keys it does not show are kept from the stored config. */
 export const FIELDS: { [P in NotificationProvider]: FieldSpec[] } = {
@@ -22,13 +25,13 @@ export const FIELDS: { [P in NotificationProvider]: FieldSpec[] } = {
     { key: "smtpHost", kind: "host" }, { key: "smtpPort", kind: "number" }, { key: "tlsMode", kind: "select", options: ["starttls", "ssl", "none"] },
     { key: "smtpUsername", kind: "text" }, { key: "smtpPassword", kind: "secret" }, { key: "fromAddress", kind: "text" }, { key: "toAddresses", kind: "list" },
   ),
-  discord: f<"discord">({ key: "webhookId", kind: "text" }, { key: "token", kind: "secret" }, { key: "username", kind: "text" }),
+  discord: f<"discord">({ key: "token", kind: "discordWebhook", hint: "discordWebhook" }, { key: "username", kind: "text", hint: "discordUsername" }),
   telegram: f<"telegram">({ key: "botToken", kind: "secret" }, { key: "chatIds", kind: "list" }, { key: "notification", kind: "switch" }, { key: "preview", kind: "switch" }),
   signal: f<"signal">(
     { key: "host", kind: "host" }, { key: "port", kind: "number" }, { key: "disableTls", kind: "switch" }, { key: "source", kind: "text" },
     { key: "recipients", kind: "list" }, { key: "token", kind: "secret" }, { key: "user", kind: "text" }, { key: "password", kind: "secret" },
   ),
-  slack: f<"slack">({ key: "token", kind: "secret" }, { key: "channel", kind: "text" }),
+  slack: f<"slack">({ key: "token", kind: "secret", hint: "slackCredential" }, { key: "channel", kind: "text" }),
   ntfy: f<"ntfy">(
     { key: "host", kind: "host" }, { key: "port", kind: "number" }, { key: "topic", kind: "text" }, { key: "username", kind: "text" },
     { key: "password", kind: "secret" }, { key: "disableTls", kind: "switch" },
@@ -61,6 +64,12 @@ export const DEFAULTS: { [P in NotificationProvider]: NotificationConfig } = {
 /** The address whose change requires re-entering a stored secret (producer rule). */
 export const TARGET_FIELD: Partial<Record<NotificationProvider, string>> = { email: "smtpHost", signal: "host", ntfy: "host", gotify: "host", matrix: "host" };
 
+/** Splits a Discord webhook address (https://discord.com/api/webhooks/<id>/<token>); query options such as thread_id have no config key and are rejected. */
+export function parseDiscordWebhook(value: string): { webhookId: string; token: string } | undefined {
+  const match = value.trim().match(/^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api(?:\/v\d+)?\/webhooks\/(\d+)\/([\w-]+)\/?$/);
+  return match ? { webhookId: match[1]!, token: match[2]! } : undefined;
+}
+
 const list = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
@@ -87,6 +96,7 @@ export function toText(kind: FieldKind, value: unknown): string {
   if (kind === "list") return list(value).join("\n");
   if (kind === "headers") return value && typeof value === "object" ? Object.entries(value).map(([k, v]) => `${k}: ${String(v)}`).join("\n") : "";
   if (kind === "number" || kind === "select") return value === undefined ? "" : String(value);
+  if (kind === "discordWebhook") return "";
   return text(value);
 }
 export function fromText(kind: FieldKind, value: string, provider: NotificationProvider, key: string): unknown {
