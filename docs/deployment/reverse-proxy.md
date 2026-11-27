@@ -37,7 +37,9 @@ See [installation](../install.md) for package and sign-in settings.
   browser's 30 second per-host budget ends those reads. With HTTP/2 the reads share one connection and
   other pages keep loading.
 - **Forwarded headers.** Send `X-Forwarded-For` and `X-Forwarded-Proto`. List the proxy's CIDR in
-  `TRUSTED_PROXIES` so the hub records the client address; this setting does not grant sign-in trust
+  `TRUSTED_PROXIES` so the hub records the client address. Only listed ranges are trusted, including
+  when the loopback default applies. Private and link-local proxies must be listed explicitly;
+  without ranges the direct peer address is used. This setting does not grant sign-in trust
   (see the [sign-in mode](../install.md#sign-in-mode) for proxy sign-in).
 - **Long downloads.** On the hub and on Direct hosts a volume or bind snapshot download starts at once
   and sends a few bytes every 10 seconds while the snapshot is prepared, so a read timeout of 60 seconds
