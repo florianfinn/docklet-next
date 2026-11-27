@@ -21,6 +21,12 @@ func CheckSelfUpdateHostTx(tx *gorm.DB, environment string) error {
 // CheckHostUpdateAdmissionTx refuses before reserving a self-update, under the
 // same SQLite write transaction used by host restart and workload admission.
 func CheckHostUpdateAdmissionTx(tx *gorm.DB, environment string) error {
+	return CheckHostUpdateAdmissionExceptTx(tx, environment, "")
+}
+
+// CheckHostUpdateAdmissionExceptTx exempts exactly one activity, the parent of
+// a combined update reserving its own hub child; every other owner still blocks.
+func CheckHostUpdateAdmissionExceptTx(tx *gorm.DB, environment, exceptActivityID string) error {
 	if err := CheckSelfUpdateHostTx(tx, environment); err != nil {
 		return err
 	}
@@ -36,7 +42,11 @@ func CheckHostUpdateAdmissionTx(tx *gorm.DB, environment string) error {
 			continue
 		}
 		var n int64
-		if err := tx.Table(check.table).Where(check.where, check.args...).Count(&n).Error; err != nil {
+		query := tx.Table(check.table).Where(check.where, check.args...)
+		if check.table == "activities" && exceptActivityID != "" {
+			query = query.Where("id <> ?", exceptActivityID)
+		}
+		if err := query.Count(&n).Error; err != nil {
 			return err
 		}
 		if n > 0 {

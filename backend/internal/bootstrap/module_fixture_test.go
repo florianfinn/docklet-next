@@ -117,13 +117,17 @@ func newM27ModuleFixture(t *testing.T, mode string, probe bool, extend ...func(*
 	}
 	huma.Get(agentAPI, "/app-version", func(context.Context, *struct{}) (*struct{ Body version.Info }, error) {
 		fingerprint := contract.AgentHubFingerprint
-		if x.version.Load() == 18 {
+		agentVersion := int(x.version.Load())
+		switch agentVersion {
+		case 18:
 			fingerprint = contract.AgentHubV18Fingerprint
+		case 24:
+			fingerprint = contract.AgentHubV24Fingerprint
 		}
 		if x.wrongFingerprint.Load() {
 			fingerprint = "different"
 		}
-		return &struct{ Body version.Info }{Body: version.Info{AgentContractVersion: int(x.version.Load()), AgentContractFingerprint: fingerprint}}, nil
+		return &struct{ Body version.Info }{Body: version.Info{AgentContractVersion: agentVersion, AgentContractFingerprint: fingerprint}}, nil
 	})
 	huma.Head(agentAPI, "/environments/{id}/system/health", func(context.Context, *struct {
 		ID string `path:"id"`

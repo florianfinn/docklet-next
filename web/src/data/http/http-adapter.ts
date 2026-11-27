@@ -3,9 +3,9 @@
 // Retrieved: 2026-10-15
 // License: Apache-2.0
 // Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211). M14 host maintenance and availability. Simple-user management, assigned-stack access and mode-aware self-service. M18 #341 #343 #342 #344 #250 #346 #319: v14 policies, explicit update/recovery gestures and shared scheduling rule. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: shell list reads and target-specific terminal invalidation. D4 #271: fair physical host reads and result-local recovery. M21 #439: Compose self-update controls and capability integration. M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #389 #391: dispatch gate (maintenance hold, unavailable-host skips). M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M25 latest agent restart read. M26 #462: bounded shell counts and raw inventory ownership; optional-module foundation (#472); M29 first-run claim and sign-in policy operations. M35 #556: capability descriptors end with stack terminals, stream reopens and gaps.
-
 import { createNavInventory, createNavInventoryState } from "./nav-inventory";
 import { createHubUpdateSession } from "./hub-update-session";
+import { createFleetUpdates } from "./fleet-update";
 import { createSelfUpdates } from "./self-update";
 import { inventoryReadBudget } from "./host-read-deadline";
 import { skipReason, skipsReads } from "./host-read-policy";
@@ -25,10 +25,8 @@ import { createUpdateSettings } from "./update-settings";
 import { createStackUpdates } from "./stack-updates";
 import { createImageCommands } from "./image-commands";
 import { createRegistryCommands } from "./registry-commands";
-
 import { hasReadConsumer } from "../read-consumers";
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
-
 import type { components, operations, paths } from "@/api/generated/schema";
 
 import type { ActionReadHealth, DockletAdapter, Topic } from "../adapter";
@@ -159,7 +157,7 @@ const IMPLEMENTED = new Set<string>([
   "saveStackFiles",
   "setStackLabels",
   "convertDockerRun",
-  "restartAgent", "selfUpdate", "getSelfUpdate",
+  "restartAgent", "selfUpdate", "getSelfUpdate", "getFleetUpdate", "updateEverything",
   "connectHost", "reconnectHost",
   "updateHost",
   "registerHost",
@@ -520,6 +518,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   const readUpdateRun = async (host: string, id: string, signal: AbortSignal) => { const run = await actions.readDetail(id, host, signal, true); actions.upsert(run); return run; };
   const hubSession = createHubUpdateSession({ baseUrl, client, publicFetch: options.fetch ?? globalThis.fetch, readRun: readUpdateRun });
+  const fleetUpdates = createFleetUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, hubSession });
   const selfUpdates = createSelfUpdates({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, readRun: readUpdateRun, hubSession });
   const targets = createActivityTargets({ terminal: (host, run) => { stackTerminals([run], true); refreshHost(host); }, hasConsumer: () => actionListeners.size > 0 || stackListeners.size > 0, read: (host, id, signal, expanded) => principal?.isAdmin === false ? runtime.detail(host, id, false, false, signal) : actions.readDetail(id, host, signal, expanded) });
 
@@ -816,6 +815,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const value = await response.json() as components["schemas"]["VersionInfo"];
       return { version: value.updateAvailable && typeof value.newestVersion === "string" ? value.newestVersion : undefined };
     },
+    ...fleetUpdates,
     selfUpdate: selfUpdates.selfUpdate,
     getSelfUpdate: selfUpdates.getSelfUpdate,
     installStackUpdates: runtime.installStackUpdates,

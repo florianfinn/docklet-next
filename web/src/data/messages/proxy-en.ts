@@ -242,6 +242,7 @@ export const enProxyContract = {
     "absent": "Absent",
     "target": "Target file",
     "metadataPermanent": "This metadata loss is permanent. Restoring the old content does not bring the attributes back.",
+    "metadataWouldBePermanent": "This metadata loss would be permanent. Restoring the old content would not bring the attributes back.",
     "metadataLinks": "{count, plural, one {# other hard link keeps the old content.} other {# other hard links keep the old content.}}",
     "metadataAck": "I accept the permanent loss listed above for this change.",
     "metadataRetry": "Retry the same change",

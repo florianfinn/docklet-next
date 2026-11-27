@@ -242,6 +242,7 @@ export const deProxyContract = {
     "absent": "Nicht vorhanden",
     "target": "Zieldatei",
     "metadataPermanent": "Dieser Metadatenverlust ist dauerhaft. Das Wiederherstellen des alten Inhalts bringt die Attribute nicht zurück.",
+    "metadataWouldBePermanent": "Dieser Metadatenverlust wäre dauerhaft. Das Wiederherstellen des alten Inhalts würde die Attribute nicht zurückbringen.",
     "metadataLinks": "{count, plural, one {# weiterer Hardlink behält den alten Inhalt.} other {# weitere Hardlinks behalten den alten Inhalt.}}",
     "metadataAck": "Ich akzeptiere den oben aufgeführten dauerhaften Verlust für diese Änderung.",
     "metadataRetry": "Dieselbe Änderung erneut versuchen",

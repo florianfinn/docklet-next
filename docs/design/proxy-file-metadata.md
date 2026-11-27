@@ -58,6 +58,12 @@ existing mode rules (`Mode&0044`, `Mode&07000`, owner-only refusal) stay.
 - **Residual race.** The source lock serialises Docklet operations only. A
   foreign process can still change attributes between the final check and the
   rename (a window of one syscall); this is stated in the design doc.
+- **Hard links in a directory read (#665).** The Docker copy archive sends the
+  second name of a hard-linked file as a link entry. A link to an earlier public
+  regular entry of the same archive reads as that content and counts toward the
+  read limits; a later write of either name still meets the loss rule above. A
+  link whose first name is a secret file, or any other link, still refuses the
+  whole read with `invalid-input`.
 
 ### Paths that replace nothing
 

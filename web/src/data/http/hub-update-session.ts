@@ -16,6 +16,7 @@ import type { CsrfClient } from "./csrf-client";
 import { object, runtimeError } from "./runtime-mapping";
 
 type Operation = components["schemas"]["SystemSelfUpdateOperation"];
+type FleetHubTarget = components["schemas"]["SystemFleetUpdateTarget"];
 export type HubUpdateState = { phase: "idle" }
   | { phase: "starting"; target: string; startedAt: number }
   | { phase: "running"; target: string; startedAt: number; opId: string; runId?: string; online: boolean; targetSeen: boolean; authenticated: boolean }
@@ -25,7 +26,7 @@ export type HubUpdateState = { phase: "idle" }
   | { phase: "signin"; target: string; versionSeen?: string };
 export interface HubUpdateSnapshot { state: HubUpdateState; dismissed: boolean }
 export const HUB_UPDATE_RECORD = "docklet.hub-update";
-interface RecordValue { hubOrigin: string; principalId: string; opId: string; runId?: string; startedAt: number }
+interface RecordValue { combined?: boolean; hubOrigin: string; principalId: string; opId: string; runId?: string; startedAt: number }
 interface Options {
   baseUrl: string;
   client: CsrfClient;
@@ -39,7 +40,9 @@ export type HubUpdateSession = ReturnType<typeof createHubUpdateSession>;
 export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, origin = globalThis.location?.origin ?? "", storage }: Options) {
   const store = createStore<HubUpdateSnapshot>({ state: { phase: "idle" }, dismissed: false });
   let lastVersion: string | undefined, runCode: string | undefined;
-  let administrator = false;
+  let administrator = false, combined = false;
+  // A combined update can skip the hub before any operation exists; its plan row then decides.
+  let fleetHub: ((signal: AbortSignal) => Promise<FleetHubTarget | undefined>) | undefined;
   let epoch = 0, principalId: string | undefined, baseline: string | undefined, terminalSamples = 0;
   let timer: ReturnType<typeof setTimeout> | undefined, recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   let recoveryEpoch = 0;
@@ -60,7 +63,7 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
   }
   function save(state: Extract<HubUpdateState, { phase: "running" }>) {
     if (!principalId) return;
-    try { local()?.setItem(HUB_UPDATE_RECORD, JSON.stringify({ hubOrigin: origin, principalId, opId: state.opId, runId: state.runId, startedAt: state.startedAt })); } catch { /* In-memory progress remains available. */ }
+    try { local()?.setItem(HUB_UPDATE_RECORD, JSON.stringify({ combined, hubOrigin: origin, principalId, opId: state.opId, runId: state.runId, startedAt: state.startedAt })); } catch { /* In-memory progress remains available. */ }
   }
   function stop() { cancelDelay?.(); cancelDelay = undefined; clearTimeout(timer); timer = undefined; controllers.forEach(c => c.abort()); controllers.clear(); }
   function publish(state: HubUpdateState) {
@@ -119,15 +122,21 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
       if (owner === epoch) schedule(); return;
     }
     if (state.phase !== "running") return;
-    let op: Operation | undefined, opReadable = false, v: string | undefined, run: CodedActionRun | undefined;
+    let op: Operation | undefined, opReadable = false, v: string | undefined, run: CodedActionRun | undefined, planned: FleetHubTarget | undefined;
     const current = () => owner === epoch && store.get().state.phase === "running";
     // A correlated settled operation decides immediately, without waiting for a slow public version or run read.
     await Promise.allSettled([
       operation().then(value => { op = value; opReadable = true; if (current() && op?.opId === state.opId && sameProductVersion(op.targetVersion, state.target)) settle(op, state); }),
       version().then(value => { v = value; }),
       state.runId ? bounded(signal => readRun("0", state.runId!, signal)).then(value => { if (value.id === state.runId && value.hostId === "0") run = value; }) : Promise.resolve(),
+      combined && fleetHub ? bounded(signal => fleetHub!(signal)).then(value => { if (value?.opId === state.opId) planned = value; }) : Promise.resolve(),
     ]);
     if (!current()) return;
+    if (planned && (planned.state === "skipped" || planned.state === "settled" && planned.outcome !== "healthy") && !(op?.opId === state.opId && op.phase === "settled")) {
+      publish(planned.outcome === "unknown" ? { phase: "unknown", target: state.target, runId: planned.runId ?? state.runId, authenticated: true }
+        : { phase: "failed", target: state.target, runId: planned.runId ?? state.runId, code: planned.code, authenticated: true });
+      return;
+    }
     const correlated = op?.opId === state.opId && sameProductVersion(op.targetVersion, state.target);
     const terminal = !!run && ["succeeded", "failed", "cancelled"].includes(run.status);
     // Adjacent reads may straddle settlement: give the operation two more samples before falling back to the run.
@@ -146,12 +155,15 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
     publish(next); save(next); schedule();
   }
   function clear() {
-    ++epoch; ++recoveryEpoch; clearTimeout(recoveryTimer); stop(); removeRecord(); baseline = undefined;
+    ++epoch; ++recoveryEpoch; clearTimeout(recoveryTimer); stop(); removeRecord(); baseline = undefined; combined = false;
     store.set({ state: { phase: "idle" }, dismissed: false });
   }
   return {
     ...store,
     clear,
+    isCombined: () => combined,
+    /** Lets the combined update supply the hub row of its plan to a combined session. */
+    readFleetHub(read: (signal: AbortSignal) => Promise<FleetHubTarget | undefined>) { fleetHub = read; },
     establish(id: string, admin = true) { if (principalId !== undefined && (principalId !== id || !admin)) clear(); principalId = id; administrator = admin; },
     unauthorized() {
       // A rejected session ends recovery retries; each retry would reject again and could cancel a sign-in.
@@ -175,6 +187,7 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
           const op = await operation();
           if (owner !== epoch || recovery !== recoveryEpoch || store.get().state.phase !== "idle") return;
           const stored = record();
+          combined = stored?.opId === op?.opId && stored?.combined === true;
           if (op && (op.phase !== "settled" || stored?.opId === op.opId)) adopt(op, stored?.opId === op.opId ? stored.startedAt : Date.now());
           else removeRecord();
         } catch {
@@ -185,8 +198,9 @@ export function createHubUpdateSession({ baseUrl, client, publicFetch, readRun, 
       };
       await read();
     },
-    async start(target: string, submit: () => Promise<SelfUpdateResponse>): Promise<string> {
+    async start(target: string, submit: () => Promise<SelfUpdateResponse>, options?: { combined?: boolean }): Promise<string> {
       if (["starting", "running", "signin"].includes(store.get().state.phase)) throw runtimeError("host.busy");
+      combined = options?.combined === true;
       const previous = baseline, startedAt = Date.now(), owner = ++epoch;
       clearTimeout(recoveryTimer); ++recoveryEpoch;
       store.set({ state: { phase: "starting", target, startedAt }, dismissed: false });

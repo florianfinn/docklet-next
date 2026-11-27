@@ -350,7 +350,7 @@ func (d *DockerRuntime) Restore(ctx context.Context, i Intent) error {
 				note := "metadata-loss: original inode unavailable; its metadata cannot be recovered"
 				if d := report.operation.Diagnostic; d != nil && d.Detail != "" {
 					// Keep why the delete was rolled back; the note follows within the detail bound.
-					note = d.Detail[:min(len(d.Detail), 4096-len(note)-2)] + "; " + note
+					note = truncateUTF8(d.Detail, MaxDiagnostic-len(note)-len("; ")) + "; " + note
 				}
 				report.operation.Diagnostic = &dto.Diagnostic{Path: i.Request.Target, Detail: note}
 				if er = report.persist(); er != nil {

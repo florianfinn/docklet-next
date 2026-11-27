@@ -30,13 +30,56 @@ const warning = {
   "en-US": "This metadata loss is permanent. Restoring the old content does not bring the attributes back.",
   de: "Dieser Metadatenverlust ist dauerhaft. Das Wiederherstellen des alten Inhalts bringt die Attribute nicht zurück.",
 };
+const prospectiveWarning = {
+  "en-US": "This metadata loss would be permanent. Restoring the old content would not bring the attributes back.",
+  de: "Dieser Metadatenverlust wäre dauerhaft. Das Wiederherstellen des alten Inhalts würde die Attribute nicht zurückbringen.",
+};
 describe("metadata loss presentation", () => {
-  it.each(["en-US", "de"] as const)("shows every detail and permanent warning in %s", locale => {
+  it.each(["en-US", "de"] as const)("shows every detail and a prospective warning in %s", locale => {
     render(<Providers locale={locale}><RefusalView refusal={receipt()} /></Providers>);
-    for (const text of [loss[0]!.path, "system.posix_acl_access", "user.example", loss[1]!.path, warning[locale],
+    for (const text of [loss[0]!.path, "system.posix_acl_access", "user.example", loss[1]!.path, prospectiveWarning[locale],
       locale === "de" ? "1 weiterer Hardlink behält den alten Inhalt." : "1 other hard link keeps the old content."]) {
       expect(screen.queryByText(text) !== null).toBe(true);
     }
+  });
+  it("decodes and shows a resolver refusal in Recent operations", async () => {
+    const f = fixture();
+    const path = "config/static.yaml";
+    const old = operation().old;
+    const next = operation().new;
+    f.state.operations = [operation({
+      kind: "resolver", state: "refused", phase: "refused", reason: "unsupported-metadata",
+      evidence: undefined, target: "", old: { present: false, hash: "" }, new: { present: false, hash: "" },
+      resolver: {
+        intent: {
+          name: "Example", email: "admin@example.test", storage: "/certs/acme.json",
+          ca: { kind: "custom", url: "https://ca.example.test/directory" },
+          challenge: { kind: "http", entryPoint: "web", delayBeforeCheck: 0 },
+          variables: [],
+        },
+        phase: "refused", recreateCommitted: false, files: [{ path, kind: "static", old, new: next }],
+      },
+      metadataLoss: [{ path, attributes: ["user.example"], token: loss[0]!.token }],
+    })];
+    const rows = await f.api.operations(instance.id);
+    expect(rows[0]?.kind).toBe("resolver");
+    render(<Providers><Operations rows={rows} busy={false} release={async () => {}} /></Providers>);
+    const recent = within(screen.getByRole("region", { name: "Recent operations" }));
+    expect(recent.queryByText(path) !== null).toBe(true);
+    expect(recent.queryByText("user.example") !== null).toBe(true);
+    expect(recent.queryByText(prospectiveWarning["en-US"]) !== null).toBe(true);
+    expect(recent.queryByText(warning["en-US"]) === null).toBe(true);
+    expect(recent.queryByRole("button", { name: "Retry the same change" }) === null).toBe(true);
+  });
+  it("keeps the permanent warning on a failed fallback whose inode is gone", () => {
+    const gone = [{ path: "routes/app.yml", token: Array(65).join("e") }];
+    render(<Providers><Operations rows={[operation({ state: "recovery-required", metadataLoss: gone })]} busy={false} release={async () => {}} /></Providers>);
+    expect(screen.queryByText(warning["en-US"]) !== null).toBe(true);
+    expect(screen.queryByText(prospectiveWarning["en-US"]) === null).toBe(true);
+  });
+  it("keeps the prospective warning on a refused restore with known attributes", () => {
+    render(<Providers><Operations rows={[operation({ state: "recovery-required", metadataLoss: [loss[0]!] })]} busy={false} release={async () => {}} /></Providers>);
+    expect(screen.queryByText(prospectiveWarning["en-US"]) !== null).toBe(true);
   });
   it("shows restore losses read-only, including unknown attributes, without a retry", () => {
     render(<Providers><Operations rows={[operation({ state: "restored", metadataLoss: loss, diagnostic: { detail: "The original inode is gone; metadata cannot be recovered." } })]} busy={false} release={async () => {}} /></Providers>);

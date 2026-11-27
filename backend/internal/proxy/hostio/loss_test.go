@@ -87,6 +87,29 @@ func TestM44LossAndValueConfirmation(t *testing.T) {
 		})
 	}
 }
+func TestMetadataLossRejectsStaleACLModeConfirmation(t *testing.T) {
+	w, root := lossFixture(t, true)
+	target := filepath.Join(root, "target")
+	require.NoError(t, unix.Setxattr(target, "system.posix_acl_access", testACL(12346), 0))
+
+	loss, err := w.Prepare(t.Context(), "stage", "target")
+	require.NoError(t, err)
+	require.Equal(t, []string{"system.posix_acl_access"}, loss.Attributes)
+	w.Acknowledgements = []dto.MetadataLoss{loss}
+	require.NoError(t, os.Chmod(target, 0644))
+
+	var refused *LossError
+	require.ErrorAs(t, w.Replace(t.Context(), "stage", "target"), &refused, "the confirmation must match the current ACL snapshot")
+	require.Equal(t, loss.Attributes, refused.Loss.Attributes)
+	require.NotEqual(t, loss.Token, refused.Loss.Token)
+	content, err := os.ReadFile(target)
+	require.NoError(t, err)
+	require.Equal(t, "old", string(content))
+	info, err := os.Stat(target)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0644), info.Mode().Perm())
+}
+
 func TestM44EntrySwap(t *testing.T) {
 	for _, name := range []string{"target", "stage"} {
 		t.Run(name, func(t *testing.T) {

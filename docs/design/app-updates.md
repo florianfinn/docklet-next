@@ -76,7 +76,9 @@ The recovery routes remain authenticated and administrator-only:
 `GET /api/environments/0/system/upgrade/check` returns version, eligibility and
 correlated operation evidence. Hub requests for remote hosts are handled locally
 before forwarding, so browsers cannot supply trusted envelope fields. The old
-update-all routes and job/resume/log-cleanup implementation are removed. The
+update-all routes and job/resume/log-cleanup implementation are removed. The combined
+hub-then-agents action is built on these operations instead; see
+[update everything](update-everything.md). The
 manual `upgrade --image` CLI remains available.
 
 For manual recovery of an eligible Compose installation, inspect the preserved
