@@ -170,7 +170,9 @@ func refreshWindowForPolicyInternal(svc composetypes.ServiceConfig, policy strin
 // DecideDeployImageAction decides whether deploy should build, pull, or require local images.
 func DecideDeployImageAction(svc composetypes.ServiceConfig, pullPolicyOverride string) DeployImageDecision {
 	policy := NormalizePullPolicy(svc.PullPolicy)
-	if policy == "" {
+	// A build service without its own pull_policy keeps the build fallback when the deploy default applies.
+	inherited := policy == ""
+	if inherited {
 		if override := NormalizeDeployPullPolicy(pullPolicyOverride); override != "" {
 			policy = override
 		}
@@ -184,9 +186,9 @@ func DecideDeployImageAction(svc composetypes.ServiceConfig, pullPolicyOverride 
 		case policy == "never":
 			return DeployImageDecision{RequireLocalOnly: true}
 		case IsAlwaysPullPolicy(policy):
-			return DeployImageDecision{PullAlways: true}
+			return DeployImageDecision{PullAlways: true, FallbackBuildOnPullFail: inherited}
 		case policy == "missing":
-			return DeployImageDecision{PullIfMissing: true}
+			return DeployImageDecision{PullIfMissing: true, FallbackBuildOnPullFail: inherited}
 		case policy == "":
 			return DeployImageDecision{PullIfMissing: true, FallbackBuildOnPullFail: true}
 		default:
