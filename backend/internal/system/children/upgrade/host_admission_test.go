@@ -30,10 +30,10 @@ func TestRestartAndUpdateExcludeEachOther(t *testing.T) {
 	restart := environment.AgentRestartRequest{RunID: "active-restart", EnvironmentID: f.remote.ID, RegistrationID: f.remote.ID, CredentialRevision: f.remote.CredentialRevision, State: "awaiting", CreatedAt: now, UpdatedAt: now, Deadline: now.Add(time.Minute)}
 	require.NoError(t, f.db.Create(&restart).Error)
 	op := core.Operation{OpID: "host-update", Role: "agent", EnvironmentID: f.remote.ID, CredentialRevision: f.remote.CredentialRevision, TargetRef: repository("agent") + ":1.0.1@sha256:" + testDigest, TargetVersion: "1.0.1", Deadline: now.Add(core.OperationTimeout)}
-	_, _, err := f.hub.reserveRun(t.Context(), f.hub.remoteStore(f.remote.ID), op, "operator", "operator")
+	_, _, err := f.hub.reserveRun(t.Context(), f.hub.remoteStore(f.remote.ID), op, "operator", "operator", nil)
 	require.ErrorContains(t, err, "host.busy")
 	require.NoError(t, f.db.Model(&restart).Updates(map[string]any{"settled_at": now, "state": "connected"}).Error)
-	_, _, err = f.hub.reserveRun(t.Context(), f.hub.remoteStore(f.remote.ID), op, "operator", "operator")
+	_, _, err = f.hub.reserveRun(t.Context(), f.hub.remoteStore(f.remote.ID), op, "operator", "operator", nil)
 	require.NoError(t, err)
 	require.NoError(t, f.hub.environments.StartAgentRestarts(t.Context()))
 	t.Cleanup(f.hub.environments.StopAgentRestarts)

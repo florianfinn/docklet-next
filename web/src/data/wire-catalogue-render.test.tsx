@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original total catalogue maps for rendered contract enums; M21 #438 candidate and manifest-refusal render proofs. M21 #438: candidate checks and verified updates. M24 S6: observed recovery and update UI follow-ups; optional-module foundation (#472). M27 proxy outcome render proofs (#473/#474).
 
+import { FleetProgressCard } from "@/shared/components/updates/fleet-progress";
 import { BindingRefusal } from "@/shared/components/updates/binding-refusal";
 import {AdoptionStatus} from "@/features/proxy/AdoptionStatus";
 import {instance as proxyInstance, Providers as ProxyProviders} from "@/features/proxy/proxy.test-support";
@@ -52,7 +53,13 @@ function proxyMessage(reason: boolean) {
   const view = proxyOutcome(decodeProxyOperation(fixture.body));
   return renderMessage({ code: reason ? view.reasonKey! : view.labelKey, params: {} }, "de");
 }
+const fleetRender = () => render(<IntlProvider locale="de" messages={catalogs.de}><FleetProgressCard status={{ active: false, phase: "settled", outcome: "partial", targetVersion: "1.0.1", agents: [{ environmentId: "example", opId: "operation", state: "skipped", outcome: "unknown", code: "update.hub-failed" }] }} /></IntlProvider>).container.textContent ?? "";
 const proofs = [
+  { property: "SystemFleetUpdateStatus.phase", member: "settled", key: "runMessages.fleet.settled", render: fleetRender },
+  { property: "SystemFleetUpdateStatus.outcome", member: "partial", key: "runMessages.fleet.partial", render: fleetRender },
+  { property: "SystemFleetUpdateTarget.state", member: "skipped", key: "runMessages.fleet.skipped", render: fleetRender },
+  { property: "SystemFleetUpdateTarget.outcome", member: "unknown", key: "runMessages.selfUpdate.unknown", render: fleetRender },
+  { property: "SystemFleetUpdateTarget.code", member: "update.hub-failed", key: "images.errors.update_hub-failed", render: fleetRender },
  {property:"ImageBinding.reason",member:"include-extends",key:"images.errors.binding_include-extends",render:()=>render(<IntlProvider locale="de" messages={catalogs.de}><BindingRefusal binding={{scope:"project",reason:"include-extends"}} /></IntlProvider>).container.textContent ?? ""},
  {property:"ProxyAdoption.reason",member:"source-changed",key:"proxyContract.adoption.reasons.source-changed",render:()=>render(<ProxyProviders locale="de"><AdoptionStatus value={{outcome:"refused",reason:"source-changed",instance:proxyInstance}} /></ProxyProviders>).container.textContent ?? ""},
  {property:"ProxyAdoption.outcome",member:"adopted",key:"proxyContract.adoption.adopted",render:()=>render(<ProxyProviders locale="de"><AdoptionStatus value={{outcome:"adopted",instance:proxyInstance,operationId:"example"}} /></ProxyProviders>).container.textContent ?? ""},

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; replace Arcane upgrader and fleet jobs with correlated Compose self-updates; fallback container search uses the Docklet system label (#235).
+// Deviations: Local module namespace; replace Arcane upgrader and fleet jobs with correlated Compose self-updates; fallback container search uses the Docklet system label (#235); combined hub-then-agents update (#682).
 
 package upgrade
 
@@ -33,6 +33,18 @@ func (s *Service) boundTx(tx *gorm.DB, op core.Operation) error {
 	}
 	if env.CredentialRevision != op.CredentialRevision {
 		return core.Refuse(core.CodeUnknown)
+	}
+	return nil
+}
+
+// registeredTx refuses when the registration was replaced since the plan froze it.
+func registeredTx(tx *gorm.DB, id string, registeredAt time.Time) error {
+	var env environment.Environment
+	if err := tx.First(&env, "id=?", id).Error; err != nil {
+		return core.Refuse(dto.FleetTargetChanged)
+	}
+	if !env.CreatedAt.Equal(registeredAt) {
+		return core.Refuse(dto.FleetTargetChanged)
 	}
 	return nil
 }
@@ -134,37 +146,35 @@ func (s *Service) startRemote(ctx context.Context, id string, input dto.SelfUpda
 	}
 	op := core.Operation{OpID: uuid.NewString(), Role: "agent", EnvironmentID: id, CredentialRevision: env.CredentialRevision, TargetRef: ref, TargetVersion: candidate.Version, FromVersion: check.Version, Deadline: time.Now().UTC().Add(core.OperationTimeout)}
 	store := s.remoteStore(id)
-	op, _, err = s.reserveRun(ctx, store, op, userID, username)
+	op, _, err = s.reserveRun(ctx, store, op, userID, username, nil)
 	if err != nil {
 		return dto.SelfUpdateResponse{}, err
 	}
-	s.launch(store.Key, func(ctx context.Context) {
-		changed, e := store.Change(ctx, op.OpID, func(tx *gorm.DB, current *core.Operation) error {
-			if err := s.boundTx(tx, *current); err != nil {
-				return err
-			}
-			current.Phase = "helper-started"
-			return nil
-		})
-		if e == nil && changed {
-			// The durable write precedes the only POST. Lost responses and restarts
-			// enter observation, never a new operation or a replay of this request.
-			envelope := dto.SelfUpdateEnvelope{OpID: op.OpID, TargetVersion: op.TargetVersion, TargetReference: op.TargetRef, HubVersion: s.runningVersion()}
-			body, _ := json.Marshal(envelope)
-			var accepted dto.SelfUpdateResponse
-			sendCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			sendErr := s.environments.ProxyJSONRequestForEnvironment(sendCtx, env, http.MethodPost, "/api/environments/0/system/upgrade", body, &accepted)
-			cancel()
-			if code, refused := agentRefusal(sendErr); refused {
-				// The agent refuses only before or at its own reservation, so a
-				// decoded 4xx problem is definitive and nothing has run yet.
-				_ = s.finishRemote(ctx, store, op, "failed-pre-effect", code)
-				return
-			}
-		}
-		s.observeRemote(ctx, store)
-	})
+	s.launch(store.Key, func(ctx context.Context) { s.dispatchRemote(ctx, store, op, env) })
 	return response(op), nil
+}
+
+// dispatchRemote sends the one request of a reserved operation and observes it.
+// Only the caller that moves reserved to helper-started sends; the durable write
+// precedes the POST, so lost responses and restarts enter observation, never a
+// replay. A reserved operation found after a restart is observed until its deadline.
+func (s *Service) dispatchRemote(ctx context.Context, store *core.Store, op core.Operation, env environment.Environment) {
+	acquired, e := store.AcquireDispatch(ctx, op.OpID, func(tx *gorm.DB, current *core.Operation) error { return s.boundTx(tx, *current) })
+	if e == nil && acquired {
+		envelope := dto.SelfUpdateEnvelope{OpID: op.OpID, TargetVersion: op.TargetVersion, TargetReference: op.TargetRef, HubVersion: s.runningVersion()}
+		body, _ := json.Marshal(envelope)
+		var accepted dto.SelfUpdateResponse
+		sendCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		sendErr := s.environments.ProxyJSONRequestForEnvironment(sendCtx, env, http.MethodPost, "/api/environments/0/system/upgrade", body, &accepted)
+		cancel()
+		if code, refused := agentRefusal(sendErr); refused {
+			// The agent refuses only before or at its own reservation, so a
+			// decoded 4xx problem is definitive and nothing has run yet.
+			_ = s.finishRemote(ctx, store, op, "failed-pre-effect", code)
+			return
+		}
+	}
+	s.observeRemote(ctx, store)
 }
 
 // agentRefusal reports a decoded HTTP 4xx problem from the agent and its

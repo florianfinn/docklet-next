@@ -177,7 +177,7 @@ func TestIdentityFenceRejectsHeldReply(t *testing.T) {
 	f := newUpdateTransport(t, false)
 	store := f.hub.remoteStore(f.remote.ID)
 	op := core.Operation{OpID: "held-reply", Role: "agent", EnvironmentID: f.remote.ID, CredentialRevision: f.remote.CredentialRevision, TargetRef: repository("agent") + ":1.0.1@sha256:" + testDigest, TargetVersion: "1.0.1", Deadline: time.Now().Add(core.OperationTimeout)}
-	op, _, err := f.hub.reserveRun(t.Context(), store, op, "operator", "operator")
+	op, _, err := f.hub.reserveRun(t.Context(), store, op, "operator", "operator", nil)
 	require.NoError(t, err)
 	require.NoError(t, f.db.Model(&f.remote).Update("credential_revision", f.remote.CredentialRevision+1).Error)
 	// Even a joined healthy reply cannot settle success after a credential change.
@@ -214,7 +214,7 @@ func TestIdentityChangeDiscardsActualHeldReplyDirectAndEdge(t *testing.T) {
 				f.hub.Stop()
 				store := f.hub.remoteStore(f.remote.ID)
 				op := core.Operation{OpID: "actual-held", Role: "agent", EnvironmentID: f.remote.ID, CredentialRevision: f.remote.CredentialRevision, TargetRef: repository("agent") + ":1.0.1@sha256:" + testDigest, TargetVersion: "1.0.1", Deadline: time.Now().Add(core.OperationTimeout)}
-				op, _, err := f.hub.reserveRun(t.Context(), store, op, "operator", "operator")
+				op, _, err := f.hub.reserveRun(t.Context(), store, op, "operator", "operator", nil)
 				require.NoError(t, err)
 				_, _, err = f.agent.store.Reserve(t.Context(), op, nil)
 				require.NoError(t, err)

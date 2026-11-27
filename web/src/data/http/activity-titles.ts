@@ -2,7 +2,7 @@
 // Revision: 343b1df4b249529e427ce1b7e38f1eec74e95187
 // Retrieved: 2026-11-23
 // License: Apache-2.0
-// Deviations: Original activity titles, host targets and scan presentation. M37 #584: truthful activity titles, host targets and scan counts.
+// Deviations: Original activity titles, host targets and scan presentation. M37 #584: truthful activity titles, host targets and scan counts; M46 #682 combined update title.
 
 import type { components } from "@/api/generated/schema";
 import type { MessageCode } from "../message-code";
@@ -12,6 +12,7 @@ type Activity = components["schemas"]["ActivityActivity"];
 export const TYPE_TITLES: Readonly<Record<string, string>> = {
   "hub.update": "hubUpdate",
   "agent.update": "agentUpdate",
+  "system.update-all": "updateAll",
   "job_run": "job",
   "resource_action": "action",
   "load_sustained": "activity.runKind.load-alert",

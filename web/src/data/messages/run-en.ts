@@ -2,6 +2,7 @@ export const enRunMessages = {
   activityTitles: {
     "hubUpdate": "Hub update",
     "agentUpdate": "Agent update",
+    "updateAll": "Update everything",
     "job": "Scheduled job",
     "action": "Action",
     "imagePatch": "Patch image",
@@ -77,6 +78,7 @@ export const enRunMessages = {
     "minutes": "{minutes} min"
   },
 
+  fleet: {"hub": "Updating hub", "agents": "Updating agents", "settled": "Finished", "success": "All hosts updated or current", "partial": "Completed with exceptions", "failed": "Update failed", "pending": "Waiting", "reserved": "Updating", "skipped": "Skipped"},
   selfUpdate: {
     "available": "Update available",
     "current": "Up to date",

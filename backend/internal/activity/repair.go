@@ -72,7 +72,7 @@ func (s *ActivityService) repairMatchingInternal(ctx context.Context, kind activ
 	// process becoming ready cannot prove the detached helper's health result.
 	if s.db.Migrator().HasTable(&kv.KVEntry{}) {
 		var entries []kv.KVEntry
-		if err := s.db.WithContext(ctx).Where("key = ? OR key LIKE ?", "selfupdate.operation", "selfupdate.remote.%").Find(&entries).Error; err != nil {
+		if err := s.db.WithContext(ctx).Where("key IN ? OR key LIKE ?", []string{"selfupdate.operation", "selfupdate.fleet"}, "selfupdate.remote.%").Find(&entries).Error; err != nil {
 			return 0, err
 		}
 		for _, entry := range entries {
