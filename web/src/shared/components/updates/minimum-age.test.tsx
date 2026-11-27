@@ -25,21 +25,32 @@ const manifest = `sha256:${"a".repeat(64)}`, eligibleAt = "2026-12-01T03:00:00Z"
 afterEach(() => setAppLocale("de"));
 for (const locale of ["en-US", "de"] as const) {
   for (const kind of ["stack", "container"] as const) {
-    it.each([true, false])(`${locale} ${kind} HTTP policy renders age (known=%s)`, async (known) => {
-      setAppLocale(locale); const f = updateFixture(); await f.adapter.getCurrentUser();
+    it.each([
+      { known: true, days: "2", mode: "scheduled" }, { known: false, days: "2", mode: "scheduled" },
+      { known: false, days: "0", mode: "scheduled" }, { known: true, days: "0", mode: "scheduled" }, { known: false, days: "2", mode: "check" },
+    ] as const)(`${locale} ${kind} HTTP policy age (known=$known, days=$days, mode=$mode)`, async ({ known, days, mode }) => {
+      setAppLocale(locale); const f = updateFixture(); const original = f.fetcher.getMockImplementation()!;
+      f.fetcher.mockImplementation(async (input, init = {}) => String(input).endsWith("/settings") ? response(Object.entries({ effectiveTimeZone: "UTC", updateCheckInterval: "12h", updateNotify: "false", updateMinimumAgeDays: days }).map(([key, value]) => ({ key, value }))) : original(input, init));
+      await f.adapter.getCurrentUser();
       f.state.policy.targetKind = kind;
-      f.state.policy.mode = "scheduled"; f.state.policy.window = { kind: "daily", time: "04:00" };
+      f.state.policy.mode = mode;
+      if (mode === "scheduled") f.state.policy.window = { kind: "daily", time: "04:00" };
       Object.assign(f.state.policy.candidates[0]!, known ? { manifest, eligibleAt } : {});
       // The standalone consumer uses the name-based policy id, separate from its container id.
       const c = { id: "direct~example-id", hostId: "direct", name: "project", origin: "standalone", image: { repository: "example", tag: "1" }, update: { state: "unchecked" } } as ContainerInfo;
       renderWithApp(kind === "stack" ? <LiveStackUpdates stackId="direct~project" /> : <ContainerUpdates c={c} select={() => {}} />, f.adapter);
       await screen.findByRole("combobox");
-      if (known) {
-        const formatted = new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }).format(new Date(eligibleAt));
-        const expected = catalogs[locale].common.stackUpdates.waitsUntil.replace("{date}", formatted);
-        expect(document.body.textContent).toContain(expected);
-        expect(document.body.textContent?.includes(catalogs[locale].common.stackUpdates.ageUnknown)).toBe(false);
-      } else expect(document.body.textContent).toContain(catalogs[locale].common.stackUpdates.ageUnknown);
+      const texts = catalogs[locale].common.stackUpdates, formatted = new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" }).format(new Date(eligibleAt));
+      const waits = texts.waitsUntil.replace("{date}", formatted), shown = () => document.body.textContent ?? "";
+      if (days === "0" || mode === "check") {
+        // Setting 0 and check-only policies keep the view unchanged: no age text for any candidate shape.
+        if (mode === "scheduled") await waitFor(() => expect(f.fetcher.mock.calls.some(([input]) => String(input).endsWith("/settings"))).toBe(true));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(shown().includes(waits) || shown().includes(texts.ageUnknown)).toBe(false);
+      } else if (known) {
+        await waitFor(() => expect(shown().includes(waits)).toBe(true));
+        expect(shown().includes(texts.ageUnknown)).toBe(false);
+      } else await waitFor(() => expect(shown().includes(texts.ageUnknown)).toBe(true));
     });
   }
   it(`${locale} settings saves and reads minimum age, rejects invalid input and refreshes policies`, async () => {

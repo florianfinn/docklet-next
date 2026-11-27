@@ -48,7 +48,7 @@ export const deCommon: typeof enCommon = {
   },
   stackUpdates: {
     waitsUntil: "Wartet bis {date}",
-    ageUnknown: "Alter unbekannt – Agent aktualisieren",
+    ageUnknown: "Image-Alter unbekannt",
     recoveryStale: "Aktualisiere diesen Container vor der Wiederherstellung des vorherigen Images; seine Bestandsdaten sind veraltet.",
     recoveryHeld: "Eine Wiederherstellung ist nicht verfügbar, solange dieser Punkt verwendet wird oder sein Ergebnis unbekannt ist.",
     updateOptions: "Update-Optionen",

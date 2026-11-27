@@ -47,7 +47,7 @@ export const enCommon = {
   },
   stackUpdates: {
     waitsUntil: "Waits until {date}",
-    ageUnknown: "Age unknown – update the agent",
+    ageUnknown: "Image age unknown",
     recoveryStale: "Refresh this container before restoring its previous image; its inventory is stale.",
     recoveryHeld: "Recovery is unavailable while this restore point is in use or its outcome is unknown.",
     updateOptions: "Update options",

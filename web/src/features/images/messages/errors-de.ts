@@ -26,7 +26,7 @@ export const deImageErrors = {
   "update_auto-restore-failed": "Update und automatische Wiederherstellung sind fehlgeschlagen. Ein Eingriff ist nötig. Volume-Daten wurden nicht wiederhergestellt.",
   "update_auto-restore-unavailable": "Das Update ist fehlgeschlagen; eine automatische Wiederherstellung war nicht möglich. Volume-Daten wurden nicht wiederhergestellt.",
   "update_interrupted": "Das Update wurde unterbrochen. Prüfe das Ziel. Volume-Daten wurden nicht wiederhergestellt.",
-  "update_minimum-age": "Der Kandidat wartet vor einem geplanten Update auf das Mindestalter des Images.",
+  "update_minimum-age": "Das geplante Update wird zurückgehalten: Das Image ist jünger als das Mindestalter oder sein Alter ist unbekannt.",
   "update_candidate-failed": "Dieser Kandidat ist zuvor fehlgeschlagen und wurde wiederhergestellt. Er wird übersprungen.",
   "restore_files-changed": "Die Stack-Dateien haben sich geändert. Automatische Wiederherstellung ist nicht möglich.",
   "container_auto-remove": "Automatische Wiederherstellung ist für einen laufenden Auto-Remove-Container nicht möglich.",
