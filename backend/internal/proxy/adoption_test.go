@@ -35,6 +35,8 @@ type adoptionFixture struct {
 	candidate dto.Discovery
 	discover  func()
 	inventory func(dto.Instance)
+	// agent overrides the reported agent contract (default: the current one).
+	agent *version.Info
 }
 
 func newAdoptionFixture(t *testing.T) *adoptionFixture {
@@ -56,6 +58,10 @@ func newAdoptionFixture(t *testing.T) *adoptionFixture {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/app-version":
+			if f.agent != nil {
+				send(*f.agent)
+				return
+			}
 			send(version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
 		case "/api/environments/0/system/health":
 			send(map[string]any{})

@@ -13,7 +13,9 @@ import (
 	"testing"
 
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/types/contract"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
+	"github.com/florianfinn/docklet-next/types/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -127,4 +129,78 @@ func TestM44MetadataLossValidation(t *testing.T) {
 		require.ErrorAs(t, err, &p, name)
 		require.Equal(t, dto.InvalidInput, p.Code, name)
 	}
+}
+
+// M44 break-map row 12 at the web entry: through the real host transport (agent contract read from the
+// agent's app-version), CreateOperation refuses before admission, adoption or any record.
+func TestM44CreateOperationGateBeforeAdmission(t *testing.T) {
+	fingerprints := map[int]string{20: contract.AgentHubV20Fingerprint, 21: contract.AgentHubV21Fingerprint, 22: contract.AgentHubV22Fingerprint, 23: contract.AgentHubV23Fingerprint, 24: contract.AgentHubV24Fingerprint}
+	for v, fp := range fingerprints {
+		f := newAdoptionFixture(t)
+		f.agent = &version.Info{AgentContractVersion: v, AgentContractFingerprint: fp}
+		f.discover = func() { t.Errorf("contract %d: discovery before the gate", v) }
+		f.inventory = func(dto.Instance) { t.Errorf("contract %d: admission before the gate", v) }
+		before, err := f.m.Instance(t.Context(), f.request.Instance.ID)
+		require.NoError(t, err)
+		_, err = f.m.CreateOperation(t.Context(), f.request.Instance.ID, dto.OperationRequest{Target: f.request.Target, Expected: f.request.Expected, GraphHashes: f.request.GraphHashes, Change: f.request.Change, Acknowledgements: dto.Acknowledgements{MetadataLoss: []dto.MetadataLoss{{Path: f.request.Target, Token: exampleLossToken}}}})
+		require.ErrorIs(t, err, environment.ErrAgentUpdateRequired, "contract %d", v)
+		after, err := f.m.Instance(t.Context(), f.request.Instance.ID)
+		require.NoError(t, err)
+		require.Equal(t, before, after, "contract %d", v)
+		require.Zero(t, f.count(t), "contract %d", v)
+	}
+}
+
+// contract24Request was encoded by main 723c0de3 (contract 24); contract24Digest is main's Digest of it.
+const contract24Request = `{"id":"example-contract24","instance":{"id":"instance-one","environmentId":"example-host","name":"","kind":"traefik","identity":{"containerId":"example-container","containerName":"example-proxy","startedAt":"2026-11-01T00:00:00Z"},"source":{"kind":"project","canonical":"/example/projects/proxy","mountTarget":"/etc/proxy","readOnly":false},"authority":"","routeDirectory":"","generation":"example-generation","registration":"example-registration","eligibility":{"writable":true,"textOnly":false,"line":0}},"generation":"example-generation","registration":"example-registration","target":"route.yml","expected":{"present":true,"hash":"example-hash"},"graphHashes":{"route.yml":"example-hash"},"change":{"kind":"edit-route"},"acknowledgements":{"unresolvedReferences":["example-middleware"],"replaceRunningConfig":false,"restart":false}}`
+const contract24Digest = "b31d5818637763f82de5a6bc3d550c54d3435e3c6c2ce4c5d81d84c5a3a122e7"
+
+// M44 break-map row 13 against main's bytes: hub records and agent journals written by contract 24
+// keep their digest, also when a client sends null or an empty list.
+func TestM44Contract24RecordsReplayUnchanged(t *testing.T) {
+	variants := map[string]string{
+		"absent": contract24Request,
+		"null":   strings.Replace(contract24Request, `"restart":false`, `"restart":false,"metadataLoss":null`, 1),
+		"empty":  strings.Replace(contract24Request, `"restart":false`, `"restart":false,"metadataLoss":[]`, 1),
+	}
+	for name, raw := range variants {
+		require.NotEqual(t, name != "absent", raw == contract24Request, name)
+		var q dto.ApplyRequest
+		require.NoError(t, json.Unmarshal([]byte(raw), &q), name)
+		d, err := Digest(q)
+		require.NoError(t, err)
+		require.Equal(t, contract24Digest, d, name)
+	}
+	var legacy dto.ApplyRequest
+	require.NoError(t, json.Unmarshal([]byte(contract24Request), &legacy))
+	again, err := json.Marshal(legacy, json.Deterministic(true))
+	require.NoError(t, err)
+	require.Equal(t, contract24Request, string(again))
+
+	// Hub: a record stored by main is found again, not a conflict, and nothing is dispatched.
+	x := newFixture(t)
+	q := legacy
+	q.Instance = x.request.Instance
+	q.Generation, q.Registration = x.request.Generation, x.request.Registration
+	stored, err := Digest(q)
+	require.NoError(t, err)
+	request, err := marshal(q)
+	require.NoError(t, err)
+	result, err := marshal(dto.Operation{Kind: dto.RouteOperation, ID: q.ID, InstanceID: q.Instance.ID, Generation: q.Generation, Registration: q.Registration, Digest: stored, State: dto.Verified, Phase: dto.Observing, Target: q.Target})
+	require.NoError(t, err)
+	require.NoError(t, x.db.Create(&Record{ID: q.ID, InstanceID: q.Instance.ID, Generation: q.Generation, Digest: stored, Registration: q.Registration, State: dto.Verified, Request: request, Result: result}).Error)
+	tr := &localTransport{a: x.a, reg: q.Registration}
+	h := &Hub{DB: x.db.DB, Modules: x.mods, Transport: tr}
+	empty := q
+	empty.Acknowledgements.MetadataLoss = []dto.MetadataLoss{}
+	o, err := h.Apply(t.Context(), empty)
+	require.NoError(t, err)
+	require.Equal(t, dto.Verified, o.State)
+	require.Zero(t, tr.applyCalls)
+
+	// Agent: a journal entry from main replays as the same operation.
+	x.persist(t, Intent{Request: q}, dto.Operation{Kind: dto.RouteOperation, ID: q.ID, InstanceID: q.Instance.ID, Generation: q.Generation, Registration: q.Registration, Digest: stored, State: dto.Verified, Phase: dto.Observing, Target: q.Target})
+	o, err = x.a.Apply(t.Context(), empty)
+	require.NoError(t, err)
+	require.Equal(t, dto.Verified, o.State)
 }

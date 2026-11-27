@@ -31,14 +31,14 @@ that external Compose version. Updates require the supported layout described in
 
 | Boundary | This release |
 | --- | --- |
-| Agent contract advertised by hub and agent (`AgentHubVersion`) | `24` |
+| Agent contract advertised by hub and agent (`AgentHubVersion`) | `25` |
 | Minimum accepted agent contract (`MinimumAgentVersion`) | `18` |
 | Edge protocol marker | `edge-protocol/1` |
 | Minimum Edge marker value | `1` |
 
 Contract numbers are wire-contract versions, not product SemVer. Agents with
 contracts older than 18 cannot become compatible hosts; the hub reports
-`update-required` and `agent.update-required`. Contracts 18 to 24 must also have
+`update-required` and `agent.update-required`. Contracts 18 to 25 must also have
 their expected schema fingerprints. Health/version reads and the agent update
 recovery routes remain available with authentication. This is the first release
 compatibility boundary for both Direct and Edge agents.
@@ -76,6 +76,15 @@ the waiting witness of a deferred run, job activity counts and the
 `update.image-not-pulled` reason. Agents on contract 18 to 23 keep running their
 jobs; their own local job runs show no progress counts. Host and all-host update
 checks run on the hub and show counts for every agent.
+
+Contract 25 adds the proxy `metadata-loss` reason and its confirmation. A proxy
+write whose replacement would lose extended attributes (for example a per-file
+ACL) or other hard links is rejected with the list until the operator confirms;
+inherited attributes pass. Agents on contract 18 to 24 keep every other module
+request and still refuse targets with extended attributes
+(`unsupported-metadata`); the hub answers a confirmation for them with
+`agent.update-required`. Update agents together with the hub: a contract-25
+agent behind an older hub is outside the supported upgrade order.
 
 Each Edge peer advertises its own protocol marker. A missing, malformed or
 duplicate marker counts as protocol 1. This release records the marker without
