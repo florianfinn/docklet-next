@@ -16,13 +16,13 @@ describe("metadata loss decoder", () => {
     expect(decode([entry, { path: "routes/other.yml", token: entry.token }]).metadataLoss).toEqual([entry, { path: "routes/other.yml", token: entry.token }]);
     expect(decode([]).metadataLoss).toEqual([]);
   });
-  it("accepts a path and an ASCII attribute name at the byte limits", () => {
-    const boundary = { ...entry, path: "é".repeat(512), attributes: ["!".repeat(254) + "~"] };
+  it("accepts a path and an ASCII attribute name at the limits (path in characters, name in bytes)", () => {
+    const boundary = { ...entry, path: "é".repeat(1024), attributes: ["!".repeat(254) + "~"] };
     expect(decode([boundary]).metadataLoss).toEqual([boundary]);
   });
   it.each([
     ["empty path", { ...entry, path: "" }],
-    ["path over 1024 bytes", { ...entry, path: "é".repeat(512) + "x" }],
+    ["path over 1024 characters", { ...entry, path: "é".repeat(1025) }],
     ["non-ASCII name", { ...entry, attributes: ["user.café"] }],
     ["space in name", { ...entry, attributes: ["user.a b"] }],
   ])("rejects a loss with %s", (_, loss) => {

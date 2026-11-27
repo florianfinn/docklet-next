@@ -71,6 +71,16 @@ describe("metadata loss presentation", () => {
     expect(recent.queryByText(warning["en-US"]) === null).toBe(true);
     expect(recent.queryByRole("button", { name: "Retry the same change" }) === null).toBe(true);
   });
+  it("keeps the permanent warning on a failed fallback whose inode is gone", () => {
+    const gone = [{ path: "routes/app.yml", token: Array(65).join("e") }];
+    render(<Providers><Operations rows={[operation({ state: "recovery-required", metadataLoss: gone })]} busy={false} release={async () => {}} /></Providers>);
+    expect(screen.queryByText(warning["en-US"]) !== null).toBe(true);
+    expect(screen.queryByText(prospectiveWarning["en-US"]) === null).toBe(true);
+  });
+  it("keeps the prospective warning on a refused restore with known attributes", () => {
+    render(<Providers><Operations rows={[operation({ state: "recovery-required", metadataLoss: [loss[0]!] })]} busy={false} release={async () => {}} /></Providers>);
+    expect(screen.queryByText(prospectiveWarning["en-US"]) !== null).toBe(true);
+  });
   it("shows restore losses read-only, including unknown attributes, without a retry", () => {
     render(<Providers><Operations rows={[operation({ state: "restored", metadataLoss: loss, diagnostic: { detail: "The original inode is gone; metadata cannot be recovered." } })]} busy={false} release={async () => {}} /></Providers>);
     expect(screen.queryByText(warning["en-US"]) !== null).toBe(true);

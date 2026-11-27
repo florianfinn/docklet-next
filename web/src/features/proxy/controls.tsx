@@ -225,7 +225,9 @@ export function AcknowledgementFields({
 export function MetadataLossList({ operation: { metadataLoss: loss, state } }: { operation: Operation }) {
   const t = useTranslations("proxyContract.ui");
   if (!loss?.length) return null;
-  const completed = state === "verified" || state === "applied-unverified" || state === "applied" || state === "restored";
+  // An entry without attributes or links is the fallback's unavailable-inode receipt: that loss already happened.
+  const completed = state === "verified" || state === "applied-unverified" || state === "applied" || state === "restored" ||
+    state === "recovery-required" && loss.some(entry => !entry.attributes?.length && !entry.links);
   return <div className="space-y-2 [overflow-wrap:anywhere]">
     <p>{t(completed ? "metadataPermanent" : "metadataWouldBePermanent")}</p>
     <ul className="space-y-2">{loss.map((entry, i) => <li key={i}>
