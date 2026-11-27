@@ -40,3 +40,20 @@ func TestGenericCronSaveRejectsAdditionalLiveKeys(t *testing.T) {
 		require.Error(t, svc.UpdateSetting(t.Context(), key, "invalid cron"), key)
 	}
 }
+
+// Descriptors the job-schedule route stores survive a restart.
+func TestCronStartupRecoveryKeepsDescriptors(t *testing.T) {
+	db := setupSettingsTestDB(t)
+	svc, err := newSettingsServiceForTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	require.NoError(t, svc.EnsureDefaultSettings(t.Context()))
+	for _, key := range []string{"eventCleanupInterval", "scheduledPruneInterval", "autoHealInterval"} {
+		require.NoError(t, db.Model(&SettingVariable{}).Where("key = ?", key).Update("value", "@daily").Error)
+	}
+	require.NoError(t, svc.EnsureDefaultSettings(t.Context()))
+	for _, key := range []string{"eventCleanupInterval", "scheduledPruneInterval", "autoHealInterval"} {
+		var stored SettingVariable
+		require.NoError(t, db.Where("key = ?", key).First(&stored).Error)
+		require.Equal(t, "@daily", stored.Value, key)
+	}
+}
