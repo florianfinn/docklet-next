@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 1af05ffbb0f5dcd28a29d9023f0979cdace9f142f52b5f3eaf0b90a48912e308
+// Revision: 34139e1bc309013d52c67caddaf3675e3c7e8ec37bd8b58c1ed41f488ee356e2
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -12119,6 +12119,7 @@ export interface components {
             title: string;
         };
         ProxyAcknowledgements: {
+            metadataLoss?: components["schemas"]["ProxyMetadataLoss"][] | null;
             replaceRunningConfig: boolean;
             restart: boolean;
             unresolvedReferences: string[] | null;
@@ -12357,6 +12358,13 @@ export interface components {
             throttleMillis: number;
             watch: boolean;
         };
+        ProxyMetadataLoss: {
+            attributes?: string[] | null;
+            /** Format: int64 */
+            links?: number;
+            path: string;
+            token: string;
+        };
         ProxyOpaqueFile: {
             path: string;
         };
@@ -12376,6 +12384,7 @@ export interface components {
             id: string;
             instanceId: string;
             kind?: string;
+            metadataLoss?: components["schemas"]["ProxyMetadataLoss"][] | null;
             new: components["schemas"]["ProxyFileState"];
             old: components["schemas"]["ProxyFileState"];
             /** @enum {string} */
@@ -12412,7 +12421,7 @@ export interface components {
         };
         ProxyProblem: {
             /** @enum {string} */
-            code: "no-observable-difference" | "not-observable" | "container-changed" | "logs-unavailable" | "generation-mismatch" | "operation-conflict" | "module-busy" | "stale-hash" | "source-read-only" | "unknown-operation" | "operation-fenced" | "registration-changed" | "journal-lost" | "invalid-input" | "input-limit" | "exec-failed" | "exec-running" | "proxy-rejected" | "restore-failed" | "invalid-graph" | "incomplete-inventory" | "opaque-input" | "single-file-mount" | "refused-bind" | "read-only-mount" | "unknown-source" | "unsupported-metadata" | "watch-off" | "unsupported-format" | "template-input" | "rule-syntax-v2" | "shared-across-files" | "persistence-off" | "relative-import" | "import-missing" | "acknowledgement-required" | "probe-unavailable" | "probe-option-unavailable" | "admin-unavailable" | "agent-unavailable" | "engine-unavailable" | "target-changed" | "source-ineligible" | "route-directory-mismatch" | "provider-directory-elsewhere" | "caddy-config-implicit" | "read-only" | "route-changed" | "certificate-unavailable" | "probe-image-unavailable" | "probe-client-missing" | "probe-client-unsupported" | "third-version" | "backup-invalid" | "unsupported-layout" | "env-conflict" | "env-key-exists" | "env-duplicate" | "storage-not-writable" | "unknown-operation-kind" | "compose-load-failed" | "compose-up-failed" | "static-parse-failed" | "effect-unsettled" | "target-unclear" | "identity-unclear" | "interrupted" | "not-implemented";
+            code: "no-observable-difference" | "not-observable" | "container-changed" | "logs-unavailable" | "generation-mismatch" | "operation-conflict" | "module-busy" | "stale-hash" | "source-read-only" | "unknown-operation" | "operation-fenced" | "registration-changed" | "journal-lost" | "invalid-input" | "input-limit" | "exec-failed" | "exec-running" | "proxy-rejected" | "restore-failed" | "invalid-graph" | "incomplete-inventory" | "opaque-input" | "single-file-mount" | "refused-bind" | "read-only-mount" | "unknown-source" | "unsupported-metadata" | "watch-off" | "unsupported-format" | "template-input" | "rule-syntax-v2" | "shared-across-files" | "persistence-off" | "relative-import" | "import-missing" | "acknowledgement-required" | "probe-unavailable" | "probe-option-unavailable" | "admin-unavailable" | "agent-unavailable" | "engine-unavailable" | "target-changed" | "metadata-loss" | "source-ineligible" | "route-directory-mismatch" | "provider-directory-elsewhere" | "caddy-config-implicit" | "read-only" | "route-changed" | "certificate-unavailable" | "probe-image-unavailable" | "probe-client-missing" | "probe-client-unsupported" | "third-version" | "backup-invalid" | "unsupported-layout" | "env-conflict" | "env-key-exists" | "env-duplicate" | "storage-not-writable" | "unknown-operation-kind" | "compose-load-failed" | "compose-up-failed" | "static-parse-failed" | "effect-unsettled" | "target-unclear" | "identity-unclear" | "interrupted" | "not-implemented";
             detail?: string;
             generation?: string;
             /** Format: int64 */

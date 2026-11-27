@@ -84,5 +84,6 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Proxy import analysis](proxy-import-analysis.md) | Dated read-only findings from a real Traefik edge and their constraints on the proxy module |
 | [Optional modules](optional-modules.md) | M27 design: in-image modules on the feature registry, access-then-gate refusal, admission fence, setup step and host compatibility |
 | [Proxy module](proxy-module.md) | M27 design: agent-owned Traefik and Caddy writes, journaled write protocol with recovery and release, verification evidence and measured baseline |
+| [Proxy file metadata](proxy-file-metadata.md) | M44 design: replacements keep or report extended attributes and extra links, metadata-loss acknowledgement (contract 25), resolver files |
 
 Historical plans belong in the [history index](../history/README.md).

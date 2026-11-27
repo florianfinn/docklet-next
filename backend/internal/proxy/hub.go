@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/modules"
 	activitydto "github.com/florianfinn/docklet-next/types/activity"
@@ -29,6 +30,24 @@ type Transport interface {
 	Query(context.Context, dto.Query) (dto.Operation, error)
 	Fence(context.Context, dto.Query) (dto.FenceResult, error)
 	Release(context.Context, dto.ReleaseRequest) (dto.Operation, error)
+	// ContractVersion is the agent contract of the environment's current session.
+	ContractVersion(context.Context, string) (int, error)
+}
+
+// metadataLossSupported refuses a metadata-loss acknowledgement for agents below contract 25: their
+// request schema has no such field, so the hub answers update-required before any record exists.
+func metadataLossSupported(ctx context.Context, t Transport, environmentID string, a dto.Acknowledgements) error {
+	if len(a.MetadataLoss) == 0 {
+		return nil
+	}
+	v, err := t.ContractVersion(ctx, environmentID)
+	if err != nil {
+		return err
+	}
+	if v < dto.MetadataLossContractVersion {
+		return environment.ErrAgentUpdateRequired
+	}
+	return nil
 }
 type Hub struct {
 	DB        *gorm.DB
@@ -38,7 +57,11 @@ type Hub struct {
 }
 
 func (h *Hub) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, error) {
+	q.Acknowledgements = dto.NormaliseAcknowledgements(q.Acknowledgements)
 	if err := validRequest(q); err != nil {
+		return dto.Operation{}, err
+	}
+	if err := metadataLossSupported(ctx, h.Transport, q.Instance.EnvironmentID, q.Acknowledgements); err != nil {
 		return dto.Operation{}, err
 	}
 	d, err := Digest(q)

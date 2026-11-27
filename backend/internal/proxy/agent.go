@@ -85,6 +85,7 @@ func (a *Agent) Check(ctx context.Context, i dto.Instance) error {
 	return a.Runtime.Check(ctx, i)
 }
 func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, error) {
+	q.Acknowledgements = dto.NormaliseAcknowledgements(q.Acknowledgements)
 	if err := validRequest(q); err != nil {
 		return dto.Operation{}, err
 	}

@@ -192,6 +192,30 @@ type Acknowledgements struct {
 	UnresolvedReferences []string `json:"unresolvedReferences"`
 	ReplaceRunningConfig bool     `json:"replaceRunningConfig"`
 	Restart              bool     `json:"restart"`
+	// MetadataLoss confirms losses an earlier metadata-loss rejection reported. Absent, null and an
+	// empty list are the same request (NormaliseAcknowledgements), so digests from contract 24 stay valid.
+	MetadataLoss []MetadataLoss `json:"metadataLoss,omitzero" maxItems:"16"`
+}
+
+// MetadataLoss names what replacing one target loses: extended attributes the staging file
+// does not keep and the target's other hard links. Token binds a confirmation to that snapshot;
+// attribute values never leave the agent.
+type MetadataLoss struct {
+	Path       string   `json:"path" minLength:"1" maxLength:"1024"`
+	Attributes []string `json:"attributes,omitzero" maxItems:"64"`
+	Links      int      `json:"links,omitzero" minimum:"0" maximum:"1024"`
+	Token      string   `json:"token" pattern:"^[a-f0-9]{64}$"`
+}
+
+// MetadataLossContractVersion is the first agent contract that accepts Acknowledgements.MetadataLoss.
+const MetadataLossContractVersion = 25
+
+// NormaliseAcknowledgements gives an empty metadata-loss list one form before hashing, storing and sending.
+func NormaliseAcknowledgements(a Acknowledgements) Acknowledgements {
+	if len(a.MetadataLoss) == 0 {
+		a.MetadataLoss = nil
+	}
+	return a
 }
 type ApplyRequest struct {
 	Kind             OperationKind     `json:"kind,omitempty" enum:"route"`
@@ -271,6 +295,8 @@ type Operation struct {
 	ReleasedBy   string                  `json:"releasedBy,omitempty"`
 	// Diagnostic names where an engine refused or failed (validator message, file and line).
 	Diagnostic *Diagnostic `json:"diagnostic,omitempty"`
+	// MetadataLoss lists what a replacement would lose (metadata-loss) or what a restore could not keep.
+	MetadataLoss []MetadataLoss `json:"metadataLoss,omitzero" maxItems:"16"`
 }
 
 // Diagnostic is bounded engine text; it never contains opaque file content.

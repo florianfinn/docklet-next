@@ -65,7 +65,7 @@ publication graph checks (`proxy.IncompleteRead`).
 | Write, project source | A source inside the agent's projects directory (the usual case for a proxy stack managed by Docklet) is written through the agent's own mount, confined like project files (`acfs.LogicalPath`, no symlink in any segment), with a temporary file, file sync, rename and directory sync. |
 | Write, other source | A named volume or another allowed bind source is read-only in M27 (Q-HELPER-META): only the tools helper could write it, and the pinned helper cannot prove that a file carries no extended attributes, ACLs or extra hard links, which a replacement would lose. Setup shows the reason `unsupported-metadata`. The helper writer and its bind path rules stay in place for a later helper with a metadata capability; a proxy configuration outside the projects directory is not a planned case. |
 | Read-only sources | A file mounted as a single file, a refused bind source, a helper-only source (above) and an unknown source kind make the instance read-only with the reason shown in setup. The proxy container's own mount access does not: the agent writes a project directory itself and other sources through the helper, so a proxy may mount its configuration read-only. |
-| Metadata | A replaced file keeps its mode. The owner becomes the writer identity; a file that only its current owner may read is refused, because the proxy could lose access. ACLs, extended attributes and hard links are not preserved; files that carry them are refused. |
+| Metadata | A replaced file keeps its mode. The owner becomes the writer identity; a file that only its current owner may read is refused, because the proxy could lose access. ACLs, extended attributes and hard links are not copied. Since M44 a replacement that keeps them proceeds; one that would lose them is rejected with `metadata-loss` and can be confirmed ([proxy file metadata](proxy-file-metadata.md)). |
 | Run a proxy command | Docker exec in the proxy container with an argument vector built by the agent from a fixed per-kind allowlist: `caddy version`, `caddy validate`, `caddy adapt`, `caddy reload`, `traefik version`, and the probe below. Values come only from validated fields: no control characters, no leading `-`, URLs normalised. Both the transport error and the exit code are checked. Output is bounded. |
 | Restart | Only for a Caddy instance with `admin off`, only inside an operation the operator confirmed for a restart: Docker restart of the instance container, then the container must be running with a new `StartedAt`. |
 | Probe | BusyBox `wget` inside the proxy container with fixed options, and for Caddy the admin endpoint read through the same `wget`. Capabilities are detected once per container identity; see Verification. |
@@ -82,8 +82,10 @@ Known limits of the first version:
   the agent's source lock and journal still protect the files.
 - The source lock key is the canonical mount source. Two containers mounting
   overlapping but different sources get different keys.
-- A file with extended attributes is refused, which includes every file on hosts
-  that label files with SELinux.
+- A replacement that would lose extended attributes (for example a per-file ACL
+  or an SELinux label that differs from what a new file in the directory gets)
+  or extra hard links is rejected with `metadata-loss` until the operator
+  confirms the reported loss; inherited attributes pass (M44).
 - Adoption refuses while an instance has a reservation or unfinished operation;
   a container held by another registration stays stale and can be removed.
 - A `recovery-required` operation whose proxy container was removed for good, or

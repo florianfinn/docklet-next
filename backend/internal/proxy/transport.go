@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/types/base"
+	"github.com/florianfinn/docklet-next/types/contract"
 	moduledto "github.com/florianfinn/docklet-next/types/modules"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"net/url"
@@ -69,6 +70,19 @@ func (t *HostTransport) call(ctx context.Context, env, method, p string, in, out
 		return dto.Fail(dto.InvalidInput, 502)
 	}
 	return nil
+}
+func (t *HostTransport) ContractVersion(ctx context.Context, id string) (int, error) {
+	if id == "0" {
+		return contract.AgentHubVersion, nil
+	}
+	info, err := t.Hosts.CheckAgentCompatibility(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	if info == nil {
+		return 0, environment.ErrAgentUpdateRequired
+	}
+	return info.AgentContractVersion, nil
 }
 func (t *HostTransport) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, error) {
 	if q.Instance.EnvironmentID == "0" {

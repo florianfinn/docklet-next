@@ -116,6 +116,7 @@ func Digest(r dto.ApplyRequest) (string, error) {
 	if r.Kind.Effective() == dto.RouteOperation {
 		r.Kind = ""
 	}
+	r.Acknowledgements = dto.NormaliseAcknowledgements(r.Acknowledgements)
 	b, err := json.Marshal(r, json.Deterministic(true))
 	if err != nil {
 		return "", err
@@ -144,7 +145,40 @@ func validRequest(r dto.ApplyRequest) error {
 			return dto.Fail(dto.OpaqueInput, 422)
 		}
 	}
+	return validMetadataLoss(r.Target, r.Acknowledgements.MetadataLoss)
+}
+
+var lossToken = regexp.MustCompile(`^[a-f0-9]{64}$`)
+
+// validMetadataLoss bounds a metadata-loss list: one entry per path, only the request target.
+func validMetadataLoss(target string, losses []dto.MetadataLoss) error {
+	if len(losses) > 16 {
+		return dto.Fail(dto.InvalidInput, 422)
+	}
+	seen := map[string]bool{}
+	for _, l := range losses {
+		if l.Path != target || seen[l.Path] || l.Links < 0 || l.Links > 1024 || len(l.Attributes) > 64 || !lossToken.MatchString(l.Token) {
+			return dto.Fail(dto.InvalidInput, 422)
+		}
+		seen[l.Path] = true
+		for _, a := range l.Attributes {
+			if !validAttributeName(a) {
+				return dto.Fail(dto.InvalidInput, 422)
+			}
+		}
+	}
 	return nil
+}
+func validAttributeName(a string) bool {
+	if a == "" || len(a) > 255 {
+		return false
+	}
+	for _, c := range []byte(a) {
+		if c < 0x21 || c > 0x7e {
+			return false
+		}
+	}
+	return true
 }
 func paths(i *Intent) {
 	d := path.Dir(i.Request.Target)
