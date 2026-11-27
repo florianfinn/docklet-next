@@ -2,10 +2,11 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps. M24 S6: observed recovery and update UI follow-ups. Validated atomic deploy observations. M37 #584: truthful activity titles, host targets and scan counts.
+// Deviations: Original activity and event DTO projection for issue 38; catalogued labels for hub job runs. M19: total contract-code catalogue maps. M24 S6: observed recovery and update UI follow-ups. Validated atomic deploy observations. M37 #584: truthful activity titles, host targets and scan counts. #655: per-service deploy stage rows.
 
 import { activityTitle } from "./activity-titles";
 import type { DeployProgress } from "@/features/activity/deploy-progress";
+import { parseDeployServices } from "@/features/activity/deploy-services";
 import { runtimePeerAudit } from "./runtime-peer-audit";
 import { operationReasonKey } from "../operation-reason";
 import type { components } from "@/api/generated/schema";
@@ -304,6 +305,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     id: run.id,
     ...(bulk ? { bulk } : {}),
     deployProgress: deployProgress(run),
+    // Rows outlive the run so the settled state of every service stays readable.
+    deployServices: (run.type === "project_deploy" || run.type === "project_redeploy" || run.type === "project_update") && run.outcomeState !== "unknown" ? parseDeployServices(run.metadata?.deployServices) : undefined,
     ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId, pointCode: reason(lifecycle.pointCode) } : {}),
     ...(updateRecovery ? { updateRecovery } : {}),
     ...(job && run.metadata?.jobStatus === "partial" ? { partial: true } : {}),

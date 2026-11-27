@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; observe deploy operation barriers.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; observe deploy operation barriers; #655: report service builds to deploy rows.
 
 package projects
 
@@ -73,6 +73,8 @@ func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request project
 	if request.Options != nil && NormalizeDeployPullPolicy(request.Options.PullPolicy) == "never" {
 		forceLocalImages(request.ProjectID, model)
 	}
+	// Bound before preparation so pulls and builds land on service rows; rebound after it for resolved build images.
+	DeployReporterFromContext(ctx).ConfigureProject(model)
 	if prepareImagesForDeployErr := c.PrepareImagesForDeploy(ctx, request.ProjectID, model, request.Progress, operations, pullPolicy); prepareImagesForDeployErr != nil {
 		return nil, fmt.Errorf("failed to prepare project images for deploy: %w", prepareImagesForDeployErr)
 	}
@@ -408,10 +410,13 @@ func (c *composeCoordinatorInternal) buildServiceImageForDeployInternal(
 		project.Services[serviceName] = updatedSvc
 	}
 
+	reporter := DeployReporterFromContext(ctx)
+	reporter.Build(serviceName, deployStageRunning)
 	if buildErr := operations.Build(ctx, buildReq, progressWriter, serviceName); buildErr != nil {
+		reporter.Build(serviceName, deployStageError)
 		return buildErr
 	}
-
+	reporter.Build(serviceName, deployStageDone)
 	return nil
 }
 

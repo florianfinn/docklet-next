@@ -38,10 +38,20 @@ function StepIcon({ state }: { state: StepState }) {
  * in the motion chosen in the design lab (notifications.css); `motion`
  * overrides it for previews. Optional step
  * names sit on one truncated line under their segment, so the height never
- * changes between phases.
+ * changes between phases. A running run without known steps (agent update,
+ * unknown outcome) shows one indeterminate segment in the same motion.
  */
 export function StepTrack({ steps, status, labels = false, thin = false, motion }: { steps: ActionStep[]; status: ActionStatus; labels?: boolean; thin?: boolean; motion?: RunMotion }) {
   const chosen = useUiStyle("runMotion");
+  if (steps.length === 0 && status === "running") {
+    return (
+      <div aria-hidden data-slot="step-track" data-indeterminate data-thin={thin || undefined} data-tone="run">
+        <span data-slot="step-segment" className={cn("relative block overflow-hidden rounded-full bg-(--tone)/22", thin ? "h-1.5" : "h-2")}>
+          <span data-slot="step-motion" data-variant={motion ?? chosen} className="absolute inset-0" />
+        </span>
+      </div>
+    );
+  }
   return (
     <ol className="flex gap-1" aria-hidden data-slot="step-track" data-thin={thin || undefined}>
       {steps.map((s, i) => (

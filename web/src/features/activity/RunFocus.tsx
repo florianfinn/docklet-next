@@ -18,6 +18,8 @@ import { elapsedSeconds, RUN_ICON, RUN_TONE, runPhase } from "./run-phase";
 import { runtimeState } from "./runtime-presentation";
 import { ActionDetail } from "./ActionDetail";
 import { RunOutput } from "./RunOutput";
+import { deployServicesOf } from "./deploy-services";
+import { ServiceProgress } from "./ServiceProgress";
 
 export function RunStatusLine({ run, className }: { run: ActionRun; className?: string }) {
   const t = useTranslations("activity");
@@ -44,6 +46,8 @@ export function RunFacts({ run, now, className }: { run: ActionRun; now: number;
   const done = phases.filter((s) => s.state === "done").length;
   // A repository check has no fixed stage count, so its cell shows the stage or result, never a ratio.
   const bulk = useBulkCheckCounts(run);
+  // Service rows already show progress and affected services; elapsed time and target share one line.
+  if (deployServicesOf(run)) return <p className="shrink-0 truncate text-xs text-muted-foreground tabular-nums" data-slot="dialog-facts" data-compact>{t("compactFacts", { seconds: elapsedSeconds(run, now), target })}</p>;
   const progress = bulk ?? scan ?? deploy ?? (run.kind === "repository-check" ? check ?? "–" : undefined);
   const items = [
     ["progress", t("progress"), progress ?? (run.outcomeState === "unknown" || phases.length === 0 || !summaryStepsAvailable(run) ? "–" : `${done}/${phases.length} · ${withPercent(run.progress)}`)],
@@ -103,6 +107,7 @@ export function RunFocusBody({ run, now, fill = false, outputOpen = false, class
         <StepTrack steps={run.outcomeState === "unknown" ? [] : phases} status={run.status} labels />
       </div>
       <RunFacts run={run} now={now} className="shrink-0 rounded-xl border bg-background/40 p-3" />
+      <ServiceProgress run={run} />
       <RunErrorBox run={run} />
       <UpdateRecovery run={run} />
       <JobUpdateOutcomes run={run} />

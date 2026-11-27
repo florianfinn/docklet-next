@@ -33,6 +33,8 @@ import { RuntimeControls } from "./RuntimeControls";
 import { runtimeState } from "./runtime-presentation";
 import { ActionDetail } from "./ActionDetail";
 import { RunOutput } from "./RunOutput";
+import { ServiceProgress } from "./ServiceProgress";
+import { deployServicesOf } from "./deploy-services";
 
 /** Whether a design opens the raw output by itself. */
 const OUTPUT_OPEN: Record<ActionDialogDesign, boolean> = { focus: false, timeline: true, console: true };
@@ -49,6 +51,7 @@ function TimelineBody({ run, now }: { run: ActionRun; now: number }) {
         <StepList run={run} dense />
         <RunFacts run={run} now={now} className="content-start sm:grid-cols-2" />
       </div>
+      <ServiceProgress run={run} />
       <RunErrorBox run={run} />
       <UpdateRecovery run={run} />
       <JobUpdateOutcomes run={run} />
@@ -60,6 +63,8 @@ function TimelineBody({ run, now }: { run: ActionRun; now: number }) {
 /** "Konsole": a compact progress strip on top, the raw output fills the rest. */
 function ConsoleBody({ run, now }: { run: ActionRun; now: number }) {
   const t = useTranslations("activity.toast");
+  const dialog = useTranslations("activity.dialog");
+  const target = useRunTarget(run);
   const bulk = useBulkCheckCounts(run);
   const phases = runPhase(run).phases;
   const done = phases.filter((s) => s.state === "done").length;
@@ -67,13 +72,17 @@ function ConsoleBody({ run, now }: { run: ActionRun; now: number }) {
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex shrink-0 items-center gap-3">
         <RunStatusLine run={run} className="min-w-0 flex-1 text-sm" />
-        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-          {bulk ?? (run.outcomeState === "unknown" ? "–" : t("stepsDone", { done, total: phases.length }))} · {t("seconds", { seconds: elapsedSeconds(run, now) })}
+        {/* With service rows the strip shows elapsed time and target, like the other designs. */}
+        <span className="shrink-0 text-xs text-muted-foreground tabular-nums" data-slot="dialog-facts" data-compact={deployServicesOf(run) ? true : undefined}>
+          {deployServicesOf(run)
+            ? dialog("compactFacts", { seconds: elapsedSeconds(run, now), target })
+            : <>{bulk ?? (run.outcomeState === "unknown" ? "–" : t("stepsDone", { done, total: phases.length }))} · {t("seconds", { seconds: elapsedSeconds(run, now) })}</>}
         </span>
       </div>
       <div className="shrink-0">
         <StepTrack steps={runPhase(run).phases} status={run.status} labels thin />
       </div>
+      <ServiceProgress run={run} />
       <RunErrorBox run={run} />
       <UpdateRecovery run={run} />
       <JobUpdateOutcomes run={run} />

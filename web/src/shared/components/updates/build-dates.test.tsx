@@ -15,6 +15,8 @@ import { renderWithApp } from "@/test/render";
 import { StackUpdatePanel, UpdateChip } from "./update-panel";
 
 const tag = { repository: "example", tag: "latest" };
+/** Dated labels by their whole text; the date sits in its own smaller span. */
+const labelled = (text: string) => Array.from(document.querySelectorAll("[title]")).filter((node) => node.textContent === text);
 const rebuild = (current: object, latest: object): UpdateInfo => ({ state: "rebuild", current: { ...tag, ...current }, latest: { ...tag, ...latest }, checkedAt: "2026-11-25T08:00:00Z", registry: "docker.io" });
 
 for (const locale of ["de", "en-US"] as const) {
@@ -27,11 +29,11 @@ for (const locale of ["de", "en-US"] as const) {
     const text = document.body.textContent ?? "";
     expect(text.includes(`latest · ${formatDate("2026-11-12T08:00:00Z")}`)).toBe(true);
     expect(text.includes("latestlatest")).toBe(false);
-    expect(screen.getAllByText(`latest · ${formatDate("2026-11-24T06:00:00Z")}`).length).toBe(2);
+    expect(labelled(`latest · ${formatDate("2026-11-24T06:00:00Z")}`).length).toBe(2);
     expect(screen.getAllByTitle(copy.builtAt.replace("{date}", formatInstant("2026-11-24T06:00:00Z"))).length).toBe(2);
     expect(screen.getAllByTitle(copy.deployedAt.replace("{date}", formatInstant("2026-11-10T07:00:00Z"))).length).toBe(1);
     expect(screen.getAllByTitle(copy.checkedAt.replace("{date}", formatInstant("2026-11-25T08:00:00Z"))).length).toBe(2);
-    expect(screen.getAllByText(`latest · ${formatDate("2026-11-25T08:00:00Z")}`).length).toBe(2);
+    expect(labelled(`latest · ${formatDate("2026-11-25T08:00:00Z")}`).length).toBe(2);
     view.unmount();
   });
   it(`leads a rebuild chip with the build date, not a repeated version, in ${locale}`, () => {
@@ -42,7 +44,7 @@ for (const locale of ["de", "en-US"] as const) {
     const text = document.body.textContent ?? "";
     expect(text.includes(`release-1.0.0 · ${formatDate("2026-11-12T08:00:00Z")}`)).toBe(true);
     expect(text.includes(`1.0.1 · ${formatDate("2026-11-24T06:00:00Z")}`)).toBe(true);
-    expect(screen.getAllByText(`1.0.1 · ${formatDate("2026-11-24T06:00:00Z")}`).length).toBe(2);
+    expect(labelled(`1.0.1 · ${formatDate("2026-11-24T06:00:00Z")}`).length).toBe(2);
     view.unmount();
   });
   it(`tells same-day builds apart down to the second in ${locale}`, () => {
@@ -57,6 +59,26 @@ for (const locale of ["de", "en-US"] as const) {
     expect(labels(first).every((label) => label?.includes(formatTime(first, true)))).toBe(true);
     expect(labels(second).every((label) => label?.includes(formatTime(second, true)))).toBe(true);
     expect(formatInstant(first) === formatInstant(second)).toBe(false);
+    expect(labels(second).every((label) => !label?.includes("2026"))).toBe(true);
+    view.unmount();
+  });
+  it(`adds the year only when nothing else tells builds apart in ${locale}`, () => {
+    setAppLocale(locale);
+    const [first, second] = ["2025-11-24T06:00:00Z", "2026-11-24T06:00:00Z"];
+    const view = renderWithApp(<StackUpdatePanel services={[{ name: "web", update: rebuild({ published: first }, { published: second }) }]} />, updateFixture().adapter);
+    const titled = Array.from(document.querySelectorAll("[data-slot=update-versions] [title]"));
+    expect(titled.map((node) => node.textContent?.includes("2025") ?? false)).toEqual([true, false]);
+    expect(titled.map((node) => node.textContent?.includes("2026") ?? false)).toEqual([false, true]);
+    expect(titled.every((node) => /20(25|26)/.test(node.getAttribute("title") ?? "") && (node.getAttribute("title") ?? "").includes(formatTime(first, true)))).toBe(true);
+    view.unmount();
+  });
+  it(`keeps the target build whole and truncates the running build first in ${locale}`, () => {
+    setAppLocale(locale);
+    const view = renderWithApp(<StackUpdatePanel services={[{ name: "web", update: rebuild({ published: "2026-10-31T08:00:00Z" }, { published: "2026-11-21T08:00:00Z" }) }]} />, updateFixture().adapter);
+    const slot = (name: string) => document.querySelector(`[data-slot=${name}]`);
+    expect(slot("update-versions")?.classList.contains("shrink-0")).toBe(false);
+    expect(slot("update-current")?.classList.contains("truncate")).toBe(true);
+    expect(slot("update-target")?.classList.contains("shrink-0")).toBe(true);
     view.unmount();
   });
 }
