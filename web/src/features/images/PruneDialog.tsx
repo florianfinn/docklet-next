@@ -35,12 +35,13 @@ export function PruneDialog({ open, onOpenChange, hosts, images }: { open: boole
   const scoped = images.filter((i) => connected.some((h) => h.id === i.hostId));
   const remove = pruneCandidates(scoped, mode), kept = scoped.filter((i) => i.consumers.length);
   const [before, setBefore] = useState<ReadonlySet<string>>(), snapshotRuns = usePruneRunSnapshot(), counts = usePruneCountText();
-  const runs = usePruneRuns(before, (report?.hosts ?? connected).map((h) => h.id));
+  const [pending, setPending] = useState(false);
+  const runs = usePruneRuns(before, (report?.hosts ?? connected).map((h) => h.id), pending);
   const change = (next: boolean) => { feedback.change(next, onOpenChange); if (!next) { setReport(undefined); setBefore(undefined); } };
   const prune = useBusyAction(async () => {
     // Retain names even when a successful cleanup invalidates the current inventory.
     const snapshot = { images: [...images], hosts: [...hosts] };
-    setBefore(snapshotRuns());
+    setBefore(snapshotRuns()); setPending(true);
     const result = await feedback.run(() => cmd.prune(connected.map((h) => h.id), mode), (result) => {
       if (!result) return;
       // One compact summary: totals, plus the hosts whose cleanup had no result.
@@ -51,6 +52,7 @@ export function PruneDialog({ open, onOpenChange, hosts, images }: { open: boole
       if (failures.length || done.some((host) => host.failed.length)) toast.error(message);
       else toast.success(message);
     });
+    setPending(false);
     if (result) setReport({ ...snapshot, result });
   });
   return <Dialog open={open} onOpenChange={change}><DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-auto sm:max-w-xl" data-surface="prune-dialog">

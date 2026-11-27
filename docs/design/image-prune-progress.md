@@ -11,7 +11,8 @@ long name lists. This note records the contract behind that view (issue #661).
 - After every processed image the activity's `bulk` counts are rewritten (`unit: "target"`;
   `planned` = selected images; `completed`, `succeeded` = removed, `skipped`, `failed`). The activity
   ends successfully when no image failed, including when every image was skipped. It fails when at
-  least one removal failed, when listing fails, or on a panic. A cancellation stops before the next
+  least one removal failed or on a panic. A listing failure happens before the activity exists and
+  is reported by the request alone. A cancellation stops before the next
   image and keeps the counts so far. A removal that cancellation cuts off is counted neither as
   removed nor as failed.
 - A failed progress write is logged and never repeats or stops a removal. Startup repair settles an
@@ -31,9 +32,11 @@ indeterminate progress and the report at the end.
 
 - The web keeps `bulk` only when its counts are whole, non-negative and consistent. Otherwise
   progress stays indeterminate.
-- The dialog records the image cleanup runs it already knows before it submits. For each host it
-  binds the first run that was not among them and never moves that binding. This needs no clock
-  comparison between hub and agent.
+- The dialog records the image cleanup runs it already knows before it submits. While the request
+  is pending it binds, for each host, the first run that was not among them and never moves that
+  binding; after the request settled no new run is bound. This needs no clock comparison between
+  hub and agent. The last valid counts of a bound run stay with the dialog session, also when the
+  run later leaves the list.
 - Start view: counts of images to remove, their size and what is kept. The names sit behind
   "Show details".
 - Running view: one row per host with "k of N images processed" and a bar. A host that has not

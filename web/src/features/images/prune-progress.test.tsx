@@ -70,3 +70,24 @@ it("shows the last observed counts as incomplete when the host request has no re
   expect(incomplete?.textContent).toBe("3 Images entfernt · Ergebnis unvollständig – Details in der Aktivität");
   expect(screen.getByRole("alert") !== null).toBe(true);
 });
+
+it("binds no cleanup run that first appears after the host request settled", async () => {
+  const f = imageRegistryFixture(); f.state.failTransport = true;
+  renderWithApp(<PruneDialog open onOpenChange={vi.fn()} hosts={[host]} images={[image]} />, f.adapter);
+  await confirm();
+  await screen.findByText("Aufräumbericht");
+  await act(async () => publish([run("unrelated", "2026-11-27T11:00:00Z", bulk(4, 9))]));
+  expect(document.querySelector('[data-slot="prune-incomplete"]') === null).toBe(true);
+});
+
+it("keeps the last observed counts when the bound run leaves the list or loses its counts", async () => {
+  const f = imageRegistryFixture(), done = barrier(); f.state.delay = () => done.promise; f.state.failTransport = true;
+  renderWithApp(<PruneDialog open onOpenChange={vi.fn()} hosts={[host]} images={[image]} />, f.adapter);
+  await confirm(); await waitFor(() => expect(mutations(f)).toHaveLength(1));
+  await act(async () => publish([run("ours", "2026-11-27T11:00:00Z", bulk(3, 9))]));
+  await act(async () => publish([{ ...runs[0]!, bulk: undefined }]));
+  await act(async () => publish([]));
+  await act(async () => done.release());
+  await screen.findByText("Aufräumbericht");
+  expect(document.querySelector('[data-slot="prune-incomplete"]')?.textContent).toContain("3 Images entfernt");
+});
