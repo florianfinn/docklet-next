@@ -22,6 +22,7 @@ import (
 	"github.com/docker/compose/v5/pkg/api"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	kit "go.getarcane.app/kit/pkg"
+	"go.getarcane.app/updater/refs"
 )
 
 type composeCoordinatorInternal struct {
@@ -204,6 +205,11 @@ func NamespaceDependents(model *composetypes.Project, services []string) []strin
 				return true
 			}
 		}
+		for name, dependency := range svc.DependsOn {
+			if _, member := members[name]; member && dependency.Restart {
+				return true
+			}
+		}
 		return false
 	}
 	for changed := true; changed; {
@@ -291,7 +297,29 @@ func (c *composeCoordinatorInternal) PrepareImagesForDeploy(
 		return nil
 	}
 
-	for name, svc := range project.Services {
+	// Index build outputs before preparation so sibling images never depend on map order.
+	built := map[string]bool{}
+	names := slices.Sorted(maps.Keys(project.Services))
+	for _, name := range names {
+		svc := project.Services[name]
+		if svc.Build != nil {
+			image, _, _ := EnsureServiceImage(projectID, project.Name, name, svc)
+			for _, tag := range append([]string{image}, svc.Build.Tags...) {
+				built[refs.NormalizeImageUpdateRef(tag)] = true
+			}
+		}
+	}
+	slices.SortStableFunc(names, func(a, b string) int {
+		if (project.Services[a].Build != nil) == (project.Services[b].Build != nil) {
+			return 0
+		}
+		if project.Services[a].Build != nil {
+			return -1
+		}
+		return 1
+	})
+	for _, name := range names {
+		svc := project.Services[name]
 		localSvc, imageName, updated := PrepareDeployServiceConfig(projectID, project.Name, name, svc)
 		if updated {
 			project.Services[name] = localSvc
@@ -304,6 +332,11 @@ func (c *composeCoordinatorInternal) PrepareImagesForDeploy(
 		decision := DecideDeployImageAction(localSvc, pullPolicyOverride)
 		if updated {
 			decision = DeployImageDecision{Build: true}
+		}
+		if localSvc.Build == nil && built[refs.NormalizeImageUpdateRef(imageName)] {
+			decision = DeployImageDecision{RequireLocalOnly: true}
+			localSvc.PullPolicy = composetypes.PullPolicyNever
+			project.Services[name] = localSvc
 		}
 		if err := c.ensureDeployServiceImageReadyInternal(ctx, projectID, project, name, localSvc, imageName, decision, progressWriter, operations); err != nil {
 			return err
@@ -327,6 +360,9 @@ func (c *composeCoordinatorInternal) PrepareImagesForDeploy(
 			}
 		}
 		for _, img := range dependentImages {
+			if built[refs.NormalizeImageUpdateRef(img)] {
+				continue
+			}
 			if err := c.ensureDeployServiceImageReadyInternal(ctx, projectID, project, name, localSvc, img, dependentDecision, progressWriter, operations); err != nil {
 				return err
 			}

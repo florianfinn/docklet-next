@@ -367,6 +367,27 @@ func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapsho
 	if err := s.checkLifecycleExternal(ctx, snap, source); err != nil {
 		return err
 	}
+	if len(services) > 0 && !restore {
+		dependencyModel, err := lifecycleDeployModel(snap, nil)
+		if err != nil {
+			return err
+		}
+		for changed := true; changed; {
+			changed = false
+			for name, svc := range dependencyModel.Services {
+				if slices.Contains(services, name) {
+					continue
+				}
+				for dependency, condition := range svc.DependsOn {
+					if condition.Restart && slices.Contains(services, dependency) {
+						services = append(services, name)
+						changed = true
+						break
+					}
+				}
+			}
+		}
+	}
 	// This model is ephemeral: actual files remain the sole source on later deploy.
 	model, orderErr := lifecycleDeployModel(snap, services)
 	if orderErr != nil {
