@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/modules"
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
 	"github.com/florianfinn/docklet-next/backend/internal/proxy/resolver"
 	"github.com/florianfinn/docklet-next/types/features"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
@@ -253,7 +254,32 @@ func (a *Agent) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, e
 		if er := a.Runtime.Stage(ctx, i); er != nil {
 			return er
 		}
-		return e.Validate(ctx, i)
+		if er := e.Validate(ctx, i); er != nil {
+			return er
+		}
+		if !i.New.Present {
+			return nil
+		}
+		if runtime, ok := a.Runtime.(interface {
+			Writer(context.Context, dto.Instance) (hostio.FileWriter, error)
+		}); ok {
+			w, er := runtime.Writer(ctx, q.Instance)
+			if er != nil {
+				return er
+			}
+			if checker, ok := w.(interface {
+				Prepare(context.Context, string, string) (dto.MetadataLoss, error)
+			}); ok {
+				loss, er := checker.Prepare(ctx, i.TempPath, q.Target)
+				if er != nil {
+					return er
+				}
+				if !hostio.Acknowledged(loss, q.Acknowledgements.MetadataLoss) {
+					return hostio.RefuseLoss(loss)
+				}
+			}
+		}
+		return nil
 	}); err != nil {
 		return a.effectFailure(ctx, i, o, err, false)
 	}
@@ -301,6 +327,9 @@ func diagnostic(err error) *dto.Diagnostic {
 
 // withDiagnostic records err's diagnostic on o, keeping an earlier one when err has none.
 func withDiagnostic(o dto.Operation, err error) dto.Operation {
+	if loss, ok := errors.AsType[*hostio.LossError](err); ok {
+		o.MetadataLoss = []dto.MetadataLoss{loss.Loss}
+	}
 	if d := diagnostic(err); d != nil {
 		o.Diagnostic = d
 	}

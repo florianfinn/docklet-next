@@ -8,13 +8,16 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/danielgtaylor/huma/v2"
 	p "github.com/florianfinn/docklet-next/backend/internal/proxy"
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
 	"github.com/florianfinn/docklet-next/types/features"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -31,6 +34,7 @@ type proxyWireRuntime struct {
 	// inside/resume hold Validate so a test can drop the connection after admission.
 	inside, resume chan struct{}
 	validateErr    error
+	root           string
 }
 
 func (f *proxyWireRuntime) Rebind(_ context.Context, i dto.Instance) (dto.Instance, error) {
@@ -45,10 +49,27 @@ func (f *proxyWireRuntime) Target(context.Context, dto.Instance, string) (p.Byte
 func (f *proxyWireRuntime) Graph(context.Context, dto.Instance) (map[string]string, error) {
 	return map[string]string{}, nil
 }
-func (f *proxyWireRuntime) Stage(context.Context, p.Intent) error { return nil }
+func (f *proxyWireRuntime) Writer(context.Context, dto.Instance) (hostio.FileWriter, error) {
+	if f.root == "" {
+		return nil, nil
+	}
+	return hostio.ProjectWriter{Root: f.root}, nil
+}
+func (f *proxyWireRuntime) Stage(ctx context.Context, i p.Intent) error {
+	if f.root != "" {
+		return (hostio.ProjectWriter{Root: f.root}).Write(ctx, i.TempPath, i.New.Content, i.Mode)
+	}
+	return nil
+}
 func (f *proxyWireRuntime) Publish(_ context.Context, i p.Intent) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.root != "" {
+		w := hostio.ProjectWriter{Root: f.root, Acknowledgements: i.Request.Acknowledgements.MetadataLoss}
+		if err := w.Replace(context.Background(), i.TempPath, i.Request.Target); err != nil {
+			return err
+		}
+	}
 	f.target = i.New
 	return nil
 }
@@ -58,7 +79,12 @@ func (f *proxyWireRuntime) Restore(_ context.Context, i p.Intent) error {
 	f.target = i.Old
 	return nil
 }
-func (f *proxyWireRuntime) Cleanup(context.Context, p.Intent) error { return nil }
+func (f *proxyWireRuntime) Cleanup(ctx context.Context, i p.Intent) error {
+	if f.root != "" {
+		return (hostio.ProjectWriter{Root: f.root}).Remove(ctx, i.TempPath)
+	}
+	return nil
+}
 func (f *proxyWireRuntime) Epoch(context.Context, dto.Instance) (bool, string, error) {
 	return true, "example-epoch", nil
 }
@@ -399,5 +425,93 @@ func TestM38S2RealDirectEdgeAdoption(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestM44MetadataLossRealDirectEdge(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		t.Run(mode, func(t *testing.T) {
+			x, a, tr, q := proxyWireFixture(t, mode)
+			f := a.Runtime.(*proxyWireRuntime)
+			f.root = t.TempDir()
+			acl := make([]byte, 4)
+			binary.LittleEndian.PutUint32(acl, 2)
+			for _, v := range [][3]uint32{{1, 7, ^uint32(0)}, {2, 4, 12345}, {4, 5, ^uint32(0)}, {16, 5, ^uint32(0)}, {32, 0, ^uint32(0)}} {
+				acl = binary.LittleEndian.AppendUint16(acl, uint16(v[0]))
+				acl = binary.LittleEndian.AppendUint16(acl, uint16(v[1]))
+				acl = binary.LittleEndian.AppendUint32(acl, v[2])
+			}
+			require.NoError(t, unix.Setxattr(f.root, "system.posix_acl_default", acl, 0))
+			target := filepath.Join(f.root, q.Target)
+			require.NoError(t, os.WriteFile(target, []byte("old"), 0644))
+			binary.LittleEndian.PutUint32(acl[16:20], 12346)
+			require.NoError(t, unix.Setxattr(target, "system.posix_acl_access", acl, 0))
+			h := &p.Hub{DB: x.f.db.DB, Modules: x.manager, Transport: tr}
+			o, err := h.Apply(t.Context(), q)
+			require.NoError(t, err)
+			require.Equal(t, dto.Rejected, o.State)
+			require.Equal(t, dto.Staging, o.Phase)
+			require.Equal(t, dto.MetadataLossReason, o.Reason)
+			require.Len(t, o.MetadataLoss, 1)
+			require.Equal(t, []string{"system.posix_acl_access"}, o.MetadataLoss[0].Attributes)
+			journal, err := a.Query(t.Context(), dto.Query{ID: q.ID, Generation: q.Generation, Registration: q.Registration, Instance: q.Instance})
+			require.NoError(t, err)
+			require.Equal(t, o.MetadataLoss, journal.MetadataLoss)
+			remote, err := tr.Query(t.Context(), dto.Query{ID: q.ID, Generation: q.Generation, Registration: q.Registration, Instance: q.Instance})
+			require.NoError(t, err)
+			require.Equal(t, o.MetadataLoss, remote.MetadataLoss)
+			stored, err := h.Query(t.Context(), q.ID)
+			require.NoError(t, err)
+			require.Equal(t, o.MetadataLoss, stored.MetadataLoss)
+			b, err := os.ReadFile(target)
+			require.NoError(t, err)
+			require.Equal(t, "old", string(b))
+			attributes := make([]byte, 256)
+			n, attrErr := unix.Getxattr(target, "system.posix_acl_access", attributes)
+			require.NoError(t, attrErr)
+			require.Equal(t, acl, attributes[:n])
+			entries, readErr := os.ReadDir(f.root)
+			require.NoError(t, readErr)
+			require.Len(t, entries, 1, "staging rejection cleans reserved temporary names")
+			q.ID += "-confirmed"
+			q.Acknowledgements.MetadataLoss = o.MetadataLoss
+			confirmed, err := h.Apply(t.Context(), q)
+			require.NoError(t, err)
+			require.Equal(t, dto.Verified, confirmed.State)
+			b, err = os.ReadFile(target)
+			require.NoError(t, err)
+			require.Equal(t, "new", string(b))
+		})
+	}
+}
+
+func TestM44HardlinkRealAgent(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		t.Run(mode, func(t *testing.T) {
+			_, a, tr, q := proxyWireFixture(t, mode)
+			f := a.Runtime.(*proxyWireRuntime)
+			f.root = t.TempDir()
+			target := filepath.Join(f.root, q.Target)
+			other := filepath.Join(f.root, "other")
+			require.NoError(t, os.WriteFile(target, []byte("old"), 0644))
+			require.NoError(t, os.Link(target, other))
+			o, e := tr.Apply(t.Context(), q)
+			require.NoError(t, e)
+			require.Equal(t, dto.Rejected, o.State)
+			require.Equal(t, dto.Staging, o.Phase)
+			require.Len(t, o.MetadataLoss, 1)
+			require.Equal(t, 1, o.MetadataLoss[0].Links)
+			q.ID += "-confirmed"
+			q.Acknowledgements.MetadataLoss = o.MetadataLoss
+			o, e = tr.Apply(t.Context(), q)
+			require.NoError(t, e)
+			require.Equal(t, dto.Verified, o.State)
+			b, e := os.ReadFile(other)
+			require.NoError(t, e)
+			require.Equal(t, "old", string(b))
+			b, e = os.ReadFile(target)
+			require.NoError(t, e)
+			require.Equal(t, "new", string(b))
+		})
 	}
 }

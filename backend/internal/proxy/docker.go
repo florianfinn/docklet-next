@@ -8,6 +8,8 @@ package proxy
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"github.com/containerd/errdefs"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -285,6 +287,13 @@ func (d *DockerRuntime) Publish(ctx context.Context, i Intent) error {
 		}
 		w = helper
 	}
+	if project, ok := w.(hostio.ProjectWriter); ok {
+		if !i.New.Present {
+			return project.Move(ctx, i.Request.Target, i.TempPath)
+		}
+		project.Acknowledgements = i.Request.Acknowledgements.MetadataLoss
+		w = project
+	}
 	if i.New.Present {
 		return w.Replace(ctx, i.TempPath, i.Request.Target)
 	}
@@ -320,6 +329,27 @@ func (d *DockerRuntime) Restore(ctx context.Context, i Intent) error {
 	}
 	if !i.Old.Present {
 		return w.Remove(ctx, i.Request.Target)
+	}
+	if !i.New.Present {
+		if project, ok := w.(hostio.ProjectWriter); ok {
+			saved, er := d.Target(ctx, i.Request.Instance, i.TempPath)
+			if er != nil {
+				return er
+			}
+			if saved.Present {
+				if saved.FileState != i.Old.FileState {
+					return dto.Fail(dto.TargetChanged, 409)
+				}
+				return project.Move(ctx, i.TempPath, i.Request.Target)
+			}
+			if report, ok := ctx.Value(restoreReportKey{}).(*dto.Operation); ok {
+				// The missing inode cannot supply names, link counts or identity.
+				// This receipt-only token marks that uncertainty, not an observed loss.
+				lost := sha256.Sum256([]byte("unavailable-inode\x00" + i.Old.Hash))
+				report.MetadataLoss = []dto.MetadataLoss{{Path: i.Request.Target, Token: hex.EncodeToString(lost[:])}}
+				report.Diagnostic = &dto.Diagnostic{Path: i.Request.Target, Detail: "metadata-loss: original inode unavailable; restored bytes as a new file"}
+			}
+		}
 	}
 	if err = w.Remove(ctx, i.TempPath); err != nil {
 		return err

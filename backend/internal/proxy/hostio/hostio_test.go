@@ -155,7 +155,11 @@ func TestP17ProjectWriterMetadataAndConfinement(t *testing.T) {
 				require.NoError(t, unix.Setxattr(filepath.Join(dir, "target"), "user.example", []byte("x"), 0))
 			}
 			require.NoError(t, writer.Write(t.Context(), "temp", []byte("new"), 0644))
-			require.ErrorContains(t, writer.Replace(t.Context(), "temp", "target"), "unsupported-metadata")
+			code := "metadata-loss"
+			if mode == "owner-only" {
+				code = "unsupported-metadata"
+			}
+			require.ErrorContains(t, writer.Replace(t.Context(), "temp", "target"), code)
 			b, err := os.ReadFile(filepath.Join(dir, "target"))
 			require.NoError(t, err)
 			require.Equal(t, "operator", string(b))

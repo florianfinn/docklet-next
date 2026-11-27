@@ -21,7 +21,11 @@ import (
 // ProjectWriter uses directory descriptors and O_NOFOLLOW for every segment.
 // LogicalPath shares the projects confinement contract; rename and parent sync
 // happen on the same pinned descriptor, including deletion and restoration.
-type ProjectWriter struct{ Root string }
+type ProjectWriter struct {
+	Root             string
+	Acknowledgements []dto.MetadataLoss
+	beforeRename     func()
+}
 
 func (w ProjectWriter) parent(target string) (int, string, error) {
 	abs := filepath.Join(w.Root, target)
@@ -66,11 +70,7 @@ func metadata(fd int, name string) error {
 	if err = unix.Fstat(file, &st); err != nil {
 		return err
 	}
-	if st.Mode&unix.S_IFMT != unix.S_IFREG || st.Nlink != 1 || st.Mode&0044 == 0 || st.Mode&07000 != 0 {
-		return dto.Fail(dto.UnsupportedMetadata, 409)
-	}
-	n, err := unix.Flistxattr(file, nil)
-	if err != nil || n != 0 {
+	if st.Mode&unix.S_IFMT != unix.S_IFREG || st.Mode&0044 == 0 || st.Mode&07000 != 0 {
 		return dto.Fail(dto.UnsupportedMetadata, 409)
 	}
 	return nil
@@ -119,29 +119,21 @@ func (w ProjectWriter) Replace(ctx context.Context, from, to string) error {
 	if path.Dir(from) != path.Dir(to) {
 		return dto.Fail(dto.InvalidInput, 422)
 	}
-	if err = metadata(fd, name); err != nil {
+	prepared, err := prepareAt(fd, path.Base(from), name, to)
+	if err != nil {
 		return err
 	}
-	if err = metadata(fd, path.Base(from)); err != nil {
-		return err
+	defer prepared.close()
+	if !Acknowledged(prepared.loss, w.Acknowledgements) {
+		return RefuseLoss(prepared.loss)
 	}
-	var target unix.Stat_t
-	if err = unix.Fstatat(fd, name, &target, unix.AT_SYMLINK_NOFOLLOW); err == nil {
-		staged, er := unix.Openat(fd, path.Base(from), unix.O_WRONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-		if er != nil {
-			return er
-		}
-		er = unix.Fchmod(staged, target.Mode&0777)
-		if er == nil {
-			er = unix.Fsync(staged)
-		}
-		_ = unix.Close(staged)
-		if er != nil {
-			return er
-		}
-	} else if !errors.Is(err, unix.ENOENT) {
-		return err
+	if w.beforeRename != nil {
+		w.beforeRename()
 	}
+	if !prepared.same(fd, path.Base(from), name) {
+		return RefuseLoss(prepared.loss)
+	}
+
 	if err = unix.Renameat(fd, path.Base(from), fd, name); err != nil {
 		return err
 	}

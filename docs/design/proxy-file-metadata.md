@@ -72,6 +72,13 @@ existing mode rules (`Mode&0044`, `Mode&07000`, owner-only refusal) stay.
   attributes. Only when that entry is gone does restore fall back to writing the
   old bytes as a new file (attributes of the lost inode cannot be recovered; the
   restore receipt says so with `metadata-loss` details).
+  Implementation detail: when the saved inode is gone its attribute names and
+  link count cannot be reconstructed. The fallback receipt therefore records the
+  path with an empty attribute list and zero known extra links, plus a diagnostic
+  explaining that limitation. Its receipt-only token is SHA-256 of
+  `unavailable-inode\0` followed by the old content hash; it is not a confirmation
+  token for a live inode. This differs from the live-loss token rule because
+  there is no remaining descriptor to inspect.
 
 ### Resolver files (maintainer Q-2: in scope, no force)
 

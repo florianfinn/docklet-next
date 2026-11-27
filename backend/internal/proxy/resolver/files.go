@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"golang.org/x/sys/unix"
 )
@@ -80,11 +81,7 @@ func readAt(fd int, name string) ([]byte, uint32, bool, error) {
 	if e = unix.Fstat(n, &st); e != nil {
 		return nil, 0, false, refuse(e)
 	}
-	attrs, e := unix.Flistxattr(n, nil)
-	if e != nil {
-		return nil, 0, false, refuse(e)
-	}
-	if attrs != 0 || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Nlink != 1 || st.Mode&07000 != 0 || st.Mode&0022 != 0 {
+	if st.Mode&unix.S_IFMT != unix.S_IFREG || st.Nlink != 1 || st.Mode&07000 != 0 || st.Mode&0022 != 0 {
 		return nil, 0, false, dto.Fail(dto.UnsupportedMetadata, 409)
 	}
 	b, e := io.ReadAll(io.LimitReader(f, maxFile+1))
@@ -153,6 +150,22 @@ func Replace(root, p string, expected dto.FileState, data []byte, present bool, 
 	}
 	if snapshot(b, exists) != expected {
 		return dto.Fail(dto.ThirdVersion, 409)
+	}
+	target, er := unix.Openat(fd, n, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+	if errors.Is(er, unix.ENOENT) {
+		target = -1
+	} else if er != nil {
+		return refuse(er)
+	}
+	if target >= 0 {
+		defer unix.Close(target)
+	}
+	loss, er := hostio.CompareMetadata(target, nfd, p)
+	if er != nil {
+		return er
+	}
+	if hostio.HasLoss(loss) {
+		return &dto.Problem{Code: dto.UnsupportedMetadata, Status: 409, Path: p, Detail: "replacement would lose metadata: " + strings.Join(loss.Attributes, ", ")}
 	}
 	if e = unix.Renameat(fd, tmp, fd, n); e != nil {
 		return e
