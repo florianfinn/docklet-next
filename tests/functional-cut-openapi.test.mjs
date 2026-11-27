@@ -14,6 +14,9 @@ const laterOperations = new Map([
   ["GET /environments/{id}/vulnerabilities/candidates/runs/{activityId}", "get-vulnerability-candidate-run"],
   // Hub-only release list refresh for the explicit update recheck.
   ["POST /system/releases/refresh", "refresh-releases"],
+  // M46: hub-only combined update (#682).
+  ["POST /system/upgrade/all", "start-update-all"],
+  ["GET /system/upgrade/all", "get-update-all"],
   // M29 first-run claim and stored sign-in policy (#518).
   ["POST /setup/identity", "claim-setup-identity"],
   ["GET /auth/sign-in", "get-sign-in"],

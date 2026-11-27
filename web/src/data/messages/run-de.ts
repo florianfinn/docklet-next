@@ -2,6 +2,7 @@ export const deRunMessages = {
   activityTitles: {
     "hubUpdate": "Hub-Update",
     "agentUpdate": "Agent-Update",
+    "updateAll": "Alles aktualisieren",
     "job": "Geplante Aufgabe",
     "action": "Aktion",
     "imagePatch": "Image patchen",

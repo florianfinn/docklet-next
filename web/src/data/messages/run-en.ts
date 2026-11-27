@@ -2,6 +2,7 @@ export const enRunMessages = {
   activityTitles: {
     "hubUpdate": "Hub update",
     "agentUpdate": "Agent update",
+    "updateAll": "Update everything",
     "job": "Scheduled job",
     "action": "Action",
     "imagePatch": "Patch image",
