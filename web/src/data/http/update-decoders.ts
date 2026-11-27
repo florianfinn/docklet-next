@@ -36,7 +36,12 @@ export function policy(value: unknown, host: string, target: string, kind: "stac
   if (o.environmentId !== host || o.targetId !== target || o.targetKind !== kind) throw invalidUpdate();
   return { mode: choice(o.mode, ["check", "scheduled"]), revision: revision(o.revision), environmentId: host, registrationId: id(o.registrationId), targetKind: kind, targetName: text(o.targetName), targetMissing: bool(o.targetMissing), window: o.window === undefined ? undefined : window(o.window), targetId: id(o.targetId), targetIdentity: identity, jobId: text(o.jobId), stale: bool(o.stale),
     checkedAt: optionalDate(o.checkedAt), code: reason(o.code), applyCheckedAt: optionalDate(o.applyCheckedAt), applyCode: reason(o.applyCode), bookkeepingAt: optionalDate(o.bookkeepingAt), bookkeepingCode: reason(o.bookkeepingCode),
-    candidates: list(o.candidates).map((v) => { const c = record(v); return { service: id(c.service), imageRef: id(c.imageRef), version: text(c.version), digest: id(c.digest), platform: id(c.platform), ...(c.entryId === undefined ? {} : { entryId: id(c.entryId) }), notificationState: choice(c.notificationState, ["pending", "sending", "sent", "unconfigured", "failed", "not-requested"]) }; }) };
+    candidates: list(o.candidates).map((v) => { const c = record(v); return { service: id(c.service), imageRef: id(c.imageRef), version: text(c.version), digest: id(c.digest), platform: id(c.platform), ...(c.manifest === undefined || c.manifest === "" ? {} : { manifest: manifest(c.manifest) }), eligibleAt: optionalDate(c.eligibleAt), ...(c.entryId === undefined ? {} : { entryId: id(c.entryId) }), notificationState: choice(c.notificationState, ["pending", "sending", "sent", "unconfigured", "failed", "not-requested"]) }; }) };
+}
+function manifest(value: unknown): string {
+  const result = text(value);
+  if (!/^sha256:[a-f0-9]{64}$/.test(result)) throw invalidUpdate();
+  return result;
 }
 export function window(value: unknown): import("@/domain/stack-updates").UpdateWindow {
   const o = record(value), kind = choice(o.kind, ["daily", "weekly"]), time = text(o.time);

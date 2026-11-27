@@ -254,6 +254,8 @@ export const enSettings = {
     noChown: "Docklet does not change ownership on hosts.",
   },
   updates: {
+    minimumAge: "Minimum image age (days)",
+    minimumAgeHelp: "Scheduled updates wait until Docklet has known a new image for this many days (0–90; 0 disables the delay). Manual updates are not delayed. Security fixes wait too.",
     fleet: {"title": "Update everything", "confirmHub": "Update the hub to {version}, then update {count, plural, one {# agent} other {# agents}} automatically.", "confirmCurrent": "The hub is current at {version}. Update {count, plural, one {# agent} other {# agents}} to this version.", "progress": "Update everything · {version}", "dismiss": "Dismiss", "doneHelp": "The hub is updated. Agent updates follow automatically."},
     selfUpdate: {
       hub: "Update Docklet",

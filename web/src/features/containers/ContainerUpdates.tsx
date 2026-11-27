@@ -16,6 +16,7 @@ import { containerUpdatesManaged, hasUpdate } from "@/domain/updates";
 import { inventoryId } from "@/data/http/inventory-mapping";
 import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { CheckUpdatesButton } from "@/shared/components/updates/check-updates-button";
+import { PolicyCandidates } from "@/shared/components/updates/policy-candidates";
 import { PolicyControl } from "@/shared/components/updates/policy-control";
 import { useUpdateAction } from "@/shared/components/updates/use-update-action";
 import { UpdateSplitButton } from "@/shared/components/updates/update-split-button";
@@ -54,6 +55,7 @@ function StandaloneUpdates({ c, select }: { c: ContainerInfo; select: (restore: 
     </div>
     {previous.data && <div><p className="break-all text-xs">{previous.data.reference} · {formatDateTime(previous.data.createdAt)}</p><Button variant="outline" disabled={!!c.inventory?.stale || !restore.available} title={restoreReason} onClick={() => select(true)}>{t("previousImage")}</Button>{restoreReason && <p role="status" className="text-xs">{restoreReason}</p>}</div>}
     {previous.isError && <p role="alert">{errors(previous.error)}</p>}
+    {policy.data && <PolicyCandidates policy={policy.data} timeZone={timeZone} />}
     {policy.data && <PolicyControl policy={policy.data} timeZone={timeZone} saved={() => { void policy.refetch(); }} />}
     {policy.isError && <p role="alert">{errors(policy.error)}</p>}
   </section>;

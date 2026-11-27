@@ -61,11 +61,13 @@ export function createUpdateSettings(o: { baseUrl: string; client: CsrfClient; g
       const values = Object.fromEntries(raw.map((v) => { const r = record(v); return [id(r.key), typeof r.value === "string" ? r.value : id(r.value)]; }));
       const timeZone = id(values.effectiveTimeZone); new Intl.DateTimeFormat("en", { timeZone });
       const interval = choice(values.updateCheckInterval, ["6h", "12h", "24h"]), notify = choice(values.updateNotify, ["true", "false"]) === "true";
+      const minimumAgeDays = Number(values.updateMinimumAgeDays ?? "0");
+      if (!/^\d+$/.test(values.updateMinimumAgeDays ?? "0") || minimumAgeDays > 90) throw new AdapterOutcomeError({ kind: "error", code: "http.error" });
       let nextRun: string | undefined, projectionUnavailable = false;
       try {
         nextRun = (await (o.updateCheckJob ?? (() => checkJob("0")))()).nextRun;
       } catch (error) { if (error instanceof CancelledError) throw error; projectionUnavailable = true; }
-      return { interval, notify, timeZone, nextRun, projectionUnavailable };
+      return { interval, notify, minimumAgeDays, timeZone, nextRun, projectionUnavailable };
     },
     async checkHostUpdates(host) {
       const target = host ?? "0", job = host === undefined ? "update-check" : "update-check-host";

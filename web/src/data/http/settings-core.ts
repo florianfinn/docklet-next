@@ -129,7 +129,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       }
       if (section === "updates") {
         const updates = value as HubSettings["updates"];
-        await write({ updateCheckInterval: updates.interval, updateNotify: String(updates.notify) }); return;
+        await write({ updateCheckInterval: updates.interval, updateNotify: String(updates.notify), updateMinimumAgeDays: String(updates.minimumAgeDays) }); return;
       }
       if (section === "hostDefaults") {
         const host = value as HubSettings["hostDefaults"];

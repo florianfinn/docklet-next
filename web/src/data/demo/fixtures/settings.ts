@@ -17,7 +17,7 @@ export const SETTINGS: HubSettings = {
     { id: "u-kim", name: "Kim Muster", email: "kim@example.com", access: "operate", scope: ["media", "craft"] },
   ],
   hostDefaults: { projectDir: "/home/docker", installDir: "/home/docker/docklet-agent", connection: "direct", puid: "", pgid: "", detectSocketGroup: true },
-  updates: { interval: "12h", notify: true },
+  updates: { minimumAgeDays: 0, interval: "12h", notify: true },
   backups: {
     defaultRetentionCount: 7,
     targets: [

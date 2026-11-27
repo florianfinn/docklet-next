@@ -54,6 +54,7 @@ export interface HostDefaults {
 export type UpdateInterval = "6h" | "12h" | "24h";
 
 export interface UpdateSettings {
+  minimumAgeDays: number;
   interval: UpdateInterval;
   notify: boolean;
 }

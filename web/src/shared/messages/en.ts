@@ -46,6 +46,8 @@ export const enCommon = {
     loading: "Checking updates …", candidates: "{count, plural, one {# update candidate} other {# update candidates}}", install: "Install updates",
   },
   stackUpdates: {
+    waitsUntil: "Waits until {date}",
+    ageUnknown: "Age unknown – update the agent",
     recoveryStale: "Refresh this container before restoring its previous image; its inventory is stale.",
     recoveryHeld: "Recovery is unavailable while this restore point is in use or its outcome is unknown.",
     updateOptions: "Update options",
