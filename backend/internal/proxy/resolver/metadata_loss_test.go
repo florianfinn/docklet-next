@@ -76,9 +76,24 @@ func TestM44ResolverRestoreForeignAttribute(t *testing.T) {
 			require.NoError(t, err)
 			if foreign {
 				require.Equal(t, dto.RecoveryRequired, result.State)
+				require.Len(t, result.MetadataLoss, 1)
+				require.Equal(t, []string{"user.example"}, result.MetadataLoss[0].Attributes)
 			} else {
 				require.Equal(t, dto.RolledBack, result.State)
 			}
 		})
 	}
+}
+
+// M44 row 22 at the receipt: a forward resolver refusal carries the lost attribute names to the operator.
+func TestM44ResolverRefusalReceiptListsLoss(t *testing.T) {
+	e, f, q, o := fixture(t)
+	require.NoError(t, unix.Setxattr(filepath.Join(f.target.Directory, "config", "static.yaml"), "user.example", []byte("foreign"), 0))
+	result, err := e.Run(t.Context(), q, *o)
+	require.NoError(t, err)
+	require.Equal(t, dto.Refused, result.State)
+	require.Equal(t, dto.UnsupportedMetadata, result.Reason)
+	require.Len(t, result.MetadataLoss, 1)
+	require.Equal(t, "config/static.yaml", result.MetadataLoss[0].Path)
+	require.Equal(t, []string{"user.example"}, result.MetadataLoss[0].Attributes)
 }

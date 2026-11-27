@@ -165,7 +165,8 @@ func Replace(root, p string, expected dto.FileState, data []byte, present bool, 
 		return er
 	}
 	if hostio.HasLoss(loss) {
-		return &dto.Problem{Code: dto.UnsupportedMetadata, Status: 409, Path: p, Detail: "replacement would lose metadata: " + strings.Join(loss.Attributes, ", ")}
+		// The loss travels on the receipt (Operation.MetadataLoss); resolver losses are never confirmable.
+		return &hostio.LossError{Problem: &dto.Problem{Code: dto.UnsupportedMetadata, Status: 409, Path: p, Detail: "replacement would lose metadata: " + strings.Join(loss.Attributes, ", ")}, Loss: loss}
 	}
 	if e = unix.Renameat(fd, tmp, fd, n); e != nil {
 		return e

@@ -437,6 +437,6 @@ export const deProxyContract = {
     "agent-unavailable": "Der Host ist nicht erreichbar.",
     "engine-unavailable": "Diese Proxy-Engine ist nicht verfügbar.",
     "target-changed": "Das Ziel weicht von beiden aufgezeichneten Zuständen ab.",
-    "metadata-loss": "Beim Ersetzen der Datei gingen erweiterte Attribute oder weitere Hardlinks verloren."
+    "metadata-loss": "Beim Ersetzen der Datei würden erweiterte Attribute oder weitere Hardlinks verloren gehen."
   }
 };

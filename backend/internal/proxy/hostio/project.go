@@ -131,6 +131,9 @@ func (w ProjectWriter) Replace(ctx context.Context, from, to string) error {
 		w.beforeRename()
 	}
 	if !prepared.same(fd, path.Base(from), name) {
+		if !HasLoss(prepared.loss) {
+			return dto.Fail(dto.TargetChanged, 409)
+		}
 		return RefuseLoss(prepared.loss)
 	}
 

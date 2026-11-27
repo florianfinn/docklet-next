@@ -95,7 +95,8 @@ func TestM44EntrySwap(t *testing.T) {
 				require.NoError(t, os.Rename(filepath.Join(root, name), filepath.Join(root, "saved")))
 				require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte("foreign"), 0644))
 			}
-			require.ErrorContains(t, w.Replace(t.Context(), "stage", "target"), "metadata-loss")
+			// A swap without any loss is a changed target; it never yields a loss entry without a token.
+			require.ErrorContains(t, w.Replace(t.Context(), "stage", "target"), "target-changed")
 			b, e := os.ReadFile(filepath.Join(root, "target"))
 			require.NoError(t, e)
 			require.NotEqual(t, "new", string(b))

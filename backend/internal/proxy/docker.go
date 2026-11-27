@@ -347,7 +347,12 @@ func (d *DockerRuntime) Restore(ctx context.Context, i Intent) error {
 				// restart cannot turn an unknown metadata restore into a clean receipt.
 				lost := sha256.Sum256([]byte("unavailable-inode\x00" + i.Old.Hash))
 				report.operation.MetadataLoss = []dto.MetadataLoss{{Path: i.Request.Target, Token: hex.EncodeToString(lost[:])}}
-				report.operation.Diagnostic = &dto.Diagnostic{Path: i.Request.Target, Detail: "metadata-loss: original inode unavailable; its metadata cannot be recovered"}
+				note := "metadata-loss: original inode unavailable; its metadata cannot be recovered"
+				if d := report.operation.Diagnostic; d != nil && d.Detail != "" {
+					// Keep why the delete was rolled back; the note follows within the detail bound.
+					note = d.Detail[:min(len(d.Detail), 4096-len(note)-2)] + "; " + note
+				}
+				report.operation.Diagnostic = &dto.Diagnostic{Path: i.Request.Target, Detail: note}
 				if er = report.persist(); er != nil {
 					return er
 				}
