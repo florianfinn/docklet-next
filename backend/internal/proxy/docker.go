@@ -342,12 +342,15 @@ func (d *DockerRuntime) Restore(ctx context.Context, i Intent) error {
 				}
 				return project.Move(ctx, i.TempPath, i.Request.Target)
 			}
-			if report, ok := ctx.Value(restoreReportKey{}).(*dto.Operation); ok {
-				// The missing inode cannot supply names, link counts or identity.
-				// This receipt-only token marks that uncertainty, not an observed loss.
+			if report, ok := ctx.Value(restoreReportKey{}).(restoreReport); ok {
+				// Persist the missing-inode warning before fallback effects, so a
+				// restart cannot turn an unknown metadata restore into a clean receipt.
 				lost := sha256.Sum256([]byte("unavailable-inode\x00" + i.Old.Hash))
-				report.MetadataLoss = []dto.MetadataLoss{{Path: i.Request.Target, Token: hex.EncodeToString(lost[:])}}
-				report.Diagnostic = &dto.Diagnostic{Path: i.Request.Target, Detail: "metadata-loss: original inode unavailable; restored bytes as a new file"}
+				report.operation.MetadataLoss = []dto.MetadataLoss{{Path: i.Request.Target, Token: hex.EncodeToString(lost[:])}}
+				report.operation.Diagnostic = &dto.Diagnostic{Path: i.Request.Target, Detail: "metadata-loss: original inode unavailable; its metadata cannot be recovered"}
+				if er = report.persist(); er != nil {
+					return er
+				}
 			}
 		}
 	}
@@ -364,7 +367,10 @@ func (d *DockerRuntime) Restore(ctx context.Context, i Intent) error {
 	if b.FileState != i.New.FileState {
 		return dto.Fail(dto.TargetChanged, 409)
 	}
-	return w.Replace(ctx, i.TempPath, i.Request.Target)
+	if err = w.Replace(ctx, i.TempPath, i.Request.Target); err != nil {
+		return err
+	}
+	return nil
 }
 func (d *DockerRuntime) Cleanup(ctx context.Context, i Intent) error {
 	// Read-only instances never staged anything; avoid selecting a writer for

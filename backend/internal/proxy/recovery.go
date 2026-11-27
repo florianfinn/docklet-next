@@ -92,8 +92,13 @@ func (a *Agent) activateObserve(ctx context.Context, i Intent, o dto.Operation, 
 
 type restoreReportKey struct{}
 
+type restoreReport struct {
+	operation *dto.Operation
+	persist   func() error
+}
+
 func (a *Agent) restore(ctx context.Context, i Intent, o dto.Operation, e Engine, r dto.Reason) (dto.Operation, error) {
-	ctx = context.WithValue(ctx, restoreReportKey{}, &o)
+	ctx = context.WithValue(ctx, restoreReportKey{}, restoreReport{operation: &o, persist: func() error { return a.save(ctx, i, o) }})
 	err := a.effect(ctx, i, &o, dto.Restoring, func() error {
 		if er := a.Check(ctx, i.Request.Instance); er != nil {
 			return er

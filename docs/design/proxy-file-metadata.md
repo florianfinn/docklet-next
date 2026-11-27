@@ -78,7 +78,9 @@ existing mode rules (`Mode&0044`, `Mode&07000`, owner-only refusal) stay.
   explaining that limitation. Its receipt-only token is SHA-256 of
   `unavailable-inode\0` followed by the old content hash; it is not a confirmation
   token for a live inode. This differs from the live-loss token rule because
-  there is no remaining descriptor to inspect.
+  there is no remaining descriptor to inspect. The unknown-metadata warning is
+  journaled before fallback effects, so interruption and failed restoration
+  retain the warning without claiming that the old bytes were restored.
 
 ### Resolver files (maintainer Q-2: in scope, no force)
 

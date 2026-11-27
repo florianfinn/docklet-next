@@ -125,3 +125,43 @@ func TestM44DeleteRollbackFallbackReceipt(t *testing.T) {
 	require.NoError(t, e)
 	require.Equal(t, i.Old.Content, b)
 }
+
+func TestM44FailedFallbackDoesNotClaimCompletedRestore(t *testing.T) {
+	x := newFixture(t)
+	root := t.TempDir()
+	i := fileIntent(t, x, root)
+	i.New = Snapshot(nil, false)
+	x.a.Runtime = fileSeam(t, x, root)
+	require.NoError(t, os.Mkdir(filepath.Join(root, i.TempPath), 0755))
+	o := dto.Operation{ID: i.Request.ID, Generation: x.a.Generation(), Registration: i.Request.Registration, InstanceID: i.Request.Instance.ID, State: dto.Pending, Phase: dto.Restoring}
+	x.persist(t, i, o)
+	result, e := x.a.Query(t.Context(), dto.Query{ID: o.ID, Generation: o.Generation, Registration: o.Registration, Instance: i.Request.Instance})
+	require.NoError(t, e)
+	require.Equal(t, dto.RecoveryRequired, result.State)
+	require.Len(t, result.MetadataLoss, 1)
+	require.NotContains(t, result.Diagnostic.Detail, "restored bytes", "failed restore cannot claim a completed fallback")
+}
+
+func TestM44FallbackWarningSurvivesRestart(t *testing.T) {
+	x := newFixture(t)
+	root := t.TempDir()
+	i := fileIntent(t, x, root)
+	i.New = Snapshot(nil, false)
+	x.a.Runtime = fileSeam(t, x, root)
+	o := dto.Operation{ID: i.Request.ID, Generation: x.a.Generation(), Registration: i.Request.Registration, InstanceID: i.Request.Instance.ID, State: dto.Pending, Phase: dto.Restoring}
+	x.persist(t, i, o)
+	x.a.afterEffect = func(phase dto.Phase) error {
+		if phase == dto.Restoring {
+			return errCrash
+		}
+		return nil
+	}
+	_, err := x.a.Query(t.Context(), dto.Query{ID: o.ID, Generation: o.Generation, Registration: o.Registration, Instance: i.Request.Instance})
+	require.ErrorIs(t, err, errCrash)
+	x.a.afterEffect = nil
+	require.NoError(t, x.a.Settle(t.Context()))
+	result, err := x.a.Query(t.Context(), dto.Query{ID: o.ID, Generation: o.Generation, Registration: o.Registration, Instance: i.Request.Instance})
+	require.NoError(t, err)
+	require.Equal(t, dto.Restored, result.State)
+	require.Len(t, result.MetadataLoss, 1)
+}
