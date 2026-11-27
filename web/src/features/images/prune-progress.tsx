@@ -4,52 +4,14 @@
 // License: Apache-2.0
 // Deviations: Original per-image cleanup progress and compact counts for issue #661.
 
-import { useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useTranslations } from "use-intl";
 import { ChevronRight } from "lucide-react";
 import type { ActionRun, BulkCheckCounts, Host } from "@/domain/model";
-import { useActionRuns } from "@/data/live";
-import { formatBulkPruneCounts } from "@/features/activity/bulk-check-counts";
+import { usePruneCountText } from "./use-prune-runs";
 import { Progress } from "@/shared/ui/progress";
 import { Spinner } from "@/shared/ui/spinner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/shared/ui/collapsible";
-
-const isPrune = (run: ActionRun) => run.sourceOperation === "image_prune";
-
-/** Run ids present before a submit; only runs absent from it can belong to that submit. */
-export function usePruneRunSnapshot(): () => ReadonlySet<string> {
-  const runs = useActionRuns();
-  const latest = useRef(runs); latest.current = runs;
-  return () => new Set(latest.current.filter(isPrune).map((run) => run.id));
-}
-
-/**
- * Binds each host to the first new image_prune run observed for it while the submit's request is
- * pending. A host runs one cleanup at a time (the image lease), so that run is this submit's; a
- * binding never moves, and once the request settled no new run is bound. The last valid counts of
- * a bound run stay with this submit even when the run later leaves the list or loses its counts.
- */
-export function usePruneRuns(before: ReadonlySet<string> | undefined, hostIds: readonly string[], admitting: boolean): ReadonlyMap<string, ActionRun> {
-  const runs = useActionRuns();
-  const bound = useRef<{ before?: ReadonlySet<string>; ids: Map<string, string>; last: Map<string, ActionRun> }>({ ids: new Map(), last: new Map() });
-  if (bound.current.before !== before) bound.current = { before, ids: new Map(), last: new Map() };
-  const out = new Map<string, ActionRun>();
-  if (!before) return out;
-  for (const hostId of hostIds) {
-    const id = bound.current.ids.get(hostId);
-    const found = id ? runs.find((r) => r.id === id) : admitting ? runs.filter((r) => isPrune(r) && r.hostId === hostId && !before.has(r.id)).sort((a, b) => a.startedAt.localeCompare(b.startedAt))[0] : undefined;
-    if (found) bound.current.ids.set(hostId, found.id);
-    if (found?.bulk) bound.current.last.set(hostId, found);
-    const run = found?.bulk ? found : bound.current.last.get(hostId) ?? found;
-    if (run) out.set(hostId, run);
-  }
-  return out;
-}
-
-export function usePruneCountText(): (bulk: BulkCheckCounts, running: boolean) => string {
-  const t = useTranslations("activity.bulk");
-  return (bulk, running) => formatBulkPruneCounts(bulk, running, (key, values) => t(key === "processed" || key === "removed" ? `prune.${key}` : key, values));
-}
 
 /** One row per host while the cleanup runs: a bar once the host reports its plan, a spinner before. */
 export function PruneProgress({ hosts, runs }: { hosts: Host[]; runs: ReadonlyMap<string, ActionRun> }) {

@@ -21,7 +21,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useImageCommands } from "./use-image-commands";
 import { useImageHostCapabilities } from "./use-image-capabilities";
 import { useImageError } from "./use-image-error";
-import { NameDetails, PruneProgress, usePruneCountText, usePruneRunSnapshot, usePruneRuns } from "./prune-progress";
+import { NameDetails, PruneProgress } from "./prune-progress";
+import { usePruneCountText, usePruneRunSnapshot, usePruneRuns } from "./use-prune-runs";
 
 export function PruneDialog({ open, onOpenChange, hosts, images }: { open: boolean; onOpenChange: (open: boolean) => void; hosts: Host[]; images: DockerImage[] }) {
   const t = useTranslations("images.pruneDialog"), error = useImageError(), cmd = useImageCommands();
