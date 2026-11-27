@@ -410,7 +410,8 @@ func (s *ContainerService) runContainerLifecycleActionInternal(ctx context.Conte
 	}
 	maps.Copy(metadata, cfg.metadata)
 
-	err = s.eventService.LogContainerEvent(ctx, cfg.eventType, containerID, "name", user.ID, user.Username, "0", metadata)
+	containerName, _ := s.GetContainerNameByID(ctx, containerID)
+	err = s.eventService.LogContainerEvent(ctx, cfg.eventType, containerID, containerName, user.ID, user.Username, "0", metadata)
 	if err != nil {
 		if !cfg.warnOnLogError {
 			return fmt.Errorf("failed to log action: %w", err)
