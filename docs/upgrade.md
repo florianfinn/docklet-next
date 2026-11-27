@@ -169,6 +169,12 @@ environment variable and the agent contract stays 24. Stored checks show build
 dates after their next update check; agents on 1.6.0 to 1.8.0 keep working and
 their rebuilds show the deploy and check dates instead until they are updated.
 
+Upgrading to 1.10.0: there is no migration and no new environment variable. The
+agent contract moves to 25 and the minimum stays 18. Agents on 1.6.0 to 1.9.0
+keep working; until they are updated, their proxy writes still refuse targets
+with extended attributes and a metadata-loss confirmation to them is answered
+with `agent.update-required`. Update every agent to 1.10.0 after the hub.
+
 ## Recover a failed in-app update
 
 The helper keeps a per-operation backup beside the interpolation env file:

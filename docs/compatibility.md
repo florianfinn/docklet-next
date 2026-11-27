@@ -3,7 +3,7 @@ Source: docklet-next/issues/363
 Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 Retrieved: 2026-11-09
 License: Apache-2.0
-Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472); agent contract 21 (#568); agent contract 22 (#586); agent contract 23 (#602); agent contract 24 (#626).
+Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472); agent contract 21 (#568); agent contract 22 (#586); agent contract 23 (#602); agent contract 24 (#626); agent contract 25 (#663).
 -->
 
 # Compatibility
