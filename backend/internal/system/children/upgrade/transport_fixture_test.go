@@ -2,7 +2,7 @@
 // Revision: 910032a54830f5ce1d37070964fa2dc7efb8aa2f
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original Compose-faithful self-update implementation.
+// Deviations: Original Compose-faithful self-update implementation; reported contract switch for the combined update (#682).
 
 package upgrade
 
@@ -62,6 +62,8 @@ type updateTransportFixture struct {
 	holdCheck    atomic.Bool
 	checkEntered chan struct{}
 	checkRelease chan struct{}
+	// currentContract makes the agent report the hub's contract instead of an old one.
+	currentContract atomic.Bool
 }
 type updateDaemon struct {
 	mu        sync.Mutex
@@ -159,6 +161,9 @@ func newUpdateTransport(t *testing.T, isEdge bool) *updateTransportFixture {
 	})
 	RegisterAgentRoutes(agentAPI, NewHandler(f.agent, nil, cfg, t.Context()))
 	huma.Get(agentAPI, "/app-version", func(context.Context, *struct{}) (*struct{ Body versionDTO.Info }, error) {
+		if f.currentContract.Load() {
+			return &struct{ Body versionDTO.Info }{Body: versionDTO.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}}, nil
+		}
 		return &struct{ Body versionDTO.Info }{Body: versionDTO.Info{AgentContractVersion: contract.MinimumAgentVersion - 1, AgentContractFingerprint: "old-contract"}}, nil
 	})
 	huma.Head(agentAPI, "/environments/{id}/system/health", func(context.Context, *struct {

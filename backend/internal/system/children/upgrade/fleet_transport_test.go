@@ -58,6 +58,7 @@ func TestFleetAgentsDispatchOnceAcrossRestartDirectAndEdge(t *testing.T) {
 		t.Run(map[bool]string{false: "direct", true: "edge"}[edge], func(t *testing.T) {
 			f := newUpdateTransport(t, edge)
 			configureUpdateFeed(t, f)
+			f.currentContract.Store(true)
 			closed := httptest.NewServer(http.NotFoundHandler())
 			closed.Close()
 			require.NoError(t, f.db.Create(&environment.Environment{BaseModel: database.BaseModel{ID: "example-offline"}, Name: "Offline", ApiUrl: closed.URL, Enabled: true, AccessToken: new("example"), CredentialRevision: 1}).Error)
@@ -92,8 +93,11 @@ func TestFleetAgentsDispatchOnceAcrossRestartDirectAndEdge(t *testing.T) {
 			done, err = second.advanceRemote(t.Context(), second.remoteStore(f.remote.ID))
 			require.NoError(t, err)
 			require.True(t, done)
-			advanceUntil(t, second, 2)
-			plan := readPlan(t, second)
+			// A third process starts after the agent settled and before the aggregate was written.
+			third := restartHub(t, f, true)
+			require.Eventually(t, func() bool { return readPlan(t, third).Phase == "settled" }, 10*time.Second, 50*time.Millisecond)
+			third.Stop()
+			plan := readPlan(t, third)
 			require.Equal(t, "settled", plan.Phase)
 			require.Equal(t, "partial", plan.Outcome)
 			require.Equal(t, "healthy", plan.Target(f.remote.ID).Outcome)
@@ -103,7 +107,13 @@ func TestFleetAgentsDispatchOnceAcrossRestartDirectAndEdge(t *testing.T) {
 			require.Equal(t, "partial", parent.Metadata["jobStatus"])
 			var children []activity.Activity
 			require.NoError(t, f.db.Where("batch_id=?", started.RunID).Order("environment_id").Find(&children).Error)
-			require.Len(t, children, 2)
+			// One child per host: the current hub, the skipped offline agent and the updated agent.
+			require.Len(t, children, 3)
+			hosts := map[string]bool{}
+			for _, child := range children {
+				hosts[child.EnvironmentID] = true
+			}
+			require.Equal(t, map[string]bool{"0": true, "example-offline": true, f.remote.ID: true}, hosts)
 			require.EqualValues(t, 1, f.posts.Load())
 			f.daemon.mu.Lock()
 			creates := len(f.daemon.creates)
@@ -117,6 +127,7 @@ func TestFleetReservedWithoutMarkerIsNeverSent(t *testing.T) {
 	updateStamp(t)
 	f := newUpdateTransport(t, false)
 	configureUpdateFeed(t, f)
+	f.currentContract.Store(true)
 	f.hub.Stop()
 	owner := restartHub(t, f, false)
 	_, err := owner.StartFleet(t.Context(), dto.FleetUpdateRequest{TargetVersion: "1.0.1"}, "operator", "operator")
@@ -136,6 +147,7 @@ func TestFleetBusyAgentIsRetriedThenSkipped(t *testing.T) {
 	updateStamp(t)
 	f := newUpdateTransport(t, false)
 	configureUpdateFeed(t, f)
+	f.currentContract.Store(true)
 	f.hub.Stop()
 	hub := restartHub(t, f, false)
 	busy := activity.Activity{BaseModel: database.BaseModel{ID: uuid.NewString()}, EnvironmentID: f.remote.ID, Type: activityDTO.TypeJobRun, Status: activityDTO.StatusRunning, StartedAt: time.Now()}
@@ -171,11 +183,13 @@ func TestFleetAgentVersionAndIdentityDecisions(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newUpdateTransport(t, false)
 			configureUpdateFeed(t, f)
+			f.currentContract.Store(true)
 			f.hub.Stop()
 			hub := restartHub(t, f, false)
-			f.version.Store(c.version)
 			_, err := hub.StartFleet(t.Context(), dto.FleetUpdateRequest{TargetVersion: "1.0.1"}, "operator", "operator")
 			require.NoError(t, err)
+			// The agent changes after admission; the frozen target is never downgraded.
+			f.version.Store(c.version)
 			if name == "rotation" {
 				require.NoError(t, f.db.Model(&f.remote).Update("credential_revision", f.remote.CredentialRevision+1).Error)
 			}
@@ -199,4 +213,27 @@ func TestFleetReservationFencesReplacedRegistration(t *testing.T) {
 	current, err := store.Read(t.Context())
 	require.NoError(t, err)
 	require.Nil(t, current, "a replaced registration was reserved")
+}
+
+func TestFleetCurrentHubNeedsAnAgentBelowTarget(t *testing.T) {
+	updateStamp(t)
+	for name, version := range map[string]string{"current": "1.0.1", "newer": "1.0.2", "old-contract": "1.0.0", "none": ""} {
+		t.Run(name, func(t *testing.T) {
+			f := newUpdateTransport(t, false)
+			configureUpdateFeed(t, f)
+			f.currentContract.Store(name != "old-contract")
+			f.hub.Stop()
+			if name == "none" {
+				require.NoError(t, f.db.Delete(&f.remote).Error)
+			} else {
+				f.version.Store(version)
+			}
+			hub := restartHub(t, f, false)
+			_, err := hub.StartFleet(t.Context(), dto.FleetUpdateRequest{TargetVersion: "1.0.1"}, "operator", "operator")
+			require.True(t, core.HasCode(err, dto.FleetCurrent), err)
+			plan, _, err := hub.fleet().Read(t.Context())
+			require.NoError(t, err)
+			require.Nil(t, plan, "a no-op combined update was admitted")
+		})
+	}
 }

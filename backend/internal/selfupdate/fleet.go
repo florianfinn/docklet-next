@@ -85,21 +85,55 @@ func FleetOpID(fleetID, environmentID string) string {
 // ErrFleetUnreadable marks a stored plan this version cannot interpret.
 var ErrFleetUnreadable = errors.New("update.fleet-unreadable")
 
-// DecodeFleet fails closed on unknown versions and missing identity fields.
+// DecodeFleet fails closed on unknown versions, missing identity fields and
+// state combinations the driver cannot advance, before any effect.
 func DecodeFleet(raw string) (FleetPlan, error) {
 	var plan FleetPlan
 	if err := json.Unmarshal([]byte(raw), &plan); err != nil {
 		return plan, ErrFleetUnreadable
 	}
-	if plan.SchemaVersion != FleetSchemaVersion || plan.FleetID == "" || plan.RunID == "" || plan.TargetVersion == "" || plan.Hub.OpID == "" {
+	if plan.SchemaVersion != FleetSchemaVersion || plan.FleetID == "" || plan.RunID == "" || plan.TargetVersion == "" || plan.StartedBy == "" || plan.CreatedAt.IsZero() {
 		return plan, ErrFleetUnreadable
 	}
+	if plan.Hub.EnvironmentID != "0" || plan.Hub.OpID != FleetOpID(plan.FleetID, "0") || !validTargetState(plan.Hub.State) {
+		return plan, ErrFleetUnreadable
+	}
+	seen := map[string]bool{}
 	for _, agent := range plan.Agents {
-		if agent.EnvironmentID == "" || agent.OpID != FleetOpID(plan.FleetID, agent.EnvironmentID) {
+		if agent.EnvironmentID == "" || agent.EnvironmentID == "0" || seen[agent.EnvironmentID] || agent.OpID != FleetOpID(plan.FleetID, agent.EnvironmentID) || !validTargetState(agent.State) || agent.RegisteredAt.IsZero() {
+			return plan, ErrFleetUnreadable
+		}
+		seen[agent.EnvironmentID] = true
+		// No agent leaves pending before the hub settled.
+		if plan.Phase == "hub" && agent.State != TargetPending && agent.State != TargetSkipped {
 			return plan, ErrFleetUnreadable
 		}
 	}
+	switch plan.Phase {
+	case "hub":
+		if plan.Hub.Terminal() {
+			return plan, ErrFleetUnreadable
+		}
+	case "agents":
+		if plan.Hub.Outcome != "healthy" && plan.Hub.Outcome != "current" {
+			return plan, ErrFleetUnreadable
+		}
+	case "settled":
+		if plan.Outcome != "success" && plan.Outcome != "partial" && plan.Outcome != "failed" {
+			return plan, ErrFleetUnreadable
+		}
+	default:
+		return plan, ErrFleetUnreadable
+	}
 	return plan, nil
+}
+
+func validTargetState(state string) bool {
+	switch state {
+	case TargetPending, TargetReserved, TargetSkipped, TargetSettled:
+		return true
+	}
+	return false
 }
 
 type FleetStore struct{ DB *gorm.DB }
@@ -118,10 +152,10 @@ func (s FleetStore) Read(ctx context.Context) (*FleetPlan, string, error) {
 	plan, err := DecodeFleet(entry.Value)
 	if err != nil {
 		var owner struct {
-			Phase string `json:"phase"`
+			Released bool `json:"released"`
 		}
-		// A released marker is settled and carries no plan.
-		if json.Unmarshal([]byte(entry.Value), &owner) == nil && owner.Phase == "settled" {
+		// Only the marker written by Release stands for "no plan".
+		if json.Unmarshal([]byte(entry.Value), &owner) == nil && owner.Released {
 			return nil, entry.Value, nil
 		}
 		return nil, entry.Value, err
@@ -209,7 +243,7 @@ func (s FleetStore) Release(ctx context.Context, raw string, settle func(*gorm.D
 				return err
 			}
 		}
-		marker, _ := json.Marshal(map[string]string{"phase": "settled", "runId": owner.RunID, "code": ErrFleetUnreadable.Error()})
+		marker, _ := json.Marshal(map[string]any{"released": true, "phase": "settled", "runId": owner.RunID, "code": ErrFleetUnreadable.Error()})
 		update := tx.Model(&kv.KVEntry{}).Where("key=? AND value=?", FleetKey, raw).Updates(map[string]any{"value": string(marker), "updated_at": time.Now()})
 		if update.Error != nil {
 			return update.Error

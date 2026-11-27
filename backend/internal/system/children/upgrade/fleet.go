@@ -66,7 +66,6 @@ func (s *Service) StartFleet(ctx context.Context, request dto.FleetUpdateRequest
 		plan.TargetVersion = check.Eligibility.Candidate.Version
 	case "current":
 		plan.TargetVersion = s.runningVersion()
-		plan.Hub.State, plan.Hub.Outcome, plan.Hub.Code = core.TargetSkipped, "current", dto.FleetCurrent
 		plan.Phase = "agents"
 	default:
 		code := check.Eligibility.Code
@@ -78,6 +77,10 @@ func (s *Service) StartFleet(ctx context.Context, request dto.FleetUpdateRequest
 	if request.TargetVersion != plan.TargetVersion {
 		return dto.FleetUpdateResponse{}, core.Refuse("update.invalid-target")
 	}
+	// With a current hub the action needs at least one agent below the target.
+	if plan.Phase == "agents" && !s.anyAgentBelow(ctx, plan.TargetVersion) {
+		return dto.FleetUpdateResponse{}, core.Refuse(dto.FleetCurrent)
+	}
 	err = s.fleet().Admit(ctx, plan, func(tx *gorm.DB, plan *core.FleetPlan) error {
 		var hosts []environment.Environment
 		if err := tx.Where("id <> ?", "0").Order("created_at, id").Find(&hosts).Error; err != nil {
@@ -88,7 +91,13 @@ func (s *Service) StartFleet(ctx context.Context, request dto.FleetUpdateRequest
 		}
 		now := time.Now().UTC()
 		parent := activity.Activity{BaseModel: database.BaseModel{ID: plan.RunID, CreatedAt: now}, EnvironmentID: "0", Type: activityDTO.TypeFleetUpdate, Status: activityDTO.StatusRunning, StartedAt: now, StartedByUserID: new(userID), StartedByUsername: new(username), MessageCode: string(activityDTO.CodeRunStarted), ResourceType: new("system"), ResourceID: new("0"), Metadata: database.JSON{"fleetId": plan.FleetID, "targetVersion": plan.TargetVersion}}
-		return tx.Create(&parent).Error
+		if err := tx.Create(&parent).Error; err != nil {
+			return err
+		}
+		if plan.Phase == "agents" {
+			return skipTx(tx, plan, &plan.Hub, dto.FleetCurrent)
+		}
+		return nil
 	})
 	if err != nil {
 		return dto.FleetUpdateResponse{}, err
@@ -198,6 +207,9 @@ func (s *Service) advanceHub(ctx context.Context, plan core.FleetPlan) error {
 			}
 			return s.changeTarget(ctx, plan, "0", func(t *core.FleetTarget) { t.TargetRef = ref })
 		}
+		if !s.mayUpdate(ctx, plan) {
+			return s.failHub(ctx, plan, "skipped", dto.FleetPermission)
+		}
 		envelope := dto.SelfUpdateEnvelope{OpID: plan.Hub.OpID, TargetVersion: plan.TargetVersion, TargetReference: plan.Hub.TargetRef, HubVersion: s.runningVersion()}
 		reserve := s.reserveLocal
 		if s.reserveHub != nil {
@@ -245,9 +257,13 @@ func (s *Service) advanceHub(ctx context.Context, plan core.FleetPlan) error {
 // failHub ends the plan: no agent is touched, each gets a terminal skip child.
 func (s *Service) failHub(ctx context.Context, plan core.FleetPlan, outcome, code string) error {
 	_, err := s.fleet().Change(ctx, plan.FleetID, func(tx *gorm.DB, p *core.FleetPlan) error {
-		p.Hub.State, p.Hub.Outcome, p.Hub.Code = core.TargetSettled, outcome, code
 		if outcome == "skipped" {
-			p.Hub.State = core.TargetSkipped
+			// Refused before any hub run existed: the hub gets its own terminal child.
+			if err := skipTx(tx, p, &p.Hub, code); err != nil {
+				return err
+			}
+		} else {
+			p.Hub.State, p.Hub.Outcome, p.Hub.Code = core.TargetSettled, outcome, code
 		}
 		for i := range p.Agents {
 			if !p.Agents[i].Terminal() {
@@ -279,7 +295,11 @@ func skipTx(tx *gorm.DB, plan *core.FleetPlan, target *core.FleetTarget, code st
 	if code == dto.FleetCurrent {
 		status, outcome, message = activityDTO.StatusSuccess, "current", "activity.success"
 	}
-	run := activity.Activity{BaseModel: database.BaseModel{ID: uuid.NewSHA1(uuid.NameSpaceOID, []byte("docklet.fleet-skip:"+target.OpID)).String(), CreatedAt: now}, EnvironmentID: target.EnvironmentID, Type: activityDTO.TypeAgentUpdate, Status: status, StartedAt: now, EndedAt: &now, StartedByUserID: new(plan.StartedBy), StartedByUsername: new(plan.StartedByName), MessageCode: message, ResourceType: new("system"), ResourceID: new(target.EnvironmentID), BatchID: new(plan.RunID), Metadata: database.JSON{"fleetId": plan.FleetID, "targetVersion": plan.TargetVersion, "skipped": true, "reason": code}}
+	kind := activityDTO.TypeAgentUpdate
+	if target.EnvironmentID == "0" {
+		kind = activityDTO.TypeHubUpdate
+	}
+	run := activity.Activity{BaseModel: database.BaseModel{ID: uuid.NewSHA1(uuid.NameSpaceOID, []byte("docklet.fleet-skip:"+target.OpID)).String(), CreatedAt: now}, EnvironmentID: target.EnvironmentID, Type: kind, Status: status, StartedAt: now, EndedAt: &now, StartedByUserID: new(plan.StartedBy), StartedByUsername: new(plan.StartedByName), MessageCode: message, ResourceType: new("system"), ResourceID: new(target.EnvironmentID), BatchID: new(plan.RunID), Metadata: database.JSON{"fleetId": plan.FleetID, "targetVersion": plan.TargetVersion, "skipped": true, "reason": code}}
 	if err := tx.Create(&run).Error; err != nil {
 		return err
 	}

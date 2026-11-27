@@ -9,6 +9,7 @@ package selfupdate
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -34,7 +35,7 @@ func TestDispatchMarkerIsAcquiredOnceFromReserved(t *testing.T) {
 }
 
 func TestFleetPlanDecodesOnlyItsOwnSchema(t *testing.T) {
-	plan := FleetPlan{SchemaVersion: FleetSchemaVersion, FleetID: "fleet", RunID: "run", Phase: "hub", TargetVersion: "1.0.1", Hub: FleetTarget{EnvironmentID: "0", OpID: FleetOpID("fleet", "0")}, Agents: []FleetTarget{{EnvironmentID: "a", OpID: FleetOpID("fleet", "a")}}}
+	plan := FleetPlan{SchemaVersion: FleetSchemaVersion, FleetID: "fleet", RunID: "run", Phase: "hub", TargetVersion: "1.0.1", StartedBy: "operator", CreatedAt: time.Now().UTC(), Hub: FleetTarget{EnvironmentID: "0", OpID: FleetOpID("fleet", "0"), State: TargetPending}, Agents: []FleetTarget{{EnvironmentID: "a", OpID: FleetOpID("fleet", "a"), State: TargetPending, RegisteredAt: time.Now().UTC()}}}
 	store := openStore(t, filepath.Join(t.TempDir(), "plan.db"))
 	defer closeStore(t, store)
 	fleet := FleetStore{DB: store.DB.DB}

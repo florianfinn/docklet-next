@@ -61,12 +61,11 @@ func (s *Service) advanceAgents(ctx context.Context, plan core.FleetPlan) error 
 		}
 	}
 	now := time.Now().UTC()
-	allowed := s.mayUpdate(ctx, plan)
 	for _, agent := range plan.Agents {
 		if agent.State != core.TargetPending || inflight >= fleetParallel || (agent.NextTry != nil && now.Before(*agent.NextTry)) {
 			continue
 		}
-		step, err := s.agentStep(ctx, plan, agent, allowed)
+		step, err := s.agentStep(ctx, plan, agent)
 		if err != nil {
 			return err
 		}
@@ -127,7 +126,7 @@ func (s *Service) applyAgentStep(ctx context.Context, plan core.FleetPlan, agent
 
 // agentStep decides one pending agent. Only definitive refusals skip; an
 // unexpected local error is returned and retried in the next round.
-func (s *Service) agentStep(ctx context.Context, plan core.FleetPlan, agent core.FleetTarget, allowed bool) (agentStep, error) {
+func (s *Service) agentStep(ctx context.Context, plan core.FleetPlan, agent core.FleetTarget) (agentStep, error) {
 	store := s.remoteStore(agent.EnvironmentID)
 	existing, err := store.Read(ctx)
 	if err != nil {
@@ -136,9 +135,6 @@ func (s *Service) agentStep(ctx context.Context, plan core.FleetPlan, agent core
 	// A reserved planned operation is joined, never reserved or sent again.
 	if existing != nil && existing.OpID == agent.OpID {
 		return agentStep{join: existing}, nil
-	}
-	if !allowed {
-		return agentStep{skip: dto.FleetPermission}, nil
 	}
 	env, err := s.remoteEnvironment(ctx, agent.EnvironmentID)
 	if err != nil {
@@ -149,6 +145,12 @@ func (s *Service) agentStep(ctx context.Context, plan core.FleetPlan, agent core
 	}
 	if env.CredentialRevision != agent.CredentialRevision || !env.CreatedAt.Equal(agent.RegisteredAt) {
 		return agentStep{skip: dto.FleetTargetChanged}, nil
+	}
+	// Recovery routes answer below the minimum contract, so the contract is read explicitly.
+	if _, err := s.environments.CheckAgentCompatibility(ctx, env.ID); errors.Is(err, remenv.ErrAgentUpdateRequired) {
+		return agentStep{skip: dto.FleetAgentTooOld}, nil
+	} else if err != nil {
+		return agentStep{skip: "agent.unavailable"}, nil
 	}
 	check, err := s.readRemote(ctx, env)
 	switch {
@@ -185,6 +187,10 @@ func (s *Service) agentStep(ctx context.Context, plan core.FleetPlan, agent core
 		}
 		return agentStep{ref: ref}, nil
 	}
+	// Authorization is checked at the effect boundary, after the preparatory reads.
+	if !s.mayUpdate(ctx, plan) {
+		return agentStep{skip: dto.FleetPermission}, nil
+	}
 	op := core.Operation{OpID: agent.OpID, Role: "agent", EnvironmentID: agent.EnvironmentID, CredentialRevision: agent.CredentialRevision, TargetRef: agent.TargetRef, TargetVersion: plan.TargetVersion, FromVersion: check.Version, Deadline: time.Now().UTC().Add(core.OperationTimeout)}
 	reserved, created, err := s.reserveRun(ctx, store, op, plan.StartedBy, plan.StartedByName, &fleetLink{parentRunID: plan.RunID, registeredAt: agent.RegisteredAt})
 	var problem *core.Problem
@@ -207,4 +213,34 @@ func (s *Service) agentStep(ctx context.Context, plan core.FleetPlan, agent core
 func hostBusy(err error) bool {
 	var problem *envDTO.HostProblem
 	return errors.As(err, &problem) && problem.Code == "host.busy"
+}
+
+// anyAgentBelow reports whether an enabled, compatible agent runs a version
+// below target; hosts are read in parallel with the bounded remote check.
+func (s *Service) anyAgentBelow(ctx context.Context, target string) bool {
+	limit, ok := product.ParseProduct(target)
+	if !ok || s.environments == nil {
+		return false
+	}
+	var hosts []environment.Environment
+	if s.db.WithContext(ctx).Where("id <> ? AND enabled = ?", "0", true).Find(&hosts).Error != nil {
+		return false
+	}
+	found := make(chan bool, len(hosts))
+	for _, host := range hosts {
+		go func() {
+			if _, err := s.environments.CheckAgentCompatibility(ctx, host.ID); err != nil {
+				found <- false
+				return
+			}
+			check, err := s.readRemote(ctx, host)
+			running, valid := product.ParseProduct(check.Version)
+			found <- err == nil && valid && running.Compare(limit) < 0
+		}()
+	}
+	below := false
+	for range hosts {
+		below = <-found || below
+	}
+	return below
 }

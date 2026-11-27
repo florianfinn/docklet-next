@@ -87,7 +87,7 @@ func advanceUntil(t *testing.T, s *Service, rounds int) {
 
 func TestFleetAdmissionKeepsOnePlan(t *testing.T) {
 	db := updateDB(t)
-	hub := newFleetHub(t, db, "1.0.1", "1.0.1")
+	hub := newFleetHub(t, db, "1.0.0", "1.0.1")
 	addHosts(t, db, "example-a")
 	var wg sync.WaitGroup
 	results := make(chan error, 8)
@@ -112,8 +112,7 @@ func TestFleetAdmissionKeepsOnePlan(t *testing.T) {
 	require.NoError(t, db.Model(&activity.Activity{}).Where("type=?", activityDTO.TypeFleetUpdate).Count(&parents).Error)
 	require.EqualValues(t, 1, parents)
 	plan := readPlan(t, hub.Service)
-	require.Equal(t, "agents", plan.Phase)
-	require.Equal(t, dto.FleetCurrent, plan.Hub.Code)
+	require.Equal(t, "hub", plan.Phase)
 	require.Len(t, plan.Agents, 1)
 	require.Equal(t, core.FleetOpID(plan.FleetID, "example-a"), plan.Agents[0].OpID)
 	// The confirmed version must be the one admitted.
@@ -256,7 +255,7 @@ func TestFleetUnreadablePlanFailsClosed(t *testing.T) {
 	for name, raw := range map[string]string{"future": `{"schemaVersion":2,"fleetId":"a","runId":"%s","phase":"hub"}`, "corrupt": `{"runId":"%s","phase":"hub",`} {
 		t.Run(name, func(t *testing.T) {
 			db := updateDB(t)
-			hub := newFleetHub(t, db, "1.0.1", "1.0.1")
+			hub := newFleetHub(t, db, "1.0.0", "1.0.1")
 			parent := activity.Activity{BaseModel: database.BaseModel{ID: "parent-run"}, EnvironmentID: "0", Type: activityDTO.TypeFleetUpdate, Status: activityDTO.StatusRunning, StartedAt: time.Now()}
 			require.NoError(t, db.Create(&parent).Error)
 			require.NoError(t, db.Create(&kv.KVEntry{Key: core.FleetKey, Value: fmtRun(raw, parent.ID)}).Error)
@@ -291,7 +290,7 @@ func fmtRun(raw, id string) string {
 
 func TestFleetParentSurvivesRepairWhileActive(t *testing.T) {
 	db := updateDB(t)
-	hub := newFleetHub(t, db, "1.0.1", "1.0.1")
+	hub := newFleetHub(t, db, "1.0.0", "1.0.1")
 	addHosts(t, db, "example-a")
 	started, err := hub.StartFleet(t.Context(), dto.FleetUpdateRequest{TargetVersion: "1.0.1"}, "operator", "operator")
 	require.NoError(t, err)
