@@ -28,6 +28,9 @@ import (
 // BrowserFrameLimit bounds one browser frame on a hub bridge, matching the hub-local shell route.
 const BrowserFrameLimit = 1 << 20
 
+// AgentFrameLimit bounds agent output on both Direct WebSocket bridges.
+const AgentFrameLimit = 16 << 20
+
 func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header http.Header, checkOrigin func(*http.Request) bool) error {
 	if IsTerminalRequest(r) {
 		return proxyTerminalHTTP(w, r, remoteWS, header, checkOrigin)
@@ -49,7 +52,7 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 		return err
 	}
 	defer lease.Release()
-	// The browser leg is untrusted and bounded like the hub-local shell; the agent leg keeps its own policy.
+	// Bound browser input like the hub-local shell.
 	clientConn.SetReadLimit(BrowserFrameLimit)
 
 	headerNames := make([]string, 0, len(header))
@@ -80,7 +83,7 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 		return err
 	}
 	defer func() { _ = remoteConn.CloseNow() }()
-	remoteConn.SetReadLimit(-1)
+	remoteConn.SetReadLimit(AgentFrameLimit)
 
 	slog.DebugContext(dialCtx, "websocket proxy established", "remoteWs", remoteWS)
 

@@ -237,6 +237,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	hubMode := !cfg.AgentMode && !cfg.EdgeAgent
 
 	e := newEchoInternal()
+	e.Use(middleware.SecurityHeaders())
 	if hubMode {
 		controller := resourceAccessController(deps)
 		e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
