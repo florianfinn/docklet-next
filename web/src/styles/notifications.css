@@ -230,6 +230,14 @@ body:has(:is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [
 }
 
 /*
+ * An open output shares the dialog with the service rows: the rows shrink to
+ * about four lines and scroll, so the log keeps a readable height.
+ */
+.action-dialog[data-expanded="true"] [data-slot="service-list"] {
+  max-height: min(9.5rem, 22dvh);
+}
+
+/*
  * Action dialog on short screens (below 36rem height, e.g. phones in landscape):
  * the fixed rows no longer leave room for an output pane, so the output drops
  * its own scrolling and the dialog body is the one scroll area.

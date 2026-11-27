@@ -1,6 +1,7 @@
 import { HISTORY_LIMITS, pruneRuns } from "@/domain/activity-history";
 import type { ActionKind, ActionRun, ActionStep, DeployStepKey, RunOutputLine } from "@/domain/model";
 
+import { demoDeployServices } from "./demo-deploy-services";
 import { genericScript, SIMULATED_NOTE, type OutputScript, type OutputSpec } from "./run-output";
 import { simulationStore } from "./simulation";
 
@@ -21,6 +22,8 @@ export interface RunPlan {
   stackId?: string;
   containerId?: string;
   services?: string[];
+  /** Simulates per-service deploy stage rows for the listed services. */
+  stageRows?: boolean;
   steps: StepPlan[];
   /** Step key at which the run fails; undefined runs to success. */
   failAt?: DeployStepKey;
@@ -117,6 +120,8 @@ export class ActionRunner {
     const lines = script.lines(step);
     // Output lines arrive spread over the step, so a running action shows ongoing progress.
     lines.forEach((line, k) => setTimeout(() => this.append(id, step.key, [line]), (duration * (k + 1)) / (lines.length + 1)));
+    const rows = (fraction: number, failed = false) => plan.stageRows && plan.services?.length ? { deployServices: demoDeployServices(plan.services, step.key, fraction, failed) } : {};
+    if (plan.stageRows) for (let k = 0; k < 10; k++) setTimeout(() => this.patch(id, (run) => run.status === "running" ? { ...run, ...rows(k / 10) } : run) && this.emit(), (duration * k) / 10);
     setTimeout(() => {
       const refusal = plan.refusal?.();
       const failure = refusal ?? plan.failMessage;
@@ -133,9 +138,9 @@ export class ActionRunner {
         });
         const progress = Math.round(((index + (failed ? 0 : 1)) / plan.steps.length) * 100);
         const log = [...run.log, failed ? `Fehler bei ${step.label}: ${failure ?? "unbekannt"}` : `${step.label}${step.detail ? ` – ${step.detail}` : ""}`];
-        if (failed) return { ...run, steps, progress, status: "failed", finishedAt: at, error: failure, log };
-        if (last) return { ...run, recreateResult: plan.recreateResult, steps, progress: 100, status: "succeeded", finishedAt: at, log: [...log, "Abgeschlossen"] };
-        return { ...run, steps, progress, log };
+        if (failed) return { ...run, ...rows(0.5, true), steps, progress, status: "failed", finishedAt: at, error: failure, log };
+        if (last) return { ...run, ...rows(1), recreateResult: plan.recreateResult, steps, progress: 100, status: "succeeded", finishedAt: at, log: [...log, "Abgeschlossen"] };
+        return { ...run, ...rows(1), steps, progress, log };
       });
       if (!settled) return;
       let run = settled;

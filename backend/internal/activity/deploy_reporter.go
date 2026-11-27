@@ -2,7 +2,7 @@
 // Revision: 6ff4ef6a5b6a41d3ee3607b0360b5cf259b2b318
 // Retrieved: 2026-11-22
 // License: Apache-2.0
-// Deviations: Original executor-owned deploy progress observation and behavioural coverage.
+// Deviations: Original executor-owned deploy progress observation and behavioural coverage. #655: service rows for update runs without phase trace.
 
 package activity
 
@@ -18,8 +18,11 @@ import (
 
 // The runtime owner supplies both the ID and its write context. Observation
 // failure is diagnostic only and cannot change the deployment's outcome.
-func (s *RuntimeService) deployReporter(ctx context.Context, runID string) (context.Context, func()) {
+func (s *RuntimeService) deployReporter(ctx context.Context, runID string, phases bool) (context.Context, func()) {
 	reporter := projects.NewDeployReporter(func(phase string, warning bool) {
+		if !phases {
+			return
+		}
 		message := "Deploy"
 		if phase == "pull" {
 			message = "Pull"

@@ -2,7 +2,7 @@
 // Revision: 5a7a7ad39c1817a3d222bc84c0cf91d433d48f0d
 // Retrieved: 2026-10-25
 // License: Apache-2.0
-// Deviations: Host image lease, verified retention pins and shared-reference restore guard. M18 deploy receipt associations retain durable point evidence after settlement. M24 tracks committed selection effects and recovery cancellation boundaries. M34 #548: recorded Compose environment inputs.
+// Deviations: Host image lease, verified retention pins and shared-reference restore guard. M18 deploy receipt associations retain durable point evidence after settlement. M24 tracks committed selection effects and recovery cancellation boundaries. M34 #548: recorded Compose environment inputs. #655: report pin pulls to deploy service rows.
 
 package project
 
@@ -14,6 +14,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/moby/moby/client"
@@ -149,7 +150,8 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 			if err != nil {
 				return imageService.PullError(err, opts.RegistryAuth != "")
 			}
-			progressErr := imageService.WriteSafePullProgress(reader, io.Discard, opts.RegistryAuth != "")
+			projects.DeployReporterFromContext(ctx).BindImage(sel.Service, immutable)
+			progressErr := imageService.WriteSafePullProgress(imageService.ObservePull(ctx, immutable, reader), io.Discard, opts.RegistryAuth != "")
 			closeErr := reader.Close()
 			if progressErr != nil {
 				return progressErr

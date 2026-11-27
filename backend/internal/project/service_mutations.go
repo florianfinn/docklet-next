@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Observe actual redeploy pulls and nonfatal warnings;  SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs. #634: pinned-platform scope of service build facts.
+// Deviations: Observe actual redeploy pulls and nonfatal warnings;  SQLite service transaction policy; split the adopted service to keep files below 1,000 lines; local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; SQLite-only local persistence; M14 container and host operation contracts; M17 runtime history and personal preferences; M18 live scheduling, policy and contract foundation. M34 #547: classified load problems instead of raw load errors. M34 #548: recorded Compose environment inputs. #634: pinned-platform scope of service build facts. #655: bind redeploy pulls to service rows.
 
 package project
 
@@ -361,6 +361,7 @@ func (s *ProjectService) PullProjectImages(ctx context.Context, projectID string
 
 	defer s.eventService.BeginComposeSuppressionWindow(compProj.Name)()
 
+	projects.DeployReporterFromContext(ctx).ConfigureProject(compProj)
 	for _, imageRef := range projects.PullableImageRefs(compProj) {
 		projects.DeployReporterFromContext(ctx).Phase("pull")
 		if pullErr := s.deployment.Pull(ctx, imageRef, progressWriter, user, credentials); pullErr != nil {

@@ -10,6 +10,8 @@ export interface DraftSeed {
   env: string;
   hostId: string;
   labels: string[];
+  /** Existing stacks keep their directory name; Compose `name:` is optional there. */
+  existing?: boolean;
 }
 
 export interface ComposeDraft {
@@ -69,7 +71,7 @@ export function useComposeDraft(seed: DraftSeed): ComposeDraft {
   }
 
   const parsed = useMemo(() => parseCompose(compose), [compose]);
-  const issues = useMemo(() => (parsed.ok ? validateCompose(parsed.model) : []), [parsed]);
+  const issues = useMemo(() => (parsed.ok ? validateCompose(parsed.model, { existing: seed.existing }) : []), [parsed, seed.existing]);
 
   const edit = useCallback((fn: Mutator) => {
     try {

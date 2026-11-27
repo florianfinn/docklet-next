@@ -41,6 +41,15 @@ export const deActivity: typeof enActivity = {
     start: "{count, plural, one {# Dienst wird gestartet} other {# Dienste werden gestartet}}",
     wait: "Warten auf {count, plural, one {# Dienst} other {# Dienste}}",
   },
+  serviceStages: {
+    heading: "Dienste",
+    stage: { pull: "Download", build: "Build", create: "Erstellen", start: "Start", health: "Health" },
+    summary: { failed: "Fehlgeschlagen", pulling: "Download {percent} %", building: "Wird gebaut", creating: "Wird erstellt", starting: "Startet", waiting: "Wartet auf Health", healthy: "Healthy", ready: "Bereit", running: "Läuft", pending: "Wartet", notReached: "Nicht erreicht", interrupted: "Unterbrochen", completed: "Abgeschlossen" },
+    layers: "{done}/{total} Layer", bytes: "{done} / {total}",
+    state: { pending: "ausstehend", running: "läuft", done: "erledigt", error: "fehlgeschlagen", skipped: "übersprungen", interrupted: "unterbrochen" },
+    stageState: "{stage}: {state}",
+    truncated: "Weitere Dienste werden nicht angezeigt.",
+  },
   bulk: {
     checked: "{count, plural, one {# von {planned} geprüft} other {# von {planned} geprüft}}",
     soFar: "{count, plural, one {# bisher geprüft} other {# bisher geprüft}}",
@@ -151,6 +160,7 @@ export const deActivity: typeof enActivity = {
     designs: { focus: "Fokus", timeline: "Zeitleiste", console: "Konsole" },
   },
   dialog: {
+    compactFacts: "{seconds} s · {target}",
     close: "Ablauffenster schließen",
     closeShort: "Schließen",
     closeHint: "Schließen beendet die Aktion nicht. Wieder öffnen über die Meldung oben rechts oder das Aktionszentrum.",

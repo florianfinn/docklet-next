@@ -2,7 +2,7 @@
 // Revision: 92ca1a3ea43cfdc211ca561a968e09c8e8f747b1
 // Retrieved: 2026-11-12
 // License: Apache-2.0
-// Deviations: Original conservative recovery from the observed stack run's own retained point. M34 #548: recorded Compose environment inputs.
+// Deviations: Original conservative recovery from the observed stack run's own retained point. M34 #548: recorded Compose environment inputs. #655: recovery deploys keep the failed update's service rows.
 
 package project
 
@@ -14,6 +14,7 @@ import (
 	"slices"
 
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/florianfinn/docklet-next/types/user"
@@ -140,7 +141,8 @@ func (s *ProjectService) recoverOwnPoint(ctx context.Context, run, registration 
 		if err = ctx.Err(); err != nil {
 			return finish(err)
 		}
-		if err = s.deployLifecycle(effectCtx, saved, true, source); err != nil {
+		// Recovery is not the update attempt: its deploy must not rewrite the failed run's service rows.
+		if err = s.deployLifecycle(projects.WithDeployReporter(effectCtx, nil), saved, true, source); err != nil {
 			return finish(err)
 		}
 	}
