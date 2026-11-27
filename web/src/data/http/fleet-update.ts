@@ -35,7 +35,9 @@ export function createFleetUpdates({ baseUrl, client, generation, capability, hu
         // A gateway reply is ambiguous; only a hub problem with a known code is a refusal.
         if ([502, 503, 504].includes(response.status)) {
           const problem = object(await response.json().catch(() => undefined)); fence(owner);
-          throw runtimeError(wireKey(FLEET_CODE_KEYS, String(problem.code)) ? String(problem.code) : "http.error", response.status);
+          // Huma problems carry the stable code in `detail`.
+          const code = [problem.code, problem.detail].map(String).find(value => wireKey(FLEET_CODE_KEYS, value));
+          throw runtimeError(code ?? "http.error", response.status);
         }
         const body: unknown = await response.json(); fence(owner);
         if (!response.ok) { const problem = object(body), code = wireKey(FLEET_CODE_KEYS, String(problem.code)) ? problem.code : wireKey(FLEET_CODE_KEYS, String(problem.detail)) ? problem.detail : "http.error"; throw runtimeError(String(code), response.status); }

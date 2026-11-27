@@ -21,13 +21,13 @@ import { UpdateEverything } from "./UpdateEverything";
 const active: FleetStatus = { active: true, fleetId: "fleet", runId: "parent", phase: "agents", targetVersion: "1.0.1", hub: { environmentId: "0", opId: "hub", state: "skipped", outcome: "current" }, agents: [{ environmentId: "example", opId: "agent", runId: "child", state: "skipped", outcome: "skipped", code: "update.hub-failed" }] };
 const cleanups: (() => void)[] = [];
 afterEach(() => { cleanup(); cleanups.splice(0).forEach(f => f()); vi.useRealTimers(); });
-function mount(hubState: "available" | "current" = "available", agentAvailable = true, status: FleetStatus = { active: false, agents: [] }, admin = true, currentAgents = 0) {
+function mount(hubState: "available" | "current" = "available", agentAvailable = true, status: FleetStatus = { active: false, agents: [] }, admin = true, currentAgents = 0, held?: Promise<SelfUpdateCheck>) {
   let epoch = 0, enabled = true; const listeners = new Set<() => void>();
   const adapter = { ...createDisconnectedAdapter(), kind: "http" as const,
     getCurrentUser: vi.fn(async () => ({ id: "operator", isAdmin: admin }) as never),
     listHosts: vi.fn(async () => [{ id: "0", name: "Hub" }, { id: "example", name: "Example agent" }, ...Array.from({ length: currentAgents }, (_, i) => ({ id: `current-${i}`, name: `Current ${i}` }))] as Host[]),
     getCapability: vi.fn(async (operationId: string, resourceRef = { kind: "hub" as const, id: "0" }) => ({ operationId, resourceRef, available: admin })),
-    getSelfUpdate: vi.fn(async (host: string): Promise<SelfUpdateCheck> => ({ version: "1.0.0", eligibility: { state: host === "0" ? hubState : host.startsWith("current-") ? "current" : agentAvailable ? "available" : "current", candidate: { version: "1.0.1" }, manual: [] } })),
+    getSelfUpdate: vi.fn(async (host: string): Promise<SelfUpdateCheck> => held && host === "current-0" ? held : ({ version: "1.0.0", eligibility: { state: host === "0" ? hubState : host.startsWith("current-") ? "current" : agentAvailable ? "available" : "current", candidate: { version: "1.0.1" }, manual: [] } })),
     getFleetUpdate: vi.fn(async () => status),
     updateEverything: vi.fn(async () => ({ fleetId: "fleet", runId: "parent", hubPhase: "current" as const })),
   };
@@ -86,4 +86,19 @@ it.each([["current", 1], ["available", 1]] as const)("counts only the agents tha
   const text = screen.getByRole("alertdialog").textContent ?? "";
   expect(text.includes(`${count} Agenten`)).toBe(true);
   expect(text.includes("3 Agenten")).toBe(false);
+});
+it.each(["available", "current"] as const)("offers no count before every agent was read (hub %s)", async hub => {
+  let release!: (value: SelfUpdateCheck) => void;
+  const held = new Promise<SelfUpdateCheck>(resolve => { release = resolve; });
+  mount(hub, true, undefined, true, 1, held);
+  const button = await screen.findByRole("button", { name: "Alles aktualisieren" });
+  await act(async () => {});
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(button);
+  expect(screen.queryByRole("alertdialog") !== null).toBe(false);
+  // The delayed agent also follows; the confirmation counts it.
+  await act(async () => { release({ version: "1.0.0", eligibility: { state: "available", candidate: { version: "1.0.1" }, manual: [] } }); });
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(button);
+  expect((screen.getByRole("alertdialog").textContent ?? "").includes("2 Agenten")).toBe(true);
 });

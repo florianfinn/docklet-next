@@ -91,3 +91,9 @@ it("keeps the hub's own refusal reason on a 503", async () => {
   await expect(f.api.updateEverything("1.0.1")).rejects.toMatchObject({ outcome: { code: "update.check-unavailable", status: 503 } });
   expect(f.fetcher.mock.calls.filter(([, init]) => init?.method === "POST")).toHaveLength(1);
 });
+it("reads the Huma detail of a hub refusal on 503 and does not reconcile it", async () => {
+  const f = fixture(); f.fetcher.mockImplementation(async (_url, init) => init?.method === "POST" ? json({ title: "Service Unavailable", status: 503, detail: "update.check-unavailable" }, 503) : json(active));
+  await expect(f.api.updateEverything("1.0.1")).rejects.toMatchObject({ outcome: { code: "update.check-unavailable", status: 503 } });
+  expect(f.fetcher.mock.calls.filter(([, init]) => init?.method !== "POST")).toHaveLength(0);
+  expect(f.start).not.toHaveBeenCalled();
+});
