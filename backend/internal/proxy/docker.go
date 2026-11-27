@@ -8,6 +8,8 @@ package proxy
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"github.com/containerd/errdefs"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -285,6 +287,13 @@ func (d *DockerRuntime) Publish(ctx context.Context, i Intent) error {
 		}
 		w = helper
 	}
+	if project, ok := w.(hostio.ProjectWriter); ok {
+		if !i.New.Present {
+			return project.Move(ctx, i.Request.Target, i.TempPath)
+		}
+		project.Acknowledgements = i.Request.Acknowledgements.MetadataLoss
+		w = project
+	}
 	if i.New.Present {
 		return w.Replace(ctx, i.TempPath, i.Request.Target)
 	}
@@ -321,6 +330,35 @@ func (d *DockerRuntime) Restore(ctx context.Context, i Intent) error {
 	if !i.Old.Present {
 		return w.Remove(ctx, i.Request.Target)
 	}
+	if !i.New.Present {
+		if project, ok := w.(hostio.ProjectWriter); ok {
+			saved, er := d.Target(ctx, i.Request.Instance, i.TempPath)
+			if er != nil {
+				return er
+			}
+			if saved.Present {
+				if saved.FileState != i.Old.FileState {
+					return dto.Fail(dto.TargetChanged, 409)
+				}
+				return project.Move(ctx, i.TempPath, i.Request.Target)
+			}
+			if report, ok := ctx.Value(restoreReportKey{}).(restoreReport); ok {
+				// Persist the missing-inode warning before fallback effects, so a
+				// restart cannot turn an unknown metadata restore into a clean receipt.
+				lost := sha256.Sum256([]byte("unavailable-inode\x00" + i.Old.Hash))
+				report.operation.MetadataLoss = []dto.MetadataLoss{{Path: i.Request.Target, Token: hex.EncodeToString(lost[:])}}
+				note := "metadata-loss: original inode unavailable; its metadata cannot be recovered"
+				if d := report.operation.Diagnostic; d != nil && d.Detail != "" {
+					// Keep why the delete was rolled back; the note follows within the detail bound.
+					note = d.Detail[:min(len(d.Detail), 4096-len(note)-2)] + "; " + note
+				}
+				report.operation.Diagnostic = &dto.Diagnostic{Path: i.Request.Target, Detail: note}
+				if er = report.persist(); er != nil {
+					return er
+				}
+			}
+		}
+	}
 	if err = w.Remove(ctx, i.TempPath); err != nil {
 		return err
 	}
@@ -334,7 +372,10 @@ func (d *DockerRuntime) Restore(ctx context.Context, i Intent) error {
 	if b.FileState != i.New.FileState {
 		return dto.Fail(dto.TargetChanged, 409)
 	}
-	return w.Replace(ctx, i.TempPath, i.Request.Target)
+	if err = w.Replace(ctx, i.TempPath, i.Request.Target); err != nil {
+		return err
+	}
+	return nil
 }
 func (d *DockerRuntime) Cleanup(ctx context.Context, i Intent) error {
 	// Read-only instances never staged anything; avoid selecting a writer for

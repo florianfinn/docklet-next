@@ -241,6 +241,10 @@ export const deProxyContract = {
     "present": "Vorhanden: {hash}",
     "absent": "Nicht vorhanden",
     "target": "Zieldatei",
+    "metadataPermanent": "Dieser Metadatenverlust ist dauerhaft. Das Wiederherstellen des alten Inhalts bringt die Attribute nicht zurück.",
+    "metadataLinks": "{count, plural, one {# weiterer Hardlink behält den alten Inhalt.} other {# weitere Hardlinks behalten den alten Inhalt.}}",
+    "metadataAck": "Ich akzeptiere den oben aufgeführten dauerhaften Verlust für diese Änderung.",
+    "metadataRetry": "Dieselbe Änderung erneut versuchen",
     "diagnostic": "Diagnose",
     "unknownReason": "Der Server hat diese Aktion abgelehnt ({code}).",
     "caddyEasyHint": "Einfache Änderungen behalten vorhandene Site-Direktiven bei. Erweitert bearbeitet den gesamten eigenen Site-Block.",
@@ -432,6 +436,7 @@ export const deProxyContract = {
     "admin-unavailable": "Die aktive Konfiguration kann nicht gelesen werden.",
     "agent-unavailable": "Der Host ist nicht erreichbar.",
     "engine-unavailable": "Diese Proxy-Engine ist nicht verfügbar.",
-    "target-changed": "Das Ziel weicht von beiden aufgezeichneten Zuständen ab."
+    "target-changed": "Das Ziel weicht von beiden aufgezeichneten Zuständen ab.",
+    "metadata-loss": "Beim Ersetzen der Datei würden erweiterte Attribute oder weitere Hardlinks verloren gehen."
   }
 };

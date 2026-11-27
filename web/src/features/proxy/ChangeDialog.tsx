@@ -24,6 +24,7 @@ export function ChangeDialog({
   busy,
   caddy = false,
   refusal,
+  retry,
   submit,
   close,
 }: {
@@ -32,6 +33,7 @@ export function ChangeDialog({
   busy: boolean;
   caddy?: boolean;
   refusal?: unknown;
+  retry?: () => void;
   submit: (target: string, change: Change, ack: Acknowledgements) => void;
   close: () => void;
 }) {
@@ -98,7 +100,7 @@ export function ChangeDialog({
       >
         {t(action.kind === "edit-service" ? "saveService" : title)}
       </Button>
-      <RefusalView refusal={refusal} />
+      <RefusalView refusal={refusal} retry={retry} busy={busy} />
     </ProxyDialog>
   );
 }

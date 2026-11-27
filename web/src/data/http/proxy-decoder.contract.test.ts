@@ -57,8 +57,8 @@ describe("M28 wire boundaries",()=>{
   expect(decodeProxyOperation({success:true,data:{...legacy.data,kind:"future-kind",state:"recovery-required",reason:"unknown-operation-kind",target:""}}).state).toBe("recovery-required");
   expect(()=>decodeProxyOperation({success:true,data:{...legacy.data,kind:"future-kind",state:"verified",reason:"unknown-operation-kind"}})).toThrow();
  });
- it("covers every v20 code and phase with actual EN/DE catalogue text",()=>{
-  const fixture=JSON.parse(readFileSync("../types/contract/testdata/agent-hub-v21.json","utf8"));
+ it("covers every current proxy code and phase with actual EN/DE catalogue text",()=>{
+  const fixture=JSON.parse(readFileSync("../types/contract/testdata/agent-hub-v25.json","utf8"));
   expect(Object.keys(PROXY_REASON_KEYS).sort()).toEqual([...fixture.proxy.reasons].sort());
   expect(Object.keys(PROXY_STATE_KEYS).sort()).toEqual([...fixture.proxy.states].sort());
   expect(Object.keys(PROXY_PHASE_KEYS).sort()).toEqual([...fixture.proxy.phases].sort());

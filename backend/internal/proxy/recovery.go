@@ -89,7 +89,16 @@ func (a *Agent) activateObserve(ctx context.Context, i Intent, o dto.Operation, 
 	o.Certificate, o.Probe = observed.Certificate, observed.Probe
 	return a.finish(ctx, i, o, observed.State, observed.Reason, observed.Evidence)
 }
+
+type restoreReportKey struct{}
+
+type restoreReport struct {
+	operation *dto.Operation
+	persist   func() error
+}
+
 func (a *Agent) restore(ctx context.Context, i Intent, o dto.Operation, e Engine, r dto.Reason) (dto.Operation, error) {
+	ctx = context.WithValue(ctx, restoreReportKey{}, restoreReport{operation: &o, persist: func() error { return a.save(ctx, i, o) }})
 	err := a.effect(ctx, i, &o, dto.Restoring, func() error {
 		if er := a.Check(ctx, i.Request.Instance); er != nil {
 			return er
@@ -206,8 +215,13 @@ func (a *Agent) Query(ctx context.Context, q dto.Query) (dto.Operation, error) {
 	return a.recover(ctx, i, o)
 }
 func (a *Agent) recover(ctx context.Context, i Intent, o dto.Operation) (dto.Operation, error) {
-	// Remove transient files before every branch, including third states.
-	if err := a.cleanup(ctx, i); err != nil {
+	// Keep a deleted inode available for rollback; clean other transient files
+	// before recovery, including third states. Settlement removes the saved inode.
+	cleanup := i
+	if !i.New.Present && i.Old.Present {
+		cleanup.TempPath = ""
+	}
+	if err := a.cleanup(ctx, cleanup); err != nil {
 		return a.finish(ctx, i, withDiagnostic(o, err), dto.RecoveryRequired, reason(err, dto.RestoreFailed), "")
 	}
 	b, err := a.Runtime.Target(ctx, i.Request.Instance, i.Request.Target)

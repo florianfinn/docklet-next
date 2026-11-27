@@ -241,6 +241,10 @@ export const enProxyContract = {
     "present": "Present: {hash}",
     "absent": "Absent",
     "target": "Target file",
+    "metadataPermanent": "This metadata loss is permanent. Restoring the old content does not bring the attributes back.",
+    "metadataLinks": "{count, plural, one {# other hard link keeps the old content.} other {# other hard links keep the old content.}}",
+    "metadataAck": "I accept the permanent loss listed above for this change.",
+    "metadataRetry": "Retry the same change",
     "diagnostic": "Diagnostic",
     "unknownReason": "The server refused this action ({code}).",
     "caddyEasyHint": "Easy changes keep existing site directives. Advanced edits the complete owned site block.",
@@ -432,6 +436,7 @@ export const enProxyContract = {
     "admin-unavailable": "The active configuration cannot be read.",
     "agent-unavailable": "The host cannot be reached.",
     "engine-unavailable": "This proxy engine is unavailable.",
-    "target-changed": "The target differs from both recorded states."
+    "target-changed": "The target differs from both recorded states.",
+    "metadata-loss": "Replacing the file would lose extended attributes or other hard links."
   }
 };

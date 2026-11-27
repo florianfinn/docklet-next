@@ -9,6 +9,7 @@ package resolver
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
 	"time"
 
 	dto "github.com/florianfinn/docklet-next/types/proxy"
@@ -25,6 +26,12 @@ type Executor struct {
 // ErrInterrupted belongs exclusively to the deterministic crash harness.
 var ErrInterrupted = errors.New("resolver process interruption")
 
+// recordLoss keeps a refused replacement's metadata list on the receipt.
+func recordLoss(o *dto.Operation, err error) {
+	if l, ok := errors.AsType[*hostio.LossError](err); ok {
+		o.MetadataLoss = append(o.MetadataLoss, l.Loss)
+	}
+}
 func code(err error, fallback dto.Reason) dto.Reason {
 	if p, ok := errors.AsType[*dto.Problem](err); ok {
 		return p.Code
@@ -162,6 +169,7 @@ func (e *Executor) Run(ctx context.Context, q dto.ResolverApplyRequest, o dto.Op
 		return o, err
 	}
 	if err != nil {
+		recordLoss(&o, err)
 		if written == 0 {
 			return e.finish(ctx, o, dto.Refused, code(err, dto.TargetUnclear))
 		}
@@ -279,6 +287,7 @@ func (e *Executor) restore(ctx context.Context, original dto.Instance, o dto.Ope
 		return o, err
 	}
 	if err != nil {
+		recordLoss(&o, err)
 		return e.finish(ctx, o, dto.RecoveryRequired, code(err, dto.RestoreFailed))
 	}
 	if !o.Resolver.RecreateCommitted {

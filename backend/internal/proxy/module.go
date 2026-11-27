@@ -508,6 +508,16 @@ func (m *Module) Discover(ctx context.Context, environmentID string) ([]dto.Disc
 // A new operation uses a fresh authenticated executor binding. Historical
 // records keep their original binding, including after credential rotation.
 func (m *Module) CreateOperation(ctx context.Context, id string, input dto.OperationRequest) (dto.Operation, error) {
+	// An acknowledgement an old agent cannot accept is refused before admission refreshes or adopts anything.
+	if acks := dto.NormaliseAcknowledgements(input.Acknowledgements); len(acks.MetadataLoss) > 0 {
+		stored, _, err := m.instanceSnapshot(ctx, id)
+		if err != nil {
+			return dto.Operation{}, err
+		}
+		if err = metadataLossSupported(ctx, m.Hub.Transport, stored.EnvironmentID, acks); err != nil {
+			return dto.Operation{}, err
+		}
+	}
 	instance, err := m.writeAdmission(ctx, id, true)
 	if err != nil {
 		return dto.Operation{}, err

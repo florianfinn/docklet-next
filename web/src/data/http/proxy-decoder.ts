@@ -11,7 +11,7 @@ export type ProxyOperation = components["schemas"]["ProxyOperation"];
 export type ProxyReason = components["schemas"]["ProxyProblem"]["code"];
 const states = ["pending", "verified", "applied-unverified", "rejected", "restored", "recovery-required", "released", "not-applied", "applied", "rolled-back", "refused"] as const satisfies readonly ProxyOperation["state"][];
 const phases = ["admitted", "staging", "publishing", "reloading", "restarting", "observing", "marking", "restoring","backup","writing","recreating","applied","rolled-back","refused","recovery-required"] as const satisfies readonly ProxyOperation["phase"][];
-const reasons = ["no-observable-difference", "not-observable", "container-changed", "logs-unavailable", "generation-mismatch", "operation-conflict", "module-busy", "stale-hash", "source-read-only", "unknown-operation", "operation-fenced", "registration-changed", "journal-lost", "invalid-input", "input-limit", "exec-failed", "exec-running", "proxy-rejected", "restore-failed", "invalid-graph", "incomplete-inventory", "opaque-input", "single-file-mount", "refused-bind", "read-only-mount", "unknown-source", "unsupported-metadata", "watch-off", "unsupported-format", "template-input", "rule-syntax-v2", "shared-across-files", "persistence-off", "relative-import", "import-missing", "acknowledgement-required", "probe-unavailable", "probe-option-unavailable", "admin-unavailable", "agent-unavailable", "engine-unavailable", "target-changed","source-ineligible","route-directory-mismatch","provider-directory-elsewhere","caddy-config-implicit","read-only","route-changed","certificate-unavailable","probe-image-unavailable","probe-client-missing","probe-client-unsupported","third-version","backup-invalid","unsupported-layout","env-conflict","env-key-exists","env-duplicate","storage-not-writable","unknown-operation-kind","compose-load-failed","compose-up-failed","static-parse-failed","effect-unsettled","target-unclear","identity-unclear","interrupted","not-implemented"] as const satisfies readonly ProxyReason[];
+const reasons = ["no-observable-difference", "not-observable", "container-changed", "logs-unavailable", "generation-mismatch", "operation-conflict", "module-busy", "stale-hash", "source-read-only", "unknown-operation", "operation-fenced", "registration-changed", "journal-lost", "invalid-input", "input-limit", "exec-failed", "exec-running", "proxy-rejected", "restore-failed", "invalid-graph", "incomplete-inventory", "opaque-input", "single-file-mount", "refused-bind", "read-only-mount", "unknown-source", "unsupported-metadata", "watch-off", "unsupported-format", "template-input", "rule-syntax-v2", "shared-across-files", "persistence-off", "relative-import", "import-missing", "acknowledgement-required", "probe-unavailable", "probe-option-unavailable", "admin-unavailable", "agent-unavailable", "engine-unavailable", "target-changed", "metadata-loss","source-ineligible","route-directory-mismatch","provider-directory-elsewhere","caddy-config-implicit","read-only","route-changed","certificate-unavailable","probe-image-unavailable","probe-client-missing","probe-client-unsupported","third-version","backup-invalid","unsupported-layout","env-conflict","env-key-exists","env-duplicate","storage-not-writable","unknown-operation-kind","compose-load-failed","compose-up-failed","static-parse-failed","effect-unsettled","target-unclear","identity-unclear","interrupted","not-implemented"] as const satisfies readonly ProxyReason[];
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const member = (items: readonly string[], v: unknown) => typeof v === "string" && items.includes(v);
 // Diagnostic is optional engine text; its bounds come from the wire contract.
@@ -28,6 +28,7 @@ export function decodeProxyOperation(body: unknown): ProxyOperation {
   if (v.kind === "adoption" && !validAdoptionRecord(v)) throw new Error("proxy.invalid-response");
   if (typeof v.digest !== "string" || (v.digest === "" && !validAdoptionRecord(v))) throw new Error("proxy.invalid-response");
   if (!["id", "instanceId", "generation", "registration", "createdAt"].every((k) => typeof v[k] === "string" && v[k] !== "") || !fileState(v.old) || !fileState(v.new) || (v.current !== undefined && !fileState(v.current)) || (v.diagnostic !== undefined && !diagnostic(v.diagnostic))) throw new Error("proxy.invalid-response");
+  if (v.metadataLoss !== undefined && !metadataLoss(v.metadataLoss)) throw new Error("proxy.invalid-response");
   return v as ProxyOperation;
 }
 // Presentation retains route verification and resolver application as distinct outcomes.
@@ -90,4 +91,14 @@ function validAdoptionRecord(v: Record<string, unknown>): boolean {
  const a=v.adoption;
  return v.kind==="adoption" && v.state==="applied" && v.phase==="applied" && timestamp(v.finishedAt) && record(a) &&
  [a.previousContainerId,a.containerId].every(x=>typeof x==="string" && x.length>0 && x.length<=128) && a.previousContainerId!==a.containerId && timestamp(a.startedAt);
+}
+
+/** Loss details are untrusted agent data; values never include attribute contents. */
+function metadataLoss(v: unknown): boolean {
+ return Array.isArray(v) && v.length <= 16 && v.every(x =>
+  record(x) && typeof x.path === "string" && x.path.length <= 1024 &&
+  (x.attributes === undefined || (Array.isArray(x.attributes) && x.attributes.length <= 64 &&
+   x.attributes.every(n => typeof n === "string" && new TextEncoder().encode(n).length <= 255 && /^[^\p{C}]+$/u.test(n)))) &&
+  (x.links === undefined || (Number.isInteger(x.links) && (x.links as number) >= 0 && (x.links as number) <= 1024)) &&
+  typeof x.token === "string" && /^[a-f0-9]{64}$/.test(x.token));
 }

@@ -41,6 +41,7 @@ export function RouteEditor({
   route,
   busy,
   refusal,
+  retry,
   submit,
   close,
 }: {
@@ -50,6 +51,7 @@ export function RouteEditor({
   route?: Route;
   busy: boolean;
   refusal?: unknown;
+  retry?: () => void;
   submit: (target: string, change: Change, ack: Acknowledgements) => void;
   close: () => void;
 }) {
@@ -216,7 +218,7 @@ export function RouteEditor({
           {(!narrow || mode === "advanced" || step === 3) && <AcknowledgementFields inventory={inventory} unresolved={caddy ? [] : unresolved} value={ack} onChange={setAck} />}
         </fieldset>
         {invalid && <p role="alert">{t("requiredField", { name: t(({ "route-name": "name", "route-domain": "domain", "route-rule": "rule", "backend-host": "backendHost", "site-block": "siteBlock", "route-resolver": "resolver" } as const)[invalid as "route-name"] ?? "name") })}</p>}
-        <RefusalView refusal={refusal} />
+        <RefusalView refusal={refusal} retry={retry} busy={busy} />
         <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 flex flex-wrap justify-end gap-2 border-t bg-background px-6 py-3">
           <Button type="button" variant="outline" disabled={busy} onClick={close}>{t("cancel")}</Button>
           {narrow && mode === "easy" && <>

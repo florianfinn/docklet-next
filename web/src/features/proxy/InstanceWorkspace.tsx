@@ -18,7 +18,7 @@ import { RouteList } from "./RouteList";
 import { ManualImportHint } from "./ManualImportHint";
 import { Settings } from "./Settings";
 import { canInsertImport, drifted, operationRequest, relativeTarget, routeWritesAllowed } from "./model";
-import type { Adoption, Acknowledgements, Change, Instance, Inventory, Operation, ReadResult, Route } from "./types";
+import type { Adoption, Acknowledgements, Change, Instance, Inventory, Operation, OperationRequest, ReadResult, Route } from "./types";
 
 type Snapshot = { read: ReadResult; inventory: Inventory };
 export function InstanceWorkspace({
@@ -176,10 +176,15 @@ export function InstanceWorkspace({
       if (active.current) setBusy(false);
     }
   };
+  const lastRequest = useRef<OperationRequest | undefined>(undefined);
   const write = (held: Snapshot, target: string, change: Change, ack: Acknowledgements) => {
+    send(operationRequest(held.read, target, change, ack));
+  };
+  const send = (request: OperationRequest) => {
+    lastRequest.current = request;
     setRefusal(undefined);
     void run(async () => {
-      const op = await api.operate(instance.id, operationRequest(held.read, target, change, ack));
+      const op = await api.operate(instance.id, request);
       if (active.current) {
         setRows(old => [op, ...old.filter(r => r.id !== op.id)]);
         if (op.state === "rejected") setRefusal(op);
@@ -189,6 +194,11 @@ export function InstanceWorkspace({
         }
       }
     }, true);
+  };
+  const retry = () => {
+    const op = refusal as Operation | undefined, request = lastRequest.current;
+    if (!request || op?.state !== "rejected" || op.reason !== "metadata-loss" || !op.metadataLoss?.length) return;
+    send({ ...request, acknowledgements: { ...request.acknowledgements, metadataLoss: op.metadataLoss } });
   };
   const blocked = busy || uncertain || rows.some(r => ["pending", "recovery-required"].includes(r.state));
   // Settings stay reachable without a readable snapshot, so a stale instance can still be removed.
@@ -345,6 +355,7 @@ export function InstanceWorkspace({
           route={editor.route}
           busy={busy}
           refusal={refusal}
+          retry={retry}
           close={() => {
             setEditor(undefined);
             setRefusal(undefined);
@@ -359,6 +370,7 @@ export function InstanceWorkspace({
           busy={busy}
           caddy={instance.kind === "caddy"}
           refusal={refusal}
+          retry={retry}
           close={() => {
             setAction(undefined);
             setRefusal(undefined);

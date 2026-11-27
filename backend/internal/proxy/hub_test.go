@@ -9,6 +9,7 @@ package proxy
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/types/contract"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
 	"github.com/stretchr/testify/require"
 	"sync/atomic"
@@ -34,9 +35,17 @@ type localTransport struct {
 	afterRelease      func()
 	applyMutate       func(*dto.Operation)
 	fenceErr          error
+	// contractVersion is the agent contract the fake reports; zero means the current one.
+	contractVersion int
 }
 
 func (t *localTransport) Registration(context.Context, string) (string, error) { return t.reg, nil }
+func (t *localTransport) ContractVersion(context.Context, string) (int, error) {
+	if t.contractVersion == 0 {
+		return contract.AgentHubVersion, nil
+	}
+	return t.contractVersion, nil
+}
 func (t *localTransport) Apply(ctx context.Context, q dto.ApplyRequest) (dto.Operation, error) {
 	t.applyCalls++
 	if t.beforeApply != nil {
