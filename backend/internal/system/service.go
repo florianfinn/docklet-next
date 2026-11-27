@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"log/slog"
 	"runtime"
 	"strings"
@@ -132,6 +133,15 @@ func NewSystemService(
 			return volumeService.BackupWorkRunning(ctx)
 		}
 		s.upgrade.SetBackupBusy(volumeService.BackupWorkRunning)
+	}
+	if roles != nil {
+		s.upgrade.SetUpdatePermission(func(ctx context.Context, userID string) (bool, error) {
+			permissions, err := roles.ResolveExecutionPermissions(ctx, userID, "")
+			if err != nil {
+				return false, err
+			}
+			return permissions.Allows(authz.PermSystemUpgrade, "0"), nil
+		})
 	}
 	s.prune.SetZoneProvider(cfg)
 	s.backup = systembackup.NewService(systembackup.Dependencies{

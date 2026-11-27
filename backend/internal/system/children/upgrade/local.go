@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; replace Arcane upgrader and fleet jobs with correlated Compose self-updates; fallback container search uses the Docklet system label (#235).
+// Deviations: Local module namespace; replace Arcane upgrader and fleet jobs with correlated Compose self-updates; fallback container search uses the Docklet system label (#235); combined hub-then-agents update (#682).
 
 package upgrade
 
@@ -79,31 +79,41 @@ func (s *Service) StartUpdate(ctx context.Context, id string, input dto.SelfUpda
 			return dto.SelfUpdateResponse{}, core.Refuse(code)
 		}
 	}
+	op, err := s.reserveLocal(ctx, input, userID, username, nil)
+	if err != nil {
+		return dto.SelfUpdateResponse{}, err
+	}
+	return response(op), nil
+}
+
+// reserveLocal reserves this installation's update for an already validated
+// envelope and launches its helper only when the reservation was created.
+func (s *Service) reserveLocal(ctx context.Context, input dto.SelfUpdateEnvelope, userID, username string, link *fleetLink) (core.Operation, error) {
 	if s.backupBusy != nil {
 		busy, err := s.backupBusy(ctx)
 		if err != nil {
-			return dto.SelfUpdateResponse{}, err
+			return core.Operation{}, err
 		}
 		if busy {
-			return dto.SelfUpdateResponse{}, core.Refuse("host.busy")
+			return core.Operation{}, core.Refuse("host.busy")
 		}
 	}
 	current, _, err := s.inspect(ctx)
 	if err != nil {
-		return dto.SelfUpdateResponse{}, err
+		return core.Operation{}, err
 	}
 	replay, err := core.ReplayFromLabels(current.Config.Labels, s.role(), current.Config.Image)
 	if err != nil {
-		return dto.SelfUpdateResponse{}, err
+		return core.Operation{}, err
 	}
 	mounts, err := core.HelperMounts(current, s.endpoint(), s.data, replay)
 	if err != nil {
-		return dto.SelfUpdateResponse{}, err
+		return core.Operation{}, err
 	}
 	op := core.Operation{OpID: input.OpID, Role: s.role(), EnvironmentID: "0", OldContainerID: current.ID, TargetRef: input.TargetReference, TargetVersion: input.TargetVersion, FromVersion: s.runningVersion(), Deadline: time.Now().UTC().Add(core.OperationTimeout)}
-	op, created, err := s.reserveRun(ctx, s.store, op, userID, username)
+	op, created, err := s.reserveRun(ctx, s.store, op, userID, username, link)
 	if err != nil {
-		return dto.SelfUpdateResponse{}, err
+		return core.Operation{}, err
 	}
 	if created {
 		request := core.Request{OpID: op.OpID, Role: op.Role, OldContainerID: op.OldContainerID, Replay: replay, TargetReference: op.TargetRef, TargetVersion: op.TargetVersion, Deadline: op.Deadline, AppUID: os.Geteuid(), AppGID: os.Getegid()}
@@ -115,7 +125,7 @@ func (s *Service) StartUpdate(ctx context.Context, id string, input dto.SelfUpda
 			s.observer().Run(ctx)
 		})
 	}
-	return response(op), nil
+	return op, nil
 }
 func (s *Service) dispatchLocal(parent context.Context, op core.Operation, request core.Request, mounts []mount.Mount) error {
 	ctx, cancel := context.WithDeadline(parent, op.Deadline)

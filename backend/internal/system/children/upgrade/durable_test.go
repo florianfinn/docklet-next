@@ -28,7 +28,7 @@ func TestHubRunSurvivesSQLiteReopenAndDelayedResult(t *testing.T) {
 	require.NoError(t, err)
 	service := NewService(db, nil, nil, &config.Config{})
 	op := core.Operation{OpID: "hub-restart", Role: "hub", EnvironmentID: "0", TargetRef: "example.com/docklet-hub:1.0.1@sha256:" + testDigest, TargetVersion: "1.0.1", Deadline: time.Now().Add(core.OperationTimeout)}
-	op, created, err := service.reserveRun(t.Context(), service.store, op, "operator", "operator")
+	op, created, err := service.reserveRun(t.Context(), service.store, op, "operator", "operator", nil)
 	require.NoError(t, err)
 	require.True(t, created)
 	require.NotEmpty(t, op.RunID)

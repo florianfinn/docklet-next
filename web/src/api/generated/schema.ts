@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 34139e1bc309013d52c67caddaf3675e3c7e8ec37bd8b58c1ed41f488ee356e2
+// Revision: 2919f245a78c57ba7c02900daf4028573b210701fdbc7f2793ee01dec26c2239
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -5423,6 +5423,30 @@ export interface paths {
          * @description Fetch the release list again before the next update check (at most every 30 seconds)
          */
         post: operations["refresh-releases"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/upgrade/all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the combined update
+         * @description Return the active or last combined update with one row per host
+         */
+        get: operations["get-update-all"];
+        put?: never;
+        /**
+         * Update everything
+         * @description Update the hub first, then every eligible agent to the hub's version
+         */
+        post: operations["start-update-all"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13554,6 +13578,57 @@ export interface components {
             envVars: string;
             serviceName: string;
             success: boolean;
+        };
+        SystemFleetUpdateRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/SystemFleetUpdateRequest.json
+             */
+            readonly $schema?: string;
+            targetVersion: string;
+        };
+        SystemFleetUpdateResponse: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/SystemFleetUpdateResponse.json
+             */
+            readonly $schema?: string;
+            fleetId: string;
+            hubOpId?: string;
+            /** @enum {string} */
+            hubPhase: "update" | "current";
+            runId: string;
+        };
+        SystemFleetUpdateStatus: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/SystemFleetUpdateStatus.json
+             */
+            readonly $schema?: string;
+            active: boolean;
+            agents: components["schemas"]["SystemFleetUpdateTarget"][] | null;
+            fleetId?: string;
+            hub?: components["schemas"]["SystemFleetUpdateTarget"];
+            /** @enum {string} */
+            outcome?: "success" | "partial" | "failed";
+            /** @enum {string} */
+            phase?: "hub" | "agents" | "settled";
+            runId?: string;
+            targetVersion?: string;
+        };
+        SystemFleetUpdateTarget: {
+            /** @enum {string} */
+            code?: "update.all-busy" | "update.current" | "update.hub-failed" | "update.newer-than-target" | "update.fleet-unreadable" | "update.permission-denied" | "update.target-changed" | "update.invalid-target" | "update.check-unavailable" | "update.system-version-unknown" | "update.self-not-compose" | "update.self-unsupported-layout" | "update.self-custom-image" | "update.self-failed" | "update.outcome-unknown" | "update.requires-hub-update" | "feature-disabled" | "host.busy" | "agent.unavailable" | "agent.update-required";
+            environmentId: string;
+            opId: string;
+            /** @enum {string} */
+            outcome?: "healthy" | "current" | "failed-health" | "failed-pre-effect" | "unknown" | "skipped";
+            runId?: string;
+            /** @enum {string} */
+            state: "pending" | "reserved" | "skipped" | "settled";
         };
         SystemHealthResponse: {
             /**
@@ -40746,6 +40821,68 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-update-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemFleetUpdateStatus"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "start-update-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemFleetUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemFleetUpdateResponse"];
+                };
             };
             /** @description Error */
             default: {

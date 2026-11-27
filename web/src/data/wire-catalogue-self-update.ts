@@ -2,7 +2,7 @@
 // Revision: 910032a54830f5ce1d37070964fa2dc7efb8aa2f
 // Retrieved: 2026-11-09
 // License: Apache-2.0
-// Deviations: Original Compose-faithful self-update implementation.
+// Deviations: Original Compose-faithful self-update implementation; combined update codes (#682).
 
 import type { components } from "@/api/generated/schema";
 import type { CatalogueKey } from "./wire-catalogue";
@@ -45,3 +45,16 @@ export const SELF_UPDATE_OUTCOME_KEYS = {
   "failed-pre-effect": "runMessages.selfUpdate.failed-pre-effect",
   "unknown": "runMessages.selfUpdate.unknown",
 } satisfies Record<NonNullable<Schema["SystemSelfUpdateOperation"]["outcome"]>, CatalogueKey>;
+
+// Codes of the combined update's targets, refusals and child runs.
+export const FLEET_CODE_KEYS = {
+  ...SELF_UPDATE_CODE_KEYS,
+  "update.all-busy": "images.errors.update_all-busy",
+  "update.current": "images.errors.update_current",
+  "update.hub-failed": "images.errors.update_hub-failed",
+  "update.newer-than-target": "images.errors.update_newer-than-target",
+  "update.fleet-unreadable": "images.errors.update_fleet-unreadable",
+  "update.permission-denied": IMAGE_ERROR_KEYS["update.permission-denied"],
+  "update.target-changed": IMAGE_ERROR_KEYS["update.target-changed"],
+  "agent.update-required": "common.commandErrors.updateRequired",
+} satisfies Record<NonNullable<Schema["SystemFleetUpdateTarget"]["code"]>, CatalogueKey>;
