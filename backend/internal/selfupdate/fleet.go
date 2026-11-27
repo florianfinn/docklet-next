@@ -115,12 +115,17 @@ func DecodeFleet(raw string) (FleetPlan, error) {
 			return plan, ErrFleetUnreadable
 		}
 	case "agents":
-		if plan.Hub.Outcome != "healthy" && plan.Hub.Outcome != "current" {
+		if !plan.Hub.Terminal() || (plan.Hub.Outcome != "healthy" && plan.Hub.Outcome != "current") {
 			return plan, ErrFleetUnreadable
 		}
 	case "settled":
-		if plan.Outcome != "success" && plan.Outcome != "partial" && plan.Outcome != "failed" {
+		if !plan.Hub.Terminal() || (plan.Outcome != "success" && plan.Outcome != "partial" && plan.Outcome != "failed") {
 			return plan, ErrFleetUnreadable
+		}
+		for _, agent := range plan.Agents {
+			if !agent.Terminal() {
+				return plan, ErrFleetUnreadable
+			}
 		}
 	default:
 		return plan, ErrFleetUnreadable
@@ -170,11 +175,9 @@ func (s FleetStore) Admit(ctx context.Context, plan FleetPlan, create func(*gorm
 		var entry kv.KVEntry
 		err := tx.First(&entry, "key=?", FleetKey).Error
 		if err == nil {
-			var owner struct {
-				Phase string `json:"phase"`
-			}
-			// An unreadable value is released by the driver first; it never admits over it.
-			if json.Unmarshal([]byte(entry.Value), &owner) != nil || owner.Phase != "settled" {
+			// Only a validated settled plan or a release marker may be replaced; an
+			// unreadable value is released by the driver first, failing its parent.
+			if !replaceable(entry.Value) {
 				return Refuse("update.all-busy")
 			}
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -253,6 +256,16 @@ func (s FleetStore) Release(ctx context.Context, raw string, settle func(*gorm.D
 		}
 		return nil
 	})
+}
+
+func replaceable(raw string) bool {
+	if plan, err := DecodeFleet(raw); err == nil {
+		return plan.Phase == "settled"
+	}
+	var marker struct {
+		Released bool `json:"released"`
+	}
+	return json.Unmarshal([]byte(raw), &marker) == nil && marker.Released
 }
 
 // ErrNotReserved reports that a dispatch marker was not acquired because the

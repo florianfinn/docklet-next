@@ -12,9 +12,11 @@ stay removed.
   version, the registered agents with credential revision and registration time, and one operation
   ID per host derived from the plan ID. A second admission while a plan is unsettled is refused with
   `update.all-busy`. When the hub is already current, admission needs at least one compatible agent
-  below the hub version; otherwise it is refused with `update.current`. The plan has a schema
+  below the hub version, and that agent's registration must still be the one the plan freezes;
+  otherwise it is refused with `update.current`. The plan has a schema
   version; an unknown version, a missing field or a state combination the driver cannot advance fails
-  closed (`update.fleet-unreadable`) and starts nothing.
+  closed (`update.fleet-unreadable`) and starts nothing. Admission replaces only a validated settled
+  plan or the release marker; any other stored value is released first, failing its parent.
 - **Driver.** The hub's update service advances the plan and resumes it on every start, like the
   remote observers. The process that admits the plan is replaced by the hub update; the new process
   continues from the stored state.
@@ -69,13 +71,16 @@ page); replaying a reserved agent request after a restart (it can duplicate an u
 | 11 | dispatch marker | reserved-only transition | second caller does not acquire |
 | 12 | registration replaced during the agent check | frozen identity in the reservation transaction | re-registration while the check is held |
 | 13 | offline or failing agent | skip and continue | closed port and 503 |
+| 13a | recovery check answers 503 or drops the connection | skip and continue | both modes, zero requests |
+| 13b | Edge agent without a live tunnel | the fleet path registers tunnel demand | on-demand Edge agent connects and receives its one request |
 | 14 | agent below the minimum contract | explicit contract read | Direct and Edge, zero requests |
 | 15 | agent newer or current after admission | never downgraded | newer and current cases |
-| 16 | hub current and no agent below the target | refused admission | no agents, all current, all newer, only old contracts |
+| 15a | feed or hub version changes after admission | frozen target version | hub on a newer version, feed offering it, operation keeps the plan target |
+| 16 | hub current and no agent below the target | refused admission | no agents, all current, all newer, only old contracts; qualifying host removed during admission |
 | 17 | busy agent | bounded retry, then skip | retry state, skip after the limit |
 | 18 | permission lost during a round | check at each reservation | revocation while the check is held |
 | 19 | parallel limit | at most three in flight | fourth agent stays pending |
-| 20 | unreadable or inconsistent plan | fail closed, slot released | future schema, corrupt value, invalid phase and states |
+| 20 | unreadable or inconsistent plan | fail closed, slot released, never overwritten | future schema, corrupt value, invalid phase and states, settled with open targets |
 | 21 | parent during restart repair | key-value owner exclusion | startup repair keeps the parent |
 | 22 | agent surface | hub-only routes | agent route set has no combined route |
 

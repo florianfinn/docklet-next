@@ -215,32 +215,49 @@ func hostBusy(err error) bool {
 	return errors.As(err, &problem) && problem.Code == "host.busy"
 }
 
-// anyAgentBelow reports whether an enabled, compatible agent runs a version
-// below target; hosts are read in parallel with the bounded remote check.
-func (s *Service) anyAgentBelow(ctx context.Context, target string) bool {
+// hostIdentity is one registration a version reading belongs to.
+type hostIdentity struct {
+	id         string
+	revision   int64
+	registered time.Time
+}
+
+func (h hostIdentity) matches(env environment.Environment) bool {
+	return env.ID == h.id && env.CredentialRevision == h.revision && env.CreatedAt.Equal(h.registered)
+}
+
+// agentsBelow returns the enabled, compatible agents that run a version below
+// target; hosts are read in parallel with the bounded remote checks.
+func (s *Service) agentsBelow(ctx context.Context, target string) []hostIdentity {
 	limit, ok := product.ParseProduct(target)
 	if !ok || s.environments == nil {
-		return false
+		return nil
 	}
 	var hosts []environment.Environment
 	if s.db.WithContext(ctx).Where("id <> ? AND enabled = ?", "0", true).Find(&hosts).Error != nil {
-		return false
+		return nil
 	}
-	found := make(chan bool, len(hosts))
+	found := make(chan *hostIdentity, len(hosts))
 	for _, host := range hosts {
 		go func() {
 			if _, err := s.environments.CheckAgentCompatibility(ctx, host.ID); err != nil {
-				found <- false
+				found <- nil
 				return
 			}
 			check, err := s.readRemote(ctx, host)
 			running, valid := product.ParseProduct(check.Version)
-			found <- err == nil && valid && running.Compare(limit) < 0
+			if err != nil || !valid || running.Compare(limit) >= 0 {
+				found <- nil
+				return
+			}
+			found <- &hostIdentity{id: host.ID, revision: host.CredentialRevision, registered: host.CreatedAt}
 		}()
 	}
-	below := false
+	var below []hostIdentity
 	for range hosts {
-		below = <-found || below
+		if identity := <-found; identity != nil {
+			below = append(below, *identity)
+		}
 	}
 	return below
 }

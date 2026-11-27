@@ -64,6 +64,9 @@ type updateTransportFixture struct {
 	checkRelease chan struct{}
 	// currentContract makes the agent report the hub's contract instead of an old one.
 	currentContract atomic.Bool
+	// checkFailure answers the recovery check with 503 ("status") or drops the connection ("drop").
+	checkFailure atomic.Value
+	checks       atomic.Int32 // recovery checks served
 }
 type updateDaemon struct {
 	mu        sync.Mutex
@@ -127,6 +130,13 @@ func updateDB(t *testing.T) *database.DB {
 }
 func newUpdateTransport(t *testing.T, isEdge bool) *updateTransportFixture {
 	t.Helper()
+	return newUpdateTransportMode(t, isEdge, false)
+}
+
+// newUpdateTransportMode with onDemand starts the Edge agent only after the hub
+// registered tunnel demand for it, as a polling Edge agent connects on demand.
+func newUpdateTransportMode(t *testing.T, isEdge, onDemand bool) *updateTransportFixture {
+	t.Helper()
 	f := &updateTransportFixture{db: updateDB(t), post: make(chan struct{}, 10), checkEntered: make(chan struct{}), checkRelease: make(chan struct{})}
 	agentDB := updateDB(t)
 	cfg := &config.Config{AgentMode: true, AgentToken: "example", DockerHost: "unix:///var/run/docker.sock", AuthMode: "local", UIConfigurationDisabled: true}
@@ -172,6 +182,19 @@ func newUpdateTransport(t *testing.T, isEdge bool) *updateTransportFixture {
 		return nil, nil
 	}, func(op *huma.Operation) { op.Security = handlerutil.DefaultOperationSecurity() })
 	f.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/api/environments/0/system/upgrade/check" {
+			defer f.checks.Add(1)
+		}
+		if failure, _ := f.checkFailure.Load().(string); failure != "" && r.Method == http.MethodGet && r.URL.Path == "/api/environments/0/system/upgrade/check" {
+			if failure == "drop" {
+				if conn, _, err := http.NewResponseController(w).Hijack(); err == nil {
+					_ = conn.Close()
+					return
+				}
+			}
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		if r.Method == http.MethodGet && r.URL.Path == "/api/environments/0/system/upgrade/check" && f.posts.Load() > 0 {
 			f.postChecks.Add(1)
 		}
@@ -212,7 +235,9 @@ func newUpdateTransport(t *testing.T, isEdge bool) *updateTransportFixture {
 	previous := edge.GetRegistry()
 	edge.SetDefaultRegistry(registry)
 	t.Cleanup(func() { edge.SetDefaultRegistry(previous) })
-	f.remote = environment.Environment{BaseModel: database.BaseModel{ID: "example-remote"}, Name: "Example host", ApiUrl: direct.URL, IsEdge: isEdge, Enabled: true, AccessToken: new(cfg.AgentToken), ApiKeyID: new("example-key"), CredentialRevision: 1}
+	// An on-demand host has its own id, so demand left by other tests cannot connect it.
+	remoteID := map[bool]string{false: "example-remote", true: "example-remote-on-demand"}[onDemand]
+	f.remote = environment.Environment{BaseModel: database.BaseModel{ID: remoteID}, Name: "Example host", ApiUrl: direct.URL, IsEdge: isEdge, Enabled: true, AccessToken: new(cfg.AgentToken), ApiKeyID: new("example-key"), CredentialRevision: 1}
 	if isEdge {
 		connected := make(chan struct{})
 		var once sync.Once
@@ -234,7 +259,13 @@ func newUpdateTransport(t *testing.T, isEdge bool) *updateTransportFixture {
 		life, cancel := context.WithCancel(t.Context())
 		done := make(chan struct{})
 		agent := edge.NewRuntimeTunnelClient(&edge.Config{EdgeTransport: edge.EdgeTransportWebSocket, ManagerApiUrl: manager.URL, AgentToken: cfg.AgentToken, EdgeReconnectInterval: 1}, f.handler)
-		go func() { defer close(done); agent.StartWithErrorChan(life, nil) }()
+		go func() {
+			defer close(done)
+			for onDemand && life.Err() == nil && edge.GetDemandRegistry().DesiredStatus(f.remote.ID, false, time.Now()) != edge.TunnelStatusRequired {
+				time.Sleep(20 * time.Millisecond)
+			}
+			agent.StartWithErrorChan(life, nil)
+		}()
 		t.Cleanup(func() {
 			cancel()
 			registry.Unregister(f.remote.ID)
@@ -244,12 +275,14 @@ func newUpdateTransport(t *testing.T, isEdge bool) *updateTransportFixture {
 				t.Error("Edge worker did not join")
 			}
 		})
-		select {
-		case <-connected:
-		case <-time.After(5 * time.Second):
-			t.Fatal("Edge registration missing")
+		if !onDemand {
+			select {
+			case <-connected:
+			case <-time.After(5 * time.Second):
+				t.Fatal("Edge registration missing")
+			}
 		}
-		f.remote.ApiUrl = "edge://example-remote"
+		f.remote.ApiUrl = "edge://" + remoteID
 	}
 	require.NoError(t, f.db.Exec("INSERT INTO api_keys(id,name,key_hash,key_prefix,kind) VALUES(?,?,?,?,?)", "example-key", "Example key", "example-hash", "example", "environment").Error)
 	require.NoError(t, f.db.Create(&f.remote).Error)

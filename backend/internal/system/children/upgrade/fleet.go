@@ -77,17 +77,28 @@ func (s *Service) StartFleet(ctx context.Context, request dto.FleetUpdateRequest
 	if request.TargetVersion != plan.TargetVersion {
 		return dto.FleetUpdateResponse{}, core.Refuse("update.invalid-target")
 	}
-	// With a current hub the action needs at least one agent below the target.
-	if plan.Phase == "agents" && !s.anyAgentBelow(ctx, plan.TargetVersion) {
-		return dto.FleetUpdateResponse{}, core.Refuse(dto.FleetCurrent)
+	// With a current hub the action needs at least one agent below the target;
+	// the evidence is bound to the registrations the admission freezes.
+	var below []hostIdentity
+	if plan.Phase == "agents" {
+		if below = s.agentsBelow(ctx, plan.TargetVersion); len(below) == 0 {
+			return dto.FleetUpdateResponse{}, core.Refuse(dto.FleetCurrent)
+		}
 	}
 	err = s.fleet().Admit(ctx, plan, func(tx *gorm.DB, plan *core.FleetPlan) error {
 		var hosts []environment.Environment
 		if err := tx.Where("id <> ?", "0").Order("created_at, id").Find(&hosts).Error; err != nil {
 			return err
 		}
+		qualified := plan.Phase == "hub"
 		for _, host := range hosts {
 			plan.Agents = append(plan.Agents, core.FleetTarget{EnvironmentID: host.ID, CredentialRevision: host.CredentialRevision, RegisteredAt: host.CreatedAt, OpID: core.FleetOpID(plan.FleetID, host.ID), State: core.TargetPending})
+			for _, evidence := range below {
+				qualified = qualified || evidence.matches(host)
+			}
+		}
+		if !qualified {
+			return core.Refuse(dto.FleetCurrent)
 		}
 		now := time.Now().UTC()
 		parent := activity.Activity{BaseModel: database.BaseModel{ID: plan.RunID, CreatedAt: now}, EnvironmentID: "0", Type: activityDTO.TypeFleetUpdate, Status: activityDTO.StatusRunning, StartedAt: now, StartedByUserID: new(userID), StartedByUsername: new(username), MessageCode: string(activityDTO.CodeRunStarted), ResourceType: new("system"), ResourceID: new("0"), Metadata: database.JSON{"fleetId": plan.FleetID, "targetVersion": plan.TargetVersion}}
