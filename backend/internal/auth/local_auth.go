@@ -14,17 +14,19 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 )
 
-// Build one dummy credential at process startup using the same hashing policy as real users.
-var dummyLocalPasswordHash = func() string {
+// Build one dummy credential on the first local sign-in, with the same hashing
+// policy as real users; processes without local sign-in never pay for it.
+var dummyLocalPasswordHash = sync.OnceValue(func() string {
 	hash, err := user.NewUserService(nil, nil, nil).HashPassword("dummy-local-credential")
 	if err != nil {
 		panic(fmt.Errorf("initialize dummy local credential: %w", err))
 	}
 	return hash
-}()
+})
 
 // This seam counts comparisons in regression tests without timing assertions.
 var validateLocalPassword = (*user.UserService).ValidatePassword
@@ -62,7 +64,7 @@ func (s *AuthService) AuthenticateLocalPrimary(ctx context.Context, username, pa
 		}
 	}
 	if localUser == nil || localUser.DisabledAt != nil {
-		_ = validateLocalPassword(s.userService, dummyLocalPasswordHash, password)
+		_ = validateLocalPassword(s.userService, dummyLocalPasswordHash(), password)
 		return nil, ErrInvalidCredentials
 	}
 	if validatePasswordErr := validateLocalPassword(s.userService, localUser.PasswordHash, password); validatePasswordErr != nil {

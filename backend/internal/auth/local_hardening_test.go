@@ -25,7 +25,7 @@ func TestLocalIdentityHardening(t *testing.T) {
 	s.settingsService = settings
 	hash, err := users.HashPassword("example-password")
 	require.NoError(t, err)
-	require.Equal(t, strings.Join(strings.Split(hash, "$")[:4], "$"), strings.Join(strings.Split(dummyLocalPasswordHash, "$")[:4], "$"))
+	require.Equal(t, strings.Join(strings.Split(hash, "$")[:4], "$"), strings.Join(strings.Split(dummyLocalPasswordHash(), "$")[:4], "$"))
 	now := time.Now()
 	for _, u := range []user.User{
 		{ID: "case", Username: "case", Email: new("Admin@example.com"), PasswordHash: hash},
@@ -45,7 +45,7 @@ func TestLocalIdentityHardening(t *testing.T) {
 	count := 0
 	validateLocalPassword = func(s *user.UserService, h, p string) error {
 		count++
-		require.Equal(t, dummyLocalPasswordHash, h)
+		require.Equal(t, dummyLocalPasswordHash(), h)
 		return original(s, h, p)
 	}
 	for _, name := range []string{"missing", "missing@example.com", "disabled"} {
