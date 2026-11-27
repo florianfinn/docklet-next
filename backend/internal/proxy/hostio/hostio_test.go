@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func archive(t *testing.T, headers []*tar.Header, payloads []string) []byte {
@@ -41,6 +42,79 @@ func TestP14SecretHeadersNeverDecoded(t *testing.T) {
 	require.Equal(t, "ok", files[0].Content)
 	require.Equal(t, []dto.OpaqueFile{{Path: "nested.SECRET.dir/hidden.yml"}, {Path: "key.secret.yml"}}, names)
 }
+func TestTarReadsHardLinkAndWriterStillRequiresConfirmation(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "app.yml")
+	alias := filepath.Join(root, "app.txt")
+	require.NoError(t, os.WriteFile(target, []byte("old"), 0644))
+	require.NoError(t, os.Link(target, alias))
+	modified := time.Unix(100, 0)
+	b := archive(t, []*tar.Header{
+		{Name: "routes/", Typeflag: tar.TypeDir},
+		{Name: "routes/app.yml", Typeflag: tar.TypeReg, Size: 3, Mode: 0644, ModTime: modified},
+		{Name: "routes/app.txt", Typeflag: tar.TypeLink, Linkname: "routes/app.yml", Mode: 0644, ModTime: modified},
+	}, []string{"", "old"})
+	var visited []FileHeader
+	files, opaque, err := ReadTarWithHeaders(t.Context(), bytes.NewReader(b), "/etc/routes", false, func(h FileHeader) error {
+		visited = append(visited, h)
+		return nil
+	})
+	require.NoError(t, err, "an earlier regular file inside the archive supplies the alias content")
+	require.Empty(t, opaque)
+	require.Len(t, files, 2)
+	require.Equal(t, "old", files[0].Content)
+	want := files[0]
+	want.Path = "app.txt"
+	require.Equal(t, want, files[1])
+	require.Len(t, visited, 2)
+	require.Equal(t, "app.txt", visited[1].Path)
+	require.Equal(t, modified, visited[1].ModifiedAt)
+
+	w := ProjectWriter{Root: root}
+	require.NoError(t, w.Write(t.Context(), "stage", []byte("new"), 0644))
+	loss, err := w.Prepare(t.Context(), "stage", "app.yml")
+	require.NoError(t, err)
+	require.Equal(t, 1, loss.Links)
+	require.ErrorContains(t, w.Replace(t.Context(), "stage", "app.yml"), "metadata-loss")
+	w.Acknowledgements = []dto.MetadataLoss{loss}
+	require.NoError(t, w.Replace(t.Context(), "stage", "app.yml"))
+	for file, content := range map[string]string{target: "new", alias: "old"} {
+		b, err := os.ReadFile(file)
+		require.NoError(t, err)
+		require.Equal(t, content, string(b))
+	}
+}
+
+func TestTarRefusesHardLinksWithoutEarlierPublicRegularTarget(t *testing.T) {
+	for _, target := range []string{"routes/later", "outside/file", "routes/../routes/first", "/routes/first", "routes/key.secret", "routes", "routes/alias"} {
+		t.Run(target, func(t *testing.T) {
+			b := archive(t, []*tar.Header{
+				{Name: "routes", Typeflag: tar.TypeDir},
+				{Name: "routes/first", Typeflag: tar.TypeReg, Size: 2},
+				{Name: "routes/key.secret", Typeflag: tar.TypeReg, Size: 6},
+				{Name: "routes/alias", Typeflag: tar.TypeLink, Linkname: "routes/first"},
+				{Name: "routes/requested", Typeflag: tar.TypeLink, Linkname: target},
+				{Name: "routes/later", Typeflag: tar.TypeReg},
+			}, []string{"", "ok", "hidden"})
+			_, _, err := ReadTar(t.Context(), bytes.NewReader(b), "routes", false)
+			var problem *dto.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, dto.InvalidInput, problem.Code)
+			require.Equal(t, "requested", problem.Path)
+		})
+	}
+}
+
+func TestTarHardLinksCountAgainstProjectedByteLimit(t *testing.T) {
+	headers := []*tar.Header{{Name: "routes/first", Typeflag: tar.TypeReg, Size: MaxFileBytes}}
+	for n := 0; n < MaxTotalBytes/MaxFileBytes; n++ {
+		headers = append(headers, &tar.Header{Name: "routes/" + strings.Repeat("x", n+1), Typeflag: tar.TypeLink, Linkname: "routes/first"})
+	}
+	b := archive(t, headers, []string{strings.Repeat("x", MaxFileBytes)})
+	_, _, err := ReadTar(t.Context(), bytes.NewReader(b), "routes", false)
+	require.ErrorContains(t, err, "input-limit")
+}
+
 func TestP18TarBounds(t *testing.T) {
 	for _, tt := range []struct {
 		name    string

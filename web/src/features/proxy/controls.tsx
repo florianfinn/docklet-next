@@ -174,7 +174,7 @@ export function RefusalView({ refusal, retry, busy }: { refusal?: unknown; retry
       <p>{t("refused")}</p>
       <Reason code={op.reason} />
       <Diagnostic value={op.diagnostic} />
-      <MetadataLossList loss={op.metadataLoss} />
+      <MetadataLossList operation={op} />
       {op.state === "rejected" && op.reason === "metadata-loss" && !!op.metadataLoss?.length && retry &&
         <MetadataRetry key={JSON.stringify(op)} retry={retry} busy={busy} />}
     </div>
@@ -222,11 +222,12 @@ export function AcknowledgementFields({
   );
 }
 
-export function MetadataLossList({ loss }: { loss?: Operation["metadataLoss"] }) {
+export function MetadataLossList({ operation: { metadataLoss: loss, state } }: { operation: Operation }) {
   const t = useTranslations("proxyContract.ui");
   if (!loss?.length) return null;
+  const completed = state === "verified" || state === "applied-unverified" || state === "applied" || state === "restored";
   return <div className="space-y-2 [overflow-wrap:anywhere]">
-    <p>{t("metadataPermanent")}</p>
+    <p>{t(completed ? "metadataPermanent" : "metadataWouldBePermanent")}</p>
     <ul className="space-y-2">{loss.map((entry, i) => <li key={i}>
       <p className="font-mono text-xs">{entry.path}</p>
       <ul>{entry.attributes?.map(name => <li key={name} className="font-mono text-xs">{name}</li>)}</ul>

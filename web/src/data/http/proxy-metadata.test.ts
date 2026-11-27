@@ -16,6 +16,18 @@ describe("metadata loss decoder", () => {
     expect(decode([entry, { path: "routes/other.yml", token: entry.token }]).metadataLoss).toEqual([entry, { path: "routes/other.yml", token: entry.token }]);
     expect(decode([]).metadataLoss).toEqual([]);
   });
+  it("accepts a path and an ASCII attribute name at the byte limits", () => {
+    const boundary = { ...entry, path: "é".repeat(512), attributes: ["!".repeat(254) + "~"] };
+    expect(decode([boundary]).metadataLoss).toEqual([boundary]);
+  });
+  it.each([
+    ["empty path", { ...entry, path: "" }],
+    ["path over 1024 bytes", { ...entry, path: "é".repeat(512) + "x" }],
+    ["non-ASCII name", { ...entry, attributes: ["user.café"] }],
+    ["space in name", { ...entry, attributes: ["user.a b"] }],
+  ])("rejects a loss with %s", (_, loss) => {
+    expect(() => decode([loss])).toThrow("proxy.invalid-response");
+  });
   const malformed = [
     null, {}, "loss", Array(17).fill(entry), [null], [[]],
     ...[undefined, 3, "x".repeat(1025)].map(path => [{ ...entry, path }]),

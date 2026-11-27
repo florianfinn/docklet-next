@@ -96,9 +96,9 @@ function validAdoptionRecord(v: Record<string, unknown>): boolean {
 /** Loss details are untrusted agent data; values never include attribute contents. */
 function metadataLoss(v: unknown): boolean {
  return Array.isArray(v) && v.length <= 16 && v.every(x =>
-  record(x) && typeof x.path === "string" && x.path.length <= 1024 &&
+  record(x) && typeof x.path === "string" && x.path.length > 0 && new TextEncoder().encode(x.path).length <= 1024 &&
   (x.attributes === undefined || (Array.isArray(x.attributes) && x.attributes.length <= 64 &&
-   x.attributes.every(n => typeof n === "string" && new TextEncoder().encode(n).length <= 255 && /^[^\p{C}]+$/u.test(n)))) &&
+   x.attributes.every(n => typeof n === "string" && n.length > 0 && n.length <= 255 && !/[^!-~]/.test(n)))) &&
   (x.links === undefined || (Number.isInteger(x.links) && (x.links as number) >= 0 && (x.links as number) <= 1024)) &&
   typeof x.token === "string" && /^[a-f0-9]{64}$/.test(x.token));
 }
