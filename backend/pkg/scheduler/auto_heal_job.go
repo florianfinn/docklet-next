@@ -152,7 +152,7 @@ func (j *AutoHealJob) Run(ctx context.Context) (st.Outcome, error) {
 	if err = jobcontext.Progress(ctx, st.TargetOutcome{ResourceType: "heal_plan", ID: "auto-heal-plan", Status: st.Succeeded, RecoveryData: frozen}); err != nil {
 		return st.Outcome{}, err
 	}
-	outcome := st.Outcome{Status: st.Succeeded}
+	outcome, interrupted := st.Outcome{Status: st.Succeeded}, false
 	var mu sync.Mutex
 	g, groupCtx := errgroup.WithContext(ctx)
 	g.SetLimit(autoHealInspectConcurrency)
@@ -164,6 +164,7 @@ func (j *AutoHealJob) Run(ctx context.Context) (st.Outcome, error) {
 			outcome.Targets = append(outcome.Targets, target)
 			if err != nil {
 				outcome.Status = st.Partial
+				interrupted = interrupted || autoHealInterruptedInternal(err)
 			}
 			mu.Unlock()
 			return jobcontext.Progress(groupCtx, target)
@@ -174,12 +175,19 @@ func (j *AutoHealJob) Run(ctx context.Context) (st.Outcome, error) {
 		// A worker error, including a recovered panic, fails the run; the scheduler keeps a set status.
 		outcome.Status = st.Failed
 	}
-	return autoHealResultInternal(ctx, outcome, err)
+	return autoHealResultInternal(ctx, outcome, err, interrupted)
 }
 
-// An attempt interrupted by shutdown reports cancellation, so the claim stays for startup reconciliation.
-func autoHealResultInternal(ctx context.Context, outcome st.Outcome, err error) (st.Outcome, error) {
-	if err == nil && ctx.Err() != nil && outcome.Status == st.Partial {
+var errAutoHealInterrupted = errors.New("autoheal.interrupted")
+
+// Only a worker's own cancellation marks interruption; other worker errors are determined results.
+func autoHealInterruptedInternal(err error) bool {
+	return errors.Is(err, errAutoHealInterrupted) || errors.Is(err, context.Canceled)
+}
+
+// An interrupted attempt reports cancellation, so the claim stays for startup reconciliation.
+func autoHealResultInternal(ctx context.Context, outcome st.Outcome, err error, interrupted bool) (st.Outcome, error) {
+	if err == nil && interrupted && ctx.Err() != nil {
 		return outcome, ctx.Err()
 	}
 	return outcome, err
@@ -285,6 +293,9 @@ func (j *AutoHealJob) processCandidateInternal(ctx context.Context, cli *client.
 		return target, err
 	}
 	target = targetForRestart(r)
+	if outcome == "interrupted" {
+		return target, errAutoHealInterrupted
+	}
 	if restartErr != nil {
 		return target, errors.New("autoheal." + outcome)
 	}
@@ -457,7 +468,7 @@ func (j *AutoHealJob) Reconcile(ctx context.Context, previous st.Run) (st.Outcom
 	return j.resumeHealingPlanInternal(ctx, cli, plan, previous)
 }
 func (j *AutoHealJob) resumeHealingPlanInternal(ctx context.Context, cli *client.Client, plan autoHealPlanInternal, previous st.Run) (st.Outcome, error) {
-	outcome := st.Outcome{Status: st.Succeeded, Targets: previous.Outcome.Targets}
+	outcome, interrupted := st.Outcome{Status: st.Succeeded, Targets: previous.Outcome.Targets}, false
 	for _, candidate := range plan.Containers {
 		attempted := false
 		for _, t := range outcome.Targets {
@@ -483,6 +494,7 @@ func (j *AutoHealJob) resumeHealingPlanInternal(ctx context.Context, cli *client
 		target, err := j.processCandidateInternal(ctx, cli, candidate, 0, 0, 0)
 		if err != nil {
 			outcome.Status = st.Partial
+			interrupted = interrupted || autoHealInterruptedInternal(err)
 		}
 		outcome.Targets = append(outcome.Targets, target)
 		if err := jobcontext.Progress(ctx, target); err != nil {
@@ -494,5 +506,5 @@ func (j *AutoHealJob) resumeHealingPlanInternal(ctx context.Context, cli *client
 			outcome.Status = st.Partial
 		}
 	}
-	return autoHealResultInternal(ctx, outcome, nil)
+	return autoHealResultInternal(ctx, outcome, nil, interrupted)
 }
