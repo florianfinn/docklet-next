@@ -566,14 +566,12 @@ func (s *DockerClientService) GetAllNetworks(ctx context.Context) ([]network.Sum
 	for _, n := range networks {
 		total++ // total includes all networks (including defaults)
 
-		// Only count non-default networks towards in-use/unused breakdown
-		if !docker.IsDefaultNetwork(n.Name) {
-			used := inUseByID[n.ID] || inUseByName[n.Name]
-			if used {
-				inuse++
-			} else {
-				unused++
-			}
+		// Default networks are always in use, matching the network list view.
+		used := docker.IsDefaultNetwork(n.Name) || inUseByID[n.ID] || inUseByName[n.Name]
+		if used {
+			inuse++
+		} else {
+			unused++
 		}
 	}
 

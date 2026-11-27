@@ -370,3 +370,18 @@ func TestWrapDockerAPIClientForInspectCompatibility_ContainerCreateLegacyNetwork
 		t.Errorf("connect payloads = %+v, want one attach for the proxy network", connectPayloads)
 	}
 }
+
+func TestBareIPAMAddressesBecomeHostPrefixes(t *testing.T) {
+	cli := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"Id":"example","IPAM":{"Config":[{"Subnet":"192.0.2.3","IPRange":"2001:db8::3"}]}}`))
+	})
+	result, err := NetworkInspectWithCompatibility(t.Context(), cli, "example", client.NetworkInspectOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := result.Network.IPAM.Config[0]
+	if config.Subnet.String() != "192.0.2.3/32" || config.IPRange.String() != "2001:db8::3/128" {
+		t.Fatalf("unexpected repaired IPAM: %v", config)
+	}
+}

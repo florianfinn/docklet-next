@@ -2,7 +2,7 @@
 // Revision: de96f232f840ee55de637f1178f8cb890de9a642
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; Normalize bare IPAM subnet and range addresses to host prefixes.
 
 package compat
 
@@ -210,6 +210,7 @@ func repairNetworkInternal(payload map[string]any) bool {
 		configs, _ := ipam["Config"].([]any)
 		for _, value := range configs {
 			if config, isMap := value.(map[string]any); isMap {
+				changed = rewriteFieldsInternal(config, true, "Subnet", "IPRange") || changed
 				changed = rewriteFieldsInternal(config, false, "Gateway", "AuxiliaryAddresses", "AuxAddress") || changed
 			}
 		}
@@ -306,6 +307,10 @@ func normalizeIPInternal(raw string, keepPrefix bool) (string, bool) {
 	}
 	normalized := trimmed
 	if _, addrErr := netip.ParseAddr(trimmed); addrErr != nil || keepPrefix {
+		if addr, err := netip.ParseAddr(trimmed); err == nil && keepPrefix {
+			normalized = netip.PrefixFrom(addr, addr.BitLen()).String()
+			return normalized, normalized != raw
+		}
 		prefix, err := netip.ParsePrefix(trimmed)
 		if err != nil {
 			return "", false

@@ -28,7 +28,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 )
 
-// pruneResourceEligibleInternal re-checks a planned resource against live state and refreshes its size from that snapshot.
+// pruneResourceEligibleInternal re-checks a planned resource against live state without repeating size calculations.
 func (s *Service) pruneResourceEligibleInternal(ctx context.Context, dockerClient *client.Client, plan prunePlanInternal, resource *pruneResourceInternal) (eligible, exists bool, err error) {
 	if resource.Kind == "network" {
 		inspected, networkInspectWithCompatibilityErr := compat.NetworkInspectWithCompatibility(ctx, dockerClient, resource.ID, client.NetworkInspectOptions{})
@@ -40,30 +40,63 @@ func (s *Service) pruneResourceEligibleInternal(ctx context.Context, dockerClien
 		}
 		return len(inspected.Network.Containers) == 0 && !inspected.Network.Ingress, true, nil
 	}
-	usage, err := dockerClient.DiskUsage(ctx, client.DiskUsageOptions{Containers: resource.Kind == "container", Images: resource.Kind == "image", Volumes: resource.Kind == "volume", Verbose: true})
-	if err != nil {
-		return false, false, err
-	}
 	switch resource.Kind {
 	case "container":
-		for _, item := range usage.Containers.Items {
-			if item.ID == resource.ID {
-				resource.Size = item.SizeRw
-				return item.State != "running" && item.State != "paused" && item.State != "restarting", true, nil
+		item, err := compat.ContainerInspectWithCompatibility(ctx, dockerClient, resource.ID, client.ContainerInspectOptions{})
+		if errdefs.IsNotFound(err) {
+			return false, false, nil
+		}
+		if err != nil {
+			return false, false, err
+		}
+		state := item.Container.State
+		return state != nil && !state.Running && !state.Paused && !state.Restarting, true, nil
+	case "image":
+		item, err := dockerClient.ImageInspect(ctx, resource.ID)
+		if errdefs.IsNotFound(err) {
+			return false, false, nil
+		}
+		if err != nil {
+			return false, false, err
+		}
+		for _, tag := range item.RepoTags {
+			if !slices.Contains(resource.Names, tag) {
+				return false, true, nil
 			}
 		}
-	case "image":
-		return pruneImageEligibleInternal(usage, plan.Request.Images, resource)
+		listed, err := dockerClient.ContainerList(ctx, client.ContainerListOptions{All: true})
+		if err != nil {
+			return false, false, err
+		}
+		for _, c := range listed.Items {
+			if c.ImageID == resource.ID {
+				return false, true, nil
+			}
+		}
+		return plan.Request.Images.Mode != system.PruneImageModeDangling || len(item.RepoTags) == 0, true, nil
 	case "volume":
-		for _, item := range usage.Volumes.Items {
-			if item.Name == resource.ID {
-				if item.UsageData == nil {
+		item, err := dockerClient.VolumeInspect(ctx, resource.ID, client.VolumeInspectOptions{})
+		if errdefs.IsNotFound(err) {
+			return false, false, nil
+		}
+		if err != nil {
+			return false, false, err
+		}
+		if strings.EqualFold(item.Volume.Labels[libarcane.InternalResourceLabel], "true") {
+			return false, true, nil
+		}
+		listed, err := dockerClient.ContainerList(ctx, client.ContainerListOptions{All: true})
+		if err != nil {
+			return false, false, err
+		}
+		for _, c := range listed.Items {
+			for _, m := range c.Mounts {
+				if m.Type == "volume" && m.Name == resource.ID {
 					return false, true, nil
 				}
-				resource.Size = item.UsageData.Size
-				return item.UsageData.RefCount == 0 && !strings.EqualFold(item.Labels[libarcane.InternalResourceLabel], "true"), true, nil
 			}
 		}
+		return true, true, nil
 	}
 	return false, false, nil
 }
