@@ -211,17 +211,24 @@ func (s *Service) containerEligibilityInternal(ctx context.Context, inspect cont
 	return "", nil
 }
 
+// maxRefusedTagCandidates bounds the platform lookups one check spends on
+// refused candidates; after that the next candidate is taken unchecked.
+const maxRefusedTagCandidates = 8
+
 // SelectTagCandidate tries acceptable tags newest first. Only an explicit
 // platform refusal advances to an older tag; lookup errors remain failures.
 func SelectTagCandidate(ctx context.Context, current string, tags []string, policy types.Policy, accept func(context.Context, string) (bool, error)) (string, error) {
 	remaining := slices.Clone(tags)
-	for {
+	for refused := 0; ; refused++ {
 		selected, err := tagpolicy.Select(current, remaining, policy)
 		if err != nil || selected == current {
 			return selected, err
 		}
 		if err := ctx.Err(); err != nil {
 			return "", err
+		}
+		if refused == maxRefusedTagCandidates {
+			return selected, nil
 		}
 		ok, err := accept(ctx, selected)
 		if err != nil {

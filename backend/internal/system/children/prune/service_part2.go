@@ -101,25 +101,6 @@ func (s *Service) pruneResourceEligibleInternal(ctx context.Context, dockerClien
 	return false, false, nil
 }
 
-func pruneImageEligibleInternal(usage client.DiskUsageResult, request *system.PruneImagesOptions, resource *pruneResourceInternal) (eligible, exists bool, err error) {
-	for _, item := range usage.Images.Items {
-		if item.ID == resource.ID {
-			// Size - SharedSize is the unique layer size Docker counts as reclaimable for an unused image.
-			resource.Size = 0
-			if item.SharedSize >= 0 {
-				resource.Size = item.Size - item.SharedSize
-			}
-			for _, tag := range item.RepoTags {
-				if !slices.Contains(resource.Names, tag) {
-					return false, true, nil
-				}
-			}
-			return item.Containers == 0 && (request.Mode != system.PruneImageModeDangling || len(item.RepoTags) == 0), true, nil
-		}
-	}
-	return false, false, nil
-}
-
 func (s *Service) ReconcileScheduledPrune(ctx context.Context, previous scheduler.Run) (scheduler.Outcome, error) {
 	outcome := jobcontext.ConfirmedTarget(previous, "scheduled-prune")
 	if outcome.Status == scheduler.Succeeded {
