@@ -72,6 +72,10 @@ func (s *ContainerService) recreateDurable(ctx context.Context, c *client.Client
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	host, err := recreateVolumeHostConfig(ctx, old, host)
+	if err != nil {
+		return "", err
+	}
 	budget := recreateEffectTimeout
 	watch := deferredRecreateFrom(ctx)
 	if watch != nil {

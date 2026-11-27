@@ -116,6 +116,23 @@ admission. Shared contract and migration items are in
     parallel run on the same container, a run of its parent stack and a policy
     run on the same target, using the existing scope rules.
 
+## Volumes of the replacement
+
+A replacement is created from the inspected configuration, which lists only
+explicit binds and mounts. Volumes the image declares (`VOLUME`) and anonymous
+volumes (`-v /path`) would otherwise come back as fresh empty volumes while the
+data stays behind in an orphaned one. Every standalone recreate (redeploy, edit,
+image update and restore, and the rebuild of an auto-removed original after a
+failed start) therefore names each volume the old container mounted, at every
+destination the new configuration leaves to Docker
+(`recreateVolumeHostConfig`). A destination the request retargets to a named
+volume, bind or tmpfs, or removes, keeps the requested behaviour. A volume mount
+point without a name refuses the recreate before the first journal write. The
+old container is removed without its volumes, as before, and recovery never
+creates a container, so nothing about volumes is journaled. Compose projects are
+excluded by the origin guard; Compose reuses its own anonymous volumes. The rule
+follows Arcane #4488 (v2.17.0).
+
 ## Recovery
 
 14. The executing host keeps `container_recreate_journal`: `run_id`, `old_id`,
