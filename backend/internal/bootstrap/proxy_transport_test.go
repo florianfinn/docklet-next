@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	p "github.com/florianfinn/docklet-next/backend/internal/proxy"
 	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
 	"github.com/florianfinn/docklet-next/types/features"
@@ -24,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -483,6 +485,51 @@ func TestM44MetadataLossRealDirectEdge(t *testing.T) {
 			require.Equal(t, "new", string(b))
 		})
 	}
+}
+
+func TestMetadataLossGateOnContract24Edge(t *testing.T) {
+	x, a, tr, q := proxyWireFixture(t, "edge")
+	x.version.Store(24)
+	v, err := tr.ContractVersion(t.Context(), q.Instance.EnvironmentID)
+	require.NoError(t, err)
+	require.Equal(t, 24, v)
+
+	raw, err := json.Marshal(q.Instance)
+	require.NoError(t, err)
+	require.NoError(t, x.f.db.Exec("INSERT INTO proxy_instances(id,environment_id,data) VALUES (?,?,?)", q.Instance.ID, q.Instance.EnvironmentID, raw).Error)
+	h := &p.Hub{DB: x.f.db.DB, Modules: x.manager, Transport: tr}
+	m := &p.Module{Hub: h, Modules: x.manager, Transport: tr}
+	var admission, dispatch atomic.Int32
+	x.agentIntercept = func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/inventory"), strings.HasSuffix(r.URL.Path, "/discover"):
+			admission.Add(1)
+		case strings.HasSuffix(r.URL.Path, "/apply"):
+			dispatch.Add(1)
+		}
+		next.ServeHTTP(w, r)
+	}
+
+	q.Acknowledgements.MetadataLoss = []dto.MetadataLoss{{Path: q.Target, Attributes: []string{"user.example"}, Token: strings.Repeat("a", 64)}}
+	input := dto.OperationRequest{Target: q.Target, Expected: q.Expected, GraphHashes: q.GraphHashes, Change: q.Change, Acknowledgements: q.Acknowledgements}
+	_, err = m.CreateOperation(t.Context(), q.Instance.ID, input)
+	require.ErrorIs(t, err, environment.ErrAgentUpdateRequired)
+	require.Zero(t, admission.Load(), "the version gate must run before write admission")
+	_, err = h.Apply(t.Context(), q)
+	require.ErrorIs(t, err, environment.ErrAgentUpdateRequired)
+	require.Zero(t, dispatch.Load(), "an old agent must not receive an acknowledged write")
+	var n int64
+	require.NoError(t, x.f.db.Table("proxy_operations").Count(&n).Error)
+	require.Zero(t, n)
+	require.NoError(t, a.DB.Table("proxy_journal").Count(&n).Error)
+	require.Zero(t, n)
+
+	input.Acknowledgements = dto.Acknowledgements{}
+	o, err := m.CreateOperation(t.Context(), q.Instance.ID, input)
+	require.NoError(t, err)
+	require.Equal(t, dto.Verified, o.State)
+	require.Positive(t, admission.Load())
+	require.EqualValues(t, 1, dispatch.Load())
 }
 
 func TestM44HardlinkRealAgent(t *testing.T) {

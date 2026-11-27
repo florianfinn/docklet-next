@@ -311,18 +311,22 @@ func diagnostic(err error) *dto.Diagnostic {
 		}
 		return -1
 	}, strings.ToValidUTF8(p.Detail, ""))
-	if len(detail) > MaxDiagnostic {
-		cut := MaxDiagnostic
-		for cut > 0 && !utf8.RuneStart(detail[cut]) {
-			cut--
-		}
-		detail = detail[:cut]
-	}
+	detail = truncateUTF8(detail, MaxDiagnostic)
 	path := p.Path
 	if len(path) > 1024 {
 		path = ""
 	}
 	return &dto.Diagnostic{Path: path, Line: max(p.Line, 0), Detail: detail}
+}
+
+func truncateUTF8(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	for limit > 0 && !utf8.RuneStart(s[limit]) {
+		limit--
+	}
+	return s[:limit]
 }
 
 // withDiagnostic records err's diagnostic on o, keeping an earlier one when err has none.

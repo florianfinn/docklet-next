@@ -7,6 +7,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/binary"
 	"github.com/florianfinn/docklet-next/backend/internal/proxy/hostio"
 	dto "github.com/florianfinn/docklet-next/types/proxy"
@@ -14,7 +15,9 @@ import (
 	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestM44RuntimeRestoreLoss(t *testing.T) {
@@ -124,6 +127,27 @@ func TestM44DeleteRollbackFallbackReceipt(t *testing.T) {
 	b, e := os.ReadFile(filepath.Join(root, i.Request.Target))
 	require.NoError(t, e)
 	require.Equal(t, i.Old.Content, b)
+}
+
+func TestMetadataLossFallbackDetailKeepsUTF8(t *testing.T) {
+	x := newFixture(t)
+	root := t.TempDir()
+	i := fileIntent(t, x, root)
+	i.New = Snapshot(nil, false)
+	d := fileSeam(t, x, root)
+	prefix := strings.Repeat("x", 4096-2-len("metadata-loss: original inode unavailable; its metadata cannot be recovered")-1)
+	o := dto.Operation{Diagnostic: &dto.Diagnostic{Detail: prefix + "é" + strings.Repeat("x", 80)}}
+	persisted := false
+	ctx := context.WithValue(t.Context(), restoreReportKey{}, restoreReport{operation: &o, persist: func() error {
+		persisted = true
+		require.True(t, utf8.ValidString(o.Diagnostic.Detail), "fallback diagnostic must be valid UTF-8 before persistence")
+		return nil
+	}})
+
+	require.NoError(t, d.Restore(ctx, i))
+	require.True(t, persisted)
+	require.Equal(t, prefix+"; metadata-loss: original inode unavailable; its metadata cannot be recovered", o.Diagnostic.Detail)
+	require.Len(t, o.Diagnostic.Detail, 4095)
 }
 
 func TestM44FailedFallbackDoesNotClaimCompletedRestore(t *testing.T) {

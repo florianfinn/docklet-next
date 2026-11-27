@@ -75,6 +75,7 @@ func ReadTarWithHeaders(ctx context.Context, r io.Reader, root string, single bo
 	files := []dto.File{}
 	opaque := []dto.OpaqueFile{}
 	seen := map[string]bool{}
+	regular := map[string]int{}
 	var total int64
 	count := 0
 	root = path.Base(path.Clean(root))
@@ -127,12 +128,24 @@ func ReadTarWithHeaders(ctx context.Context, r io.Reader, root string, single bo
 		if count > MaxFiles {
 			return nil, nil, bad(rel, dto.InputLimit)
 		}
-		// Byte limits count only payloads that are read; secret payloads are skipped.
-		if !Secret(name) {
-			if h.Size > MaxFileBytes {
+		secret := Secret(name)
+		target := 0
+		if !secret {
+			size := h.Size
+			if h.Typeflag == tar.TypeLink {
+				// Docker names the earlier inode entry by its full archive path.
+				var ok bool
+				target, ok = regular[h.Linkname]
+				if !ok || h.Size != 0 {
+					return nil, nil, bad(rel, dto.InvalidInput)
+				}
+				size = int64(len(files[target].Content))
+			}
+			// Bound projected content, including hard links. Secret payloads are skipped.
+			if size > MaxFileBytes {
 				return nil, nil, bad(rel, dto.InputLimit)
 			}
-			total += h.Size
+			total += size
 			if total > MaxTotalBytes {
 				return nil, nil, bad(rel, dto.InputLimit)
 			}
@@ -142,8 +155,14 @@ func ReadTarWithHeaders(ctx context.Context, r io.Reader, root string, single bo
 				return nil, nil, err
 			}
 		}
-		if Secret(name) {
+		if secret {
 			opaque = append(opaque, dto.OpaqueFile{Path: rel})
+			continue
+		}
+		if h.Typeflag == tar.TypeLink {
+			alias := files[target]
+			alias.Path = rel
+			files = append(files, alias)
 			continue
 		}
 		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeRegA {
@@ -157,6 +176,7 @@ func ReadTarWithHeaders(ctx context.Context, r io.Reader, root string, single bo
 			return nil, nil, bad(rel, dto.InvalidInput)
 		}
 		sum := sha256.Sum256(b)
+		regular[name] = len(files)
 		files = append(files, dto.File{Path: rel, Content: string(b), Hash: hex.EncodeToString(sum[:]), Mode: uint32(h.Mode) & 0777, ModifiedAt: h.ModTime})
 	}
 	if single && count != 1 {

@@ -85,7 +85,7 @@ export function Operations({
             <p className="break-all font-mono text-xs">{row.target}</p>
             <Reason code={row.reason} />
             <Diagnostic value={row.diagnostic} />
-            <MetadataLossList loss={row.metadataLoss} />
+            <MetadataLossList operation={row} />
             {row.probe?.client === "wget" && <p className="text-xs">{ui("certificateUnavailable")}</p>}
             {row.certificate && <CertificateObservation value={row.certificate} />}
             {row.state === "recovery-required" && (
