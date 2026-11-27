@@ -35,12 +35,12 @@ export function formatDateTime(iso: string): string {
 
 const BUILD_STAMPS: Intl.DateTimeFormatOptions[] = [
   { day: "2-digit", month: "2-digit" },
-  { day: "2-digit", month: "2-digit", year: "numeric" },
-  { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" },
-  { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" },
+  { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" },
+  { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" },
 ];
+const INSTANT: Intl.DateTimeFormatOptions = { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" };
 
-/** The shortest date that tells one build apart from another; at most down to the second. */
+/** The shortest date that tells one build apart from another, down to the second; the year only when nothing else differs. */
 export function formatDistinctDate(iso: string, other?: string): string {
   const at = new Date(iso);
   for (const options of BUILD_STAMPS) {
@@ -52,7 +52,7 @@ export function formatDistinctDate(iso: string, other?: string): string {
 
 /** A full instant with year and seconds, for hover titles. */
 export function formatInstant(iso: string): string {
-  return dateFormat(BUILD_STAMPS[BUILD_STAMPS.length - 1]!).format(new Date(iso));
+  return dateFormat(INSTANT).format(new Date(iso));
 }
 
 export function formatRelative(iso: string, now = Date.now()): string {

@@ -38,7 +38,7 @@ export function StackUpdateIndicator({
   const s = summarizeUpdates(services);
   const state = s.pending ? t("chipPending", { count: s.pending }) : s.errors ? t("chipError") : s.visual === "unknown" ? t("chipUnknown") : s.visual === "unchecked" ? t("chipUnchecked") : s.visual === "local" ? t("chipLocal") : t("chipCurrent");
   return (
-    <InteractiveHoverCard label={t("triggerLabel", { name, state })} side={side} content={<StackUpdatePanel services={services} actions={actions} times={times} gaps={gaps} />}>
+    <InteractiveHoverCard label={t("triggerLabel", { name, state })} side={side} contentClassName="w-96 max-w-[calc(100vw-1rem)]" content={<StackUpdatePanel services={services} actions={actions} times={times} gaps={gaps} />}>
       <StackUpdateChip services={services} />
     </InteractiveHoverCard>
   );

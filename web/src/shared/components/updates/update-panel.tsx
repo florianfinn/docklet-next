@@ -129,7 +129,7 @@ function latestStamp(update: UpdateInfo): Stamp | undefined {
 function BuildLabel({ image, stamp, other, empty, plain }: { image: ImageVersion; stamp?: Stamp; other?: Stamp; empty?: string; plain?: boolean }) {
   const t = useTranslations("common.updates");
   const name = !plain && image.version && image.version !== image.tag ? image.version : image.tag;
-  if (stamp) return <span title={t(stamp.key, { date: formatInstant(stamp.at) })}>{name} · {formatDistinctDate(stamp.at, other?.at)}</span>;
+  if (stamp) return <span title={t(stamp.key, { date: formatInstant(stamp.at) })}>{name} · <span className="text-[0.85em]">{formatDistinctDate(stamp.at, other?.at)}</span></span>;
   return <>{empty ?? name}</>;
 }
 
@@ -269,12 +269,13 @@ export function StackUpdatePanel({ services, actions = {}, times, gaps }: { serv
             <li key={s.name} className="flex items-center gap-2 py-2.5">
               <RowIcon data-tone={rowTone} className="size-3.5 shrink-0 text-(--tone)" aria-hidden />
               <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
-              <span className="flex min-w-0 shrink-0 items-center gap-1.5 font-mono text-[13px] font-semibold" data-slot="update-versions">
-                <span className={cn("rounded-md px-1.5 py-0.5", latest ? "text-muted-foreground" : "bg-muted text-foreground")}>{v === "rebuild" ? <BuildLabel image={s.update.current} stamp={currentStamp(s.update)} other={latestStamp(s.update)} plain /> : s.update.current.version ?? s.update.current.tag}</span>
+              {/* On narrow screens the running build truncates first; the arrow and target stay whole. */}
+              <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px] font-semibold whitespace-nowrap" data-slot="update-versions">
+                <span data-slot="update-current" className={cn("min-w-0 truncate rounded-md px-1.5 py-0.5", latest ? "text-muted-foreground" : "bg-muted text-foreground")}>{v === "rebuild" ? <BuildLabel image={s.update.current} stamp={currentStamp(s.update)} other={latestStamp(s.update)} plain /> : s.update.current.version ?? s.update.current.tag}</span>
                 {latest && (
                   <>
-                    <ArrowRight className="size-3.5 text-muted-foreground" aria-hidden />
-                    <span data-tone={rowTone} className="rounded-md bg-(--tone)/14 px-1.5 py-0.5 text-(--tone)">
+                    <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                    <span data-tone={rowTone} data-slot="update-target" className="shrink-0 rounded-md bg-(--tone)/14 px-1.5 py-0.5 text-(--tone)">
                       {v === "rebuild" ? <BuildLabel image={latest} stamp={latestStamp(s.update)} other={currentStamp(s.update)} empty={t("chipRebuild")} /> : latest.version ?? t("chipRebuild")}
                     </span>
                   </>
