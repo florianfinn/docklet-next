@@ -109,6 +109,11 @@ export const enImages = {
     previewHint: "Preview only. The host rechecks usage and protection; the report shows actual results.",
     report: "Cleanup report", removed: "Removed: {count}", skipped: "Skipped: {count}", failed: "Failed: {count}", space: "Reclaimed: {size}", spaceUnknown: "Reclaimed space unknown", close: "Close",
     nothing: "Nothing to remove.",
+    details: "Show details ({count})",
+    progressStarting: "Cleaning up…",
+    progressTotal: "{done} of {planned} images processed",
+    incomplete: "result incomplete – details in the activity",
+    totals: "{hosts} hosts: {removed} removed · {skipped} skipped · {failed} failed",
   },
   removeDialog: {
     title: "Remove {name}?",

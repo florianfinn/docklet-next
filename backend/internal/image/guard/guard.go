@@ -264,26 +264,58 @@ func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) 
 		return nil, imageDTO.Failure("image.usage-unavailable", 503)
 	}
 	out := &imageDTO.PruneReport{ImagesDeleted: []string{}, Skipped: []imageDTO.PruneItem{}, Failed: []imageDTO.PruneItem{}, SpaceReclaimedKnown: false}
-	seen := map[string]bool{}
+	seen, selected := map[string]bool{}, []string{}
 	for _, item := range list.Items {
 		if seen[item.ID] || (!cutoff.IsZero() && !time.Unix(item.Created, 0).Before(cutoff)) {
 			continue
 		}
 		seen[item.ID] = true
-		_, err = s.RemoveLocked(ctx, c, item.ID, "bulk_prune")
+		selected = append(selected, item.ID)
+	}
+	observer, _ := ctx.Value(pruneObserverKey{}).(PruneObserver)
+	if observer != nil && len(selected) > 0 {
+		ctx = observer.Begin(ctx, len(selected))
+	}
+	for _, id := range selected {
+		// Stop before the next image; the report keeps what was already processed.
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		_, err = s.RemoveLocked(ctx, c, id, "bulk_prune")
+		if err != nil && ctx.Err() != nil {
+			// A removal cut off by cancellation has no known result; it is not reported as failed.
+			return out, ctx.Err()
+		}
 		if err != nil {
 			p := imageDTO.Neutral(err, "image.remove-failed", 502)
-			entry := imageDTO.PruneItem{ID: item.ID, Code: p.Problem.Code}
+			entry := imageDTO.PruneItem{ID: id, Code: p.Problem.Code}
 			if p.Status == 409 || p.Status == 404 {
 				out.Skipped = append(out.Skipped, entry)
 			} else {
 				out.Failed = append(out.Failed, entry)
 			}
-			continue
+		} else {
+			out.ImagesDeleted = append(out.ImagesDeleted, id)
 		}
-		out.ImagesDeleted = append(out.ImagesDeleted, item.ID)
+		if observer != nil {
+			observer.Image(ctx, out)
+		}
 	}
 	return out, nil
+}
+
+// PruneObserver follows one prune: Begin runs once under the lease when images are selected and
+// returns the work context; Image runs after every processed image with the report so far.
+type PruneObserver interface {
+	Begin(ctx context.Context, planned int) context.Context
+	Image(ctx context.Context, report *imageDTO.PruneReport)
+}
+
+type pruneObserverKey struct{}
+
+// WithPruneObserver scopes an observer to one prune request; other callers prune without one.
+func WithPruneObserver(ctx context.Context, observer PruneObserver) context.Context {
+	return context.WithValue(ctx, pruneObserverKey{}, observer)
 }
 
 // Search terms have Docker's free-text grammar; only the private host is reserved.

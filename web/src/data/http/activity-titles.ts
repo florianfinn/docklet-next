@@ -16,6 +16,7 @@ export const TYPE_TITLES: Readonly<Record<string, string>> = {
   "resource_action": "action",
   "load_sustained": "activity.runKind.load-alert",
   "image_pull": "activity.runKind.pull",
+  "image_prune": "imagePrune",
   "image_update_check": "activity.runKind.check-updates",
   "image_patch": "imagePatch",
   "project_pull": "projectPull",
