@@ -23,7 +23,7 @@ it("shows the poor-grouping notice and only the top 200 rows for the variable de
   await act(async () => { await Promise.resolve(); });
   while (callbacks.length) act(() => callbacks.splice(0).forEach((cb) => cb(0)));
   expect(screen.getByText("This log does not group well (5,000 patterns).")).toBeDefined();
-  expect(screen.getAllByRole("img", { name: "Distribution across 30 time bins in the covered span" })).toHaveLength(200);
+  expect(screen.getAllByRole("group", { name: "Distribution across 30 time bins in the covered span" })).toHaveLength(200);
   expect(screen.getByText("Other shapes")).toBeDefined();
   expect(screen.queryByText("Reading and grouping…")).toBeNull();
 });
@@ -42,8 +42,8 @@ it("drops info rows when the level filter splits one shape by level", async () =
   renderWithApp(<PatternMode kind="container" id="example" select={() => {}} />, adapter);
   await act(async () => { await Promise.resolve(); });
   while (callbacks.length) act(() => callbacks.splice(0).forEach((cb) => cb(0)));
-  expect(screen.getAllByRole("img")).toHaveLength(3);
+  expect(screen.getAllByRole("group", { name: "Distribution across 30 time bins in the covered span" })).toHaveLength(3);
   await userEvent.setup().click(screen.getByRole("radio", { name: "Error + warning" }));
-  expect(screen.getAllByRole("img")).toHaveLength(2);
+  expect(screen.getAllByRole("group", { name: "Distribution across 30 time bins in the covered span" })).toHaveLength(2);
   expect(screen.queryByText("Info") === null).toBe(true);
 });

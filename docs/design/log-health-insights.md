@@ -98,6 +98,7 @@ S1 adds the adapter operation `readLogs(ref, options, sink, signal)`:
   - Bins with counts are buttons labelled with their count and time span. Selecting one scrolls to
     the first shown line in that bin and turns follow off.
   - Empty bins are inert.
+  - Hovering or focusing a bin shows its local time span and counts above it (K-6).
   - The S2 combined view reuses the strip.
 
 Break map S1:
@@ -202,7 +203,8 @@ Break map S2:
 ## S3 (#694) Pattern mode: web only, yellow
 - **Mode switch.** `Raw | Patterns` is a toggle in the stack Logs tab and the container log card.
 - **Reading.** Selecting Patterns starts `readLogs` with:
-  - window 1 h / 24 h / 7 d (default 24 h) as `since`;
+  - window 1 h / 24 h / 7 d (default 24 h) as `since`, or a custom range from the browser's date
+    and time inputs as `since` and `until` (K-6);
   - `tail: 100000`, so Docker returns the newest lines inside the window. For a stack, compose applies
     `tail` per container, so a stack read shows the time span it actually covered. It does not claim
     to hold the globally newest lines;
@@ -224,7 +226,8 @@ Break map S2:
     30 time bins and up to three samples.
   - Raw lines are not kept.
 - **Chunks.** Frames are queued and folded in slices of at most 8 ms per animation frame. Progress
-  shows lines, bytes and the time covered.
+  shows lines, size and the local time span covered, with a spinner while reading. Pattern rows do
+  not repeat the span (K-6).
 - **Caps.** At most 5,000 distinct patterns, plus one "other shapes" row that counts every further
   new shape (count conservation is tested). The queue of frames waiting to be folded is bounded by
   the same byte cap, and abort or sign-out clears it.
@@ -235,6 +238,11 @@ Break map S2:
 - **Selecting a pattern.** It switches to Raw with a pattern filter. The filter keeps live lines
   whose key matches. When none of the loaded live lines match, the pattern's samples are shown with
   a note.
+- **Time bins (K-6).** Each pattern's 30 bins split the covered span evenly. Hovering a bin shows its
+  span and line count. Selecting a bin with lines reads that bin's span (`since`, `until`,
+  `tail: all`, at most 2,000 lines / 1 MiB from its start) and lists those lines below the pattern,
+  with the pattern's own lines marked and the first one scrolled into view. Raw keeps only live
+  lines, so the bin read is the way to reach older log positions.
 - **Measurement.** Fold time for 100,000 synthetic lines: desktop Chromium unthrottled, and Chromium
   with 4× CPU throttle and a phone viewport. Both are documented with the longest main-thread task.
 

@@ -13,11 +13,13 @@ import { PATTERN_BYTES, PATTERN_LINES, type LogPattern } from "./patterns";
 import { PatternQueue } from "./pattern-queue";
 
 export interface PatternView { rows: LogPattern[]; lines: number; bytes: number; first?: string; last?: string; result?: LogReadResult }
-export function usePatternRead(kind: "stack" | "container", id: string, hours: number, retry: number) {
+/** A preset reaches back from the moment the read starts; a custom range is fixed. */
+export type PatternRange = { hours: number } | { since: string; until: string };
+export function usePatternRead(kind: "stack" | "container", id: string, range: PatternRange, retry: number) {
   const adapter = useAdapter();
   const lifetime = logLifetime(adapter.subscribeLogs);
   const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
-  const key = JSON.stringify([kind, id, hours, retry, generation]);
+  const key = JSON.stringify([kind, id, range, retry, generation]);
   const [state, setState] = useState<{ key: string; adapter: typeof adapter; view: PatternView }>();
   useEffect(() => {
     const controller = new AbortController(), queue = new PatternQueue();
@@ -39,7 +41,8 @@ export function usePatternRead(kind: "stack" | "container", id: string, hours: n
     };
     const schedule = () => { if (active && !frame) frame = requestAnimationFrame(publish); };
     if (!identityLifetime(adapter).active()) return () => { off(); offIdentity(); clear(); };
-    void adapter.readLogs({ kind, id }, { since: new Date(Date.now() - hours * 3600_000).toISOString(), tail: PATTERN_LINES, maxLines: PATTERN_LINES, maxBytes: PATTERN_BYTES }, (lines) => {
+    const bounds = "hours" in range ? { since: new Date(Date.now() - range.hours * 3600_000).toISOString() } : { since: range.since, until: range.until };
+    void adapter.readLogs({ kind, id }, { ...bounds, tail: PATTERN_LINES, maxLines: PATTERN_LINES, maxBytes: PATTERN_BYTES }, (lines) => {
       if (active) { queue.enqueue(lines); schedule(); }
     }, controller.signal).then((value) => {
       if (!active) return;
@@ -47,6 +50,7 @@ export function usePatternRead(kind: "stack" | "container", id: string, hours: n
       result = value; schedule();
     });
     return () => { off(); offIdentity(); clear(); };
-  }, [adapter, key, kind, id, hours, lifetime]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` carries the range by value.
+  }, [adapter, key, kind, id, lifetime]);
   return state?.key === key && state.adapter === adapter ? state.view : undefined;
 }
