@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"sync/atomic"
+	"time"
 
 	"github.com/coder/websocket"
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
@@ -40,6 +41,8 @@ func (h *WebSocketHandler) serveFiniteLogStreamInternal(
 	ctx := conn.CloseRead(context.WithoutCancel(c.Request().Context()))
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// Like live streams, the session is rechecked on the transport cadence; expiry ends the read.
+	defer startWSKeepaliveInternal(ctx, cancel, conn, 54*time.Second)()
 
 	lines := make(chan sourceLogLine, 256)
 	go func() {
