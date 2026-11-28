@@ -58,7 +58,7 @@ func TestM47LanesStayOnHubAndLogsKeepTheirPermission(t *testing.T) {
 				defer cancel()
 				headers := http.Header{"Origin": {f.cfg.AppUrl}}
 				headers.Set(middleware.HeaderApiKey, key)
-				return websocket.Dial(ctx, edge.HTTPToWebSocketURL(hub.URL)+"/api/environments/example/ws/containers/canonical/logs?follow=false&until=2026-01-02T03:05:00Z", &websocket.DialOptions{HTTPHeader: headers})
+				return websocket.Dial(ctx, edge.HTTPToWebSocketURL(hub.URL)+"/api/environments/example/ws/containers/canonical/logs?follow=false&until=2026-01-02T03%3A05%3A00Z", &websocket.DialOptions{HTTPHeader: headers})
 			}
 			conn, response, err := dial(readOnly)
 			require.Error(t, err, "containers:read alone must not open the log stream")
@@ -69,7 +69,32 @@ func TestM47LanesStayOnHubAndLogsKeepTheirPermission(t *testing.T) {
 			require.Equal(t, http.StatusForbidden, response.StatusCode)
 			conn, _, err = dial(logs)
 			require.NoError(t, err, "containers:logs opens the forwarded stream")
-			_ = conn.CloseNow()
+			readReady(t, conn)
+			forwarded, _ := x.wsQuery.Load().(string)
+			require.Contains(t, forwarded, "/ws/containers/canonical/logs?")
+			require.Contains(t, forwarded, "until=2026-01-02T03%3A05%3A00Z", "the window end reaches the agent unchanged")
+			projectKey := grant("project-logs", authz.PermProjectsRead, authz.PermProjectsLogs)
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			headers := http.Header{"Origin": {f.cfg.AppUrl}}
+			headers.Set(middleware.HeaderApiKey, projectKey)
+			conn, _, err = websocket.Dial(ctx, edge.HTTPToWebSocketURL(hub.URL)+"/api/environments/example/ws/projects/project-uuid/logs?follow=false&until=2026-01-02T03%3A05%3A00Z", &websocket.DialOptions{HTTPHeader: headers})
+			require.NoError(t, err, "project logs open the forwarded stream")
+			readReady(t, conn)
+			forwarded, _ = x.wsQuery.Load().(string)
+			require.Contains(t, forwarded, "/ws/projects/project-uuid/logs?")
+			require.Contains(t, forwarded, "until=2026-01-02T03%3A05%3A00Z", "the project window end reaches the agent unchanged")
 		})
 	}
+}
+
+// readReady waits for the agent's first frame, so the forwarded request has been observed.
+func readReady(t *testing.T, conn *websocket.Conn) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	_, body, err := conn.Read(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "ready", string(body))
+	_ = conn.CloseNow()
 }

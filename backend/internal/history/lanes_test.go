@@ -8,9 +8,12 @@ package history
 
 import (
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	dto "github.com/florianfinn/docklet-next/types/history"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -93,4 +96,31 @@ func TestHostContainerLanesCapKeepsMostDisrupted(t *testing.T) {
 	for _, lane := range got.Containers {
 		require.NotEqual(t, fmt.Sprintf("c%04d", MaxLanes), lane.Name, "the last tie by name is cut")
 	}
+}
+
+// Buckets stored before a hub restart, without a later sample, are read from the reopened database.
+func TestHostContainerLanesReadPersistedBucketsAfterReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.db")
+	now := time.Date(2026, 11, 3, 12, 7, 0, 0, time.UTC)
+	older := now.Add(-5*time.Hour).Unix() / 900 * 900
+	db, err := database.Initialize(t.Context(), sqlitestore.URL(path), database.MigrationOptions{})
+	require.NoError(t, err)
+	require.NoError(t, db.Create(&bucketRow{Kind: "container", HostID: "host", EntityKey: "restarted", Tier: 15, BucketStart: older, LastMinute: older + 840, MinutesDown: 4, MinutesRunning: 11, ExitCodeLast: 137}).Error)
+	require.NoError(t, db.Close())
+
+	reopened, err := database.Initialize(t.Context(), sqlitestore.URL(path), database.MigrationOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reopened.Close()) })
+	got, err := readHostContainers(t.Context(), reopened, "host", "24h", now)
+	require.NoError(t, err)
+	require.Len(t, got.Containers, 1)
+	lane := got.Containers[0]
+	require.Equal(t, "restarted", lane.Name)
+	require.Len(t, lane.Buckets, 96)
+	at := 95 - 20
+	require.Equal(t, older, lane.Buckets[at].Start.Unix(), "the stored bucket keeps its aligned slot")
+	require.Equal(t, dto.Down, lane.Buckets[at].State)
+	require.Equal(t, 4, lane.Buckets[at].Minutes.Down)
+	require.Equal(t, 137, lane.Buckets[at].ExitCode)
+	require.Equal(t, dto.NoData, lane.Buckets[95].State, "no sample after the restart leaves the open bucket empty")
 }

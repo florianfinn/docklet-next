@@ -16,6 +16,7 @@ const typed = {
   "get-container-history": ["400", "503"],
   "get-project-history": ["400", "503"],
   "get-host-history": ["400", "503"],
+  "get-host-container-history": ["400", "503"],
   "get-runtime-conditions": ["503"],
   "get-history-capacity": ["503"],
   "get-my-ui-preferences": ["403"],
