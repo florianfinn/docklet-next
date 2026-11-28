@@ -23,7 +23,7 @@ export function LogModeToggle({ mode, onChange }: { mode: "raw" | "patterns"; on
 }
 export function PatternSamples({ pattern, clear }: { pattern: LogPattern; clear: () => void }) {
   const t = useTranslations("stacks.logs.patterns");
-  return <div className="border-b p-3"><p>{t("fallback")}</p><pre className="overflow-auto whitespace-pre-wrap text-xs">{pattern.samples.join("\n")}</pre><Button variant="outline" size="sm" onClick={clear}>{t("clear")}</Button></div>;
+  return <div className="border-b p-3"><p>{t("fallback")}</p><pre className="overflow-auto overscroll-contain whitespace-pre text-xs">{pattern.samples.join("\n")}</pre><Button variant="outline" size="sm" onClick={clear}>{t("clear")}</Button></div>;
 }
 export function PatternFilter({ clear }: { clear: () => void }) {
   const t = useTranslations("stacks.logs.patterns");
@@ -88,7 +88,7 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
           onSelect: bin && Number.isFinite(first) ? () => setSlice(selected ? undefined : { row: rowId(row), start, end }) : undefined };
       })} />
       {slice?.row === rowId(row) && <PatternSlice kind={kind} id={id} pattern={row} slice={slice} close={() => setSlice(undefined)} />}
-      <details><summary>{t("samples")}</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{row.samples.join("\n")}</pre></details>
+      <details><summary>{t("samples")}</summary><pre className="overflow-auto overscroll-contain whitespace-pre text-xs">{row.samples.join("\n")}</pre></details>
     </div>)}
   </section>;
 }

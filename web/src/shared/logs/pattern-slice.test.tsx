@@ -126,7 +126,8 @@ it("states how many lines a capped bin read actually shows", async () => {
   await act(settleLogs);
   act(() => { fixture.sockets[0]!.send({ seq: 1, timestamp: head.ts, message: "x".repeat(600 * 1024) }); fixture.sockets[0]!.send({ seq: 2, timestamp: head.ts, message: "x".repeat(600 * 1024) }); });
   await act(settleLogs);
-  expect(screen.getByText("Read limit reached: showing the first line of this period.")).toBeDefined();
+  expect(screen.getByText("Showing the first line; this period has more.")).toBeDefined();
+  expect(screen.getByRole("button", { name: "Load more lines" })).toBeDefined();
 });
 
 it("marks the continuation lines the fold counts in the pattern, per source", async () => {
@@ -160,4 +161,40 @@ it("scrolls the list to its first marked line", async () => {
   await act(settleLogs);
   expect(screen.getByRole("list").scrollTop).toBe(500);
   offsets.mockRestore();
+});
+
+it("loads the next page from the last shown millisecond without repeating its lines", async () => {
+  setAppLocale("en-US");
+  const start = Date.parse(head.ts);
+  const at = (i: number, ms: number, message: string): LogLine => ({ id: `p${i}`, service: "web", ts: new Date(start + ms).toISOString(), level: "info", message });
+  const first = [...Array.from({ length: 498 }, (_, i) => at(i, i, `INFO line ${i}`)), at(498, 600, "INFO tick a"), at(499, 600, "INFO tick b")];
+  const second = [at(0, 600, "INFO tick a"), at(1, 600, "INFO tick b"), at(2, 600, "INFO tick c"), at(3, 700, "INFO late")];
+  const calls: LogReadOptions[] = [];
+  const fold = new PatternFold(); fold.add(first[0]!);
+  const demo = createDemoAdapter();
+  renderWithApp(<PatternSlice kind="container" id="example" pattern={fold.snapshot()[0]!} slice={{ start, end: start + 1000 }} close={() => {}} />, { ...demo, readLogs: async (_ref, options, sink) => {
+    calls.push(options);
+    const page = calls.length === 1 ? first : second;
+    sink(page);
+    return { reason: calls.length === 1 ? "cap-lines" : "end", lines: page.length, bytes: 100 };
+  } });
+  await act(settleLogs);
+  expect(calls[0]).toMatchObject({ since: new Date(start).toISOString(), maxLines: 500 });
+  expect(screen.getByText("Showing the first 500 lines; this period has more.")).toBeDefined();
+  await userEvent.setup().click(screen.getByRole("button", { name: "Load more lines" }));
+  await act(settleLogs);
+  expect(calls[1]).toMatchObject({ since: new Date(start + 600).toISOString(), until: "2026-01-02T03:04:05.999999999Z", maxLines: 502 });
+  expect([screen.getAllByText("INFO tick a").length, screen.getAllByText("INFO tick c").length, screen.getAllByRole("listitem").length]).toEqual([1, 1, 502]);
+  expect(screen.queryByRole("button", { name: "Load more lines" })).toBeNull();
+});
+
+it("keeps long lines on one row and scrolls them sideways", async () => {
+  setAppLocale("en-US");
+  const fold = new PatternFold(); fold.add(head);
+  const long = { ...head, message: `ERROR failure ${"x".repeat(400)}` };
+  const demo = createDemoAdapter();
+  renderWithApp(<PatternSlice kind="container" id="example" pattern={fold.snapshot()[0]!} slice={{ start: Date.parse(head.ts), end: Date.parse(head.ts) + 1000 }} close={() => {}} />, { ...demo, readLogs: async (_ref, _options, sink) => { sink([long]); return { reason: "end", lines: 1, bytes: 420 }; } });
+  await act(settleLogs);
+  const row = screen.getByRole("listitem"), list = screen.getByRole("list");
+  expect([row.classList.contains("whitespace-pre"), row.classList.contains("break-all"), list.classList.contains("overflow-auto")]).toEqual([true, false, true]);
 });

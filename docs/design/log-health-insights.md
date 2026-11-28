@@ -240,7 +240,7 @@ Break map S2:
   a note.
 - **Time bins (K-6).** Each pattern's 30 bins split the covered span evenly. Hovering a bin shows its
   span and line count. Selecting a bin with lines reads that bin's span (`since`, `until`,
-  `tail: all`, at most 2,000 lines / 1 MiB from its start) and lists those lines below the pattern,
+  `tail: all`) in pages of 500 lines / 1 MiB from its start (K-7) and lists those lines below the pattern,
   with the pattern's own lines marked and the first one scrolled into view. Raw keeps only live
   lines, so the bin read is the way to reach older log positions.
   - Bounds are the integer milliseconds the fold counted in the bin. The browser keeps millisecond
@@ -248,7 +248,11 @@ Break map S2:
     the bin's last millisecond.
   - Marking follows the fold: matching head lines plus the continuation lines after them in the same
     source. Continuation lines before their source's first head in the read stay unmarked.
-  - A reached cap states how many lines are shown.
+  - A full page states how many lines are shown and offers "Load more lines". The next page starts
+    at the last shown millisecond again, because the browser cannot name the producer nanosecond in
+    between, and skips the lines of that millisecond it already shows; a page that adds no line
+    offers no further page.
+  - Long lines stay on one row; the list and the samples scroll sideways (K-7).
 - **Measurement.** Fold time for 100,000 synthetic lines: desktop Chromium unthrottled, and Chromium
   with 4× CPU throttle and a phone viewport. Both are documented with the longest main-thread task.
 

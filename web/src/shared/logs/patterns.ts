@@ -111,16 +111,15 @@ export class PatternFold {
     }).sort((a, b) => b.count - a.count);
   }
 }
-/** Lines of the pattern as the fold counts them: matching heads plus the continuation lines that follow
- * them in the same source. Continuation lines before the first head of their source in the slice stay unmarked. */
-export function patternMembers(lines: readonly LogLine[], pattern: LogPattern): Set<string> {
-  const members = new Set<string>(), heads = new Map<string, boolean>();
-  if (pattern.other) return members;
-  for (const line of lines) {
+/** Per line, whether it belongs to the pattern as the fold counts it: matching heads plus the continuation
+ * lines that follow them in the same source. Continuation lines before their source's first head stay out. */
+export function patternMembers(lines: readonly LogLine[], pattern: LogPattern): boolean[] {
+  const heads = new Map<string, boolean>();
+  return lines.map((line) => {
+    if (pattern.other) return false;
     const head = patternKey(line) !== "";
     const member = head ? matchesPattern(line, pattern) : heads.get(line.service) ?? false;
     if (head) heads.set(line.service, member);
-    if (member) members.add(line.id);
-  }
-  return members;
+    return member;
+  });
 }
