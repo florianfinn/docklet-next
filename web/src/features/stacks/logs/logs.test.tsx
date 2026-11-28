@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original localized log clear, filter and resource-switch gestures.
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { IntlProvider } from "use-intl";
@@ -39,4 +39,21 @@ it.each(["en", "de"] as const)("%s clear uses arrival identity and resource chan
   expect(screen.queryByText(locale === "en" ? "[line truncated]" : "[Zeile gekürzt]") !== null).toBe(true);
   expect(screen.queryByText(locale === "en" ? "1 log entry was lost before this line." : "1 Logeintrag ging vor dieser Zeile verloren.") !== null).toBe(true);
   view.unmount(); expect(f.sockets[1]!.close).toHaveBeenCalledTimes(1);
+});
+
+it("names each toolbar toggle in a short tooltip without losing its pressed state", async () => {
+  const f = logFixture(), user = userEvent.setup();
+  const adapter = { ...createDisconnectedAdapter(), subscribeLogs: f.owner.subscribeLogs };
+  render(<AdapterContext.Provider value={adapter}><IntlProvider locale="de" messages={catalogs.de} timeZone="UTC"><MemoryRouter><TooltipProvider delayDuration={0}><StackLogs stack={{ ...STACKS[0]!, id: "0~one", services: [] }} /></TooltipProvider></MemoryRouter></IntlProvider></AdapterContext.Provider>);
+  await act(settleLogs);
+  // Hover opens the first hint; happy-dom has no pointer geometry for Radix's grace area, so the
+  // others are reached by keyboard focus, which opens the same tooltip.
+  await user.hover(screen.getByRole("button", { name: "Folgen" }));
+  await waitFor(() => expect(screen.getAllByRole("tooltip").map((tip) => tip.textContent)).toContain("Folgen"));
+  for (const name of ["Zeitstempel", "Umbruch", "Pausieren", "Ansicht leeren"]) {
+    act(() => screen.getByRole("button", { name }).focus());
+    await waitFor(() => expect(screen.getAllByRole("tooltip").map((tip) => tip.textContent)).toContain(name));
+  }
+  await user.click(screen.getByRole("button", { name: "Umbruch" }));
+  expect(screen.getByRole("button", { name: "Umbruch" }).getAttribute("data-state")).toBe("on");
 });

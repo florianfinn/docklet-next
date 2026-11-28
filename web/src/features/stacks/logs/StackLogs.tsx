@@ -5,7 +5,7 @@ import { RepeatButton, LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { useLogKeyboard } from "./use-log-keyboard";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { ArrowDownToLine, Eraser, Pause, Play, Search, WrapText } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -18,6 +18,7 @@ import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { cn } from "@/shared/lib/utils";
 import { Card } from "@/shared/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/shared/ui/input-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { Toggle } from "@/shared/ui/toggle";
 
 const SERVICE_TONES = ["info", "violet", "teal", "orange", "pink", "lime", "cyan"] as const;
@@ -81,21 +82,31 @@ function StackLogsView({ stack }: { stack: Stack }) {
         </InputGroup>
         <SegmentedToggle<LevelFilter> value={level} onChange={setLevel} label={t("level")} options={(["all", "info", "warn", "error"] as const).map((l) => ({ value: l, label: t(`levels.${l}`) }))} fit="content" wrap />
         <span className="flex-1" />
-        <Toggle size="sm" variant="outline" pressed={follow} onPressedChange={setFollow} aria-label={t("follow")}>
-          <ArrowDownToLine /> <span className="hidden md:inline">{t("follow")}</span>
-        </Toggle>
-        <Toggle size="sm" variant="outline" pressed={stamps} onPressedChange={setStamps} aria-label={t("timestamps")}>
-          <span className="font-mono text-[11px]">12:00</span>
-        </Toggle>
-        <Toggle size="sm" variant="outline" pressed={wrap} onPressedChange={setWrap} aria-label={t("wrap")}>
-          <WrapText />
-        </Toggle>
-        <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("resume") : t("pause")}>
-          {paused ? <Play /> : <Pause />}
-        </Toggle>
-        <Toggle size="sm" variant="outline" pressed={false} onPressedChange={() => setClearedIds(new Set(lines.map((line) => line.id)))} aria-label={t("clear")}>
-          <Eraser />
-        </Toggle>
+        <ToolbarHint label={t("follow")}>
+          <Toggle size="sm" variant="outline" pressed={follow} onPressedChange={setFollow} aria-label={t("follow")}>
+            <ArrowDownToLine /> <span className="hidden md:inline">{t("follow")}</span>
+          </Toggle>
+        </ToolbarHint>
+        <ToolbarHint label={t("timestamps")}>
+          <Toggle size="sm" variant="outline" pressed={stamps} onPressedChange={setStamps} aria-label={t("timestamps")}>
+            <span className="font-mono text-[11px]">12:00</span>
+          </Toggle>
+        </ToolbarHint>
+        <ToolbarHint label={t("wrap")}>
+          <Toggle size="sm" variant="outline" pressed={wrap} onPressedChange={setWrap} aria-label={t("wrap")}>
+            <WrapText />
+          </Toggle>
+        </ToolbarHint>
+        <ToolbarHint label={paused ? t("resume") : t("pause")}>
+          <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("resume") : t("pause")}>
+            {paused ? <Play /> : <Pause />}
+          </Toggle>
+        </ToolbarHint>
+        <ToolbarHint label={t("clear")}>
+          <Toggle size="sm" variant="outline" pressed={false} onPressedChange={() => setClearedIds(new Set(lines.map((line) => line.id)))} aria-label={t("clear")}>
+            <Eraser />
+          </Toggle>
+        </ToolbarHint>
       </div>
       {mode === "patterns" ? <PatternMode kind="stack" id={stack.id} select={(row) => { setPattern(row); setMode("raw"); }} /> : <>
       {pattern && !lines.some((line) => matchesPattern(line, pattern)) && <PatternSamples pattern={pattern} clear={() => setPattern(undefined)} />}
@@ -149,4 +160,10 @@ function StackLogsView({ stack }: { stack: Stack }) {
       </>}
     </Card>
   );
+}
+
+/** Short name of an icon toggle on hover and keyboard focus. The span carries the trigger, so the
+ * tooltip's data-state does not replace the toggle's pressed state. */
+function ToolbarHint({ label, children }: { label: string; children: ReactNode }) {
+  return <Tooltip><TooltipTrigger asChild><span className="inline-flex">{children}</span></TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>;
 }
