@@ -14,6 +14,7 @@ export const enDisruptions = {
   "unavailable": "Logs not available for this container",
   "emptyLogs": "No lines in this window. The log may predate a container recreation.",
   "capped": "Logs cut off at the read limit.",
+  "interrupted": "Reading was interrupted; lines may be missing. Read again.",
   "retry": "Read again",
   "truncated": "Only the 500 most disrupted containers of this host are shown.",
   "empty": "No disruptions in this range.",

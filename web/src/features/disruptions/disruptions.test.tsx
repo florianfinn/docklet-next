@@ -153,3 +153,12 @@ it("keeps both entry links admin-only and preserves the preference when collapsi
   await userEvent.click(screen.getByRole("button", { name: "Collapse fixture" }));
   expect(sidebarStore.get()).toEqual({ open: false, disruptions: true });
 });
+it("an interrupted participant read says lines may be missing", async () => {
+  const readLogs = vi.fn<LogsApi["readLogs"]>(async (_ref, _options, sink) => {
+    sink([{ id: "1", service: "web", ts: "2026-01-02T03:00:00Z", level: "error", message: "partial failure" }]);
+    return { reason: "interrupted", lines: 1, bytes: 15 };
+  });
+  renderRoutes([{ path: "/", element: <CombinedWindow selection={{ ...selection, participants: [selection.participants[0]!] }} /> }], ["/"], { ...createDemoAdapter(), readLogs });
+  await screen.findByText(/partial failure/);
+  expect(screen.getByRole("alert").textContent).toBe("Reading was interrupted; lines may be missing. Read again.");
+});

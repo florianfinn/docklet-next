@@ -65,3 +65,13 @@ it("caller abort closes the socket and drops captured frames", async () => {
   expect(await read).toEqual({ reason: "aborted", lines: 0, bytes: 0 });
   expect(sink).not.toHaveBeenCalled(); expect(f.sockets[0]!.close).toHaveBeenCalledOnce();
 });
+it("reports a close without the normal end after opening as interrupted, keeping the delivered lines", async () => {
+  const f = logFixture(), sink = vi.fn();
+  const read = f.owner.readLogs(ref, options, sink, new AbortController().signal);
+  await settleLogs(); f.sockets[0]!.onopen?.(new Event("open"));
+  f.sockets[0]!.send([wire(1), wire(2)]);
+  f.sockets[0]!.onerror?.(new Event("error"));
+  f.sockets[0]!.disconnect(1006);
+  expect(await read).toEqual({ reason: "interrupted", lines: 2, bytes: 10 });
+  expect(sink.mock.calls[0]![0]).toHaveLength(2);
+});

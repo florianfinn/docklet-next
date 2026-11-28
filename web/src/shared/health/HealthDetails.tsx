@@ -85,6 +85,7 @@ function LastLines({ containerId, href, onOpen }: { containerId: string; href?: 
   return <section className="min-w-0"><h4>{t("lastLines")}</h4>
     {read.result?.reason === "unavailable" && <p>{t("logsUnavailable")} <Button size="sm" variant="outline" onClick={read.retry}>{t("retry")}</Button></p>}
     {read.result?.reason === "cap-bytes" && <p>{t("logsCutOff")}</p>}
+    {read.result?.reason === "interrupted" && <p role="alert">{t("logsInterrupted")} <Button size="sm" variant="outline" onClick={read.retry}>{t("retry")}</Button></p>}
     <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs">{read.lines.map((l) => l.message).join("\n")}</pre>
     {href ? <Link className="underline" to={href}>{t("openLogs")}</Link> : onOpen && <Button size="sm" variant="link" className="h-auto justify-self-start p-0" onClick={onOpen}>{t("openLogs")}</Button>}
   </section>;

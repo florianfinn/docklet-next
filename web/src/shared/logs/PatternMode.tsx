@@ -74,6 +74,7 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
     {!view?.result && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner className="text-primary" />{t("reading")}</p>}
     {view?.result?.reason === "unavailable" && <p>{t("unavailable")}</p>}
     {(view?.result?.reason === "cap-lines" || view?.result?.reason === "cap-bytes") && <p>{t("capped")}</p>}
+    {view?.result?.reason === "interrupted" && <p role="alert">{t("interrupted")}</p>}
     {count > 2000 && <p>{t("variable", { count })}</p>}
     <p className="text-xs text-muted-foreground">{t("top")}</p>
     {visible.map((row) => <div key={rowId(row)} className="rounded border p-2 text-sm">

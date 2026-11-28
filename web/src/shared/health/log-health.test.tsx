@@ -72,3 +72,10 @@ it("running containers start no read and operator stops show zero restarts", asy
   expect(screen.getByText("Restarts in 10 minutes: 0").textContent).toBeTruthy();
   expect(readLogs).not.toHaveBeenCalled();
 });
+it("an interrupted read says lines may be missing and offers a retry", async () => {
+  const readLogs = vi.fn<LogsApi["readLogs"]>().mockResolvedValue({ reason: "interrupted", lines: 3, bytes: 30 });
+  renderRoutes([{ path: "/", element: <HealthDetails containerId="example" state="stopped" /> }], ["/"], { ...createDemoAdapter(), readLogs });
+  await waitFor(() => expect(readLogs).toHaveBeenCalledTimes(1));
+  await act(async () => { for (let i = 0; i < 12; ++i) await Promise.resolve(); });
+  expect([screen.queryByText("Reading the logs was interrupted; lines may be missing.") !== null, screen.queryByRole("button", { name: "Retry" }) !== null]).toEqual([true, true]);
+});

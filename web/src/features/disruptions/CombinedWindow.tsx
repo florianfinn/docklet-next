@@ -52,7 +52,7 @@ export function CombinedWindow({ selection }: { selection: WindowSelection }) {
     {selection.omitted > 0 && <p role="status">{t("omitted", { count: selection.omitted })}</p>}
     <ul>{selection.participants.map((p) => {
       const read = p.id ? reads[p.id] : undefined;
-      return <li key={`${p.hostId}:${p.name}`}><span>{p.name} · {p.host}{p.id ? ` [${p.id}]` : ""}</span>{!p.id ? <p>{t("missing")}</p> : read?.result?.reason === "unavailable" ? <p role="status">{t("unavailable")}</p> : read?.result ? <>{read.lines.length === 0 && <p>{t("emptyLogs")}</p>}{(read.result.reason === "cap-lines" || read.result.reason === "cap-bytes") && <p>{t("capped")}</p>}</> : <p role="status">{t("loading")}</p>}</li>;
+      return <li key={`${p.hostId}:${p.name}`}><span>{p.name} · {p.host}{p.id ? ` [${p.id}]` : ""}</span>{!p.id ? <p>{t("missing")}</p> : read?.result?.reason === "unavailable" ? <p role="status">{t("unavailable")}</p> : read?.result ? <>{read.lines.length === 0 && <p>{t("emptyLogs")}</p>}{(read.result.reason === "cap-lines" || read.result.reason === "cap-bytes") && <p>{t("capped")}</p>}{read.result.reason === "interrupted" && <p role="alert">{t("interrupted")}</p>}</> : <p role="status">{t("loading")}</p>}</li>;
     })}</ul>
     <div className="flex flex-wrap gap-2"><ErrorJump jump={jump} /><Button variant="outline" onClick={() => setAttempt((n) => n + 1)}>{t("retry")}</Button></div>
     <LogDensity lines={lines} onSelect={focus} />

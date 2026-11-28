@@ -53,7 +53,10 @@ export function createLogReads(transport: ReadTransport) {
         const identity = ++attempt;
         socket = transport.socket(url.href);
         socket.onopen = () => { opened = true; };
-        socket.onclose = socket.onerror = () => finish(opened ? "end" : "unavailable");
+        // Every path ends a complete finite read with a normal close (1000); an Edge tunnel that drops a
+        // slow stream closes without one, so any other close after opening means lines may be missing.
+        socket.onerror = () => { if (!opened) finish("unavailable"); };
+        socket.onclose = (event) => finish(!opened ? "unavailable" : event.code === 1000 ? "end" : "interrupted");
         socket.onmessage = (event) => {
           if (done) return;
           if (!transport.authenticated()) { abort(); return; }

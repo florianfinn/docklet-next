@@ -349,7 +349,8 @@ export interface AutoHealApi {
 
 /** One finite read; abort discards pending delivery, and caps count UTF-8 message bytes. */
 export interface LogReadOptions { tail?: number | "all"; since?: string; until?: string; maxLines: number; maxBytes: number }
-export interface LogReadResult { reason: "end" | "cap-lines" | "cap-bytes" | "aborted" | "unavailable"; lines: number; bytes: number }
+/** `interrupted`: the read opened but its socket closed without the normal end (code 1000), so lines may be missing. */
+export interface LogReadResult { reason: "end" | "cap-lines" | "cap-bytes" | "aborted" | "unavailable" | "interrupted"; lines: number; bytes: number }
 export interface LogsApi {
   readLogs(ref: { kind: "container" | "stack"; id: string }, options: LogReadOptions, sink: (lines: import("@/domain/model").LogLine[]) => void, signal: AbortSignal): Promise<LogReadResult>;
 }

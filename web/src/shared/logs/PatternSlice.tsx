@@ -98,6 +98,7 @@ export function PatternSlice({ kind, id, pattern, slice, close }: { kind: "stack
     {!current?.result && <p className="flex items-center gap-2 text-xs"><Spinner />{t("sliceReading")}</p>}
     {current?.result?.reason === "unavailable" && <p className="text-xs">{t("unavailable")}</p>}
     {capped && <p className="text-xs">{t("sliceMore", { count: lines.length })}</p>}
-    {((capped && progressed) || (current?.result?.reason === "unavailable" && page > 0)) && <Button size="sm" variant="outline" className="justify-self-start" onClick={more}>{t("sliceLoadMore")}</Button>}
+    {current?.result?.reason === "interrupted" && <p role="alert" className="text-xs">{t("sliceInterrupted", { count: lines.length })}</p>}
+    {((capped && progressed) || current?.result?.reason === "interrupted" || (current?.result?.reason === "unavailable" && page > 0)) && <Button size="sm" variant="outline" className="justify-self-start" onClick={more}>{t("sliceLoadMore")}</Button>}
   </div>;
 }

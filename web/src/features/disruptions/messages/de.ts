@@ -14,6 +14,7 @@ export const deDisruptions = {
   "unavailable": "Logs für diesen Container nicht verfügbar",
   "emptyLogs": "Keine Zeilen in diesem Zeitfenster. Das Log könnte vor einer Container-Neuerstellung liegen.",
   "capped": "Logs am Leselimit abgeschnitten.",
+  "interrupted": "Das Lesen wurde unterbrochen; Zeilen können fehlen. Erneut lesen.",
   "retry": "Erneut lesen",
   "truncated": "Nur die 500 am stärksten gestörten Container dieses Hosts werden angezeigt.",
   "empty": "Keine Störungen in diesem Zeitraum.",

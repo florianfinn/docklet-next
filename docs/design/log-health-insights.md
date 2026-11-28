@@ -46,8 +46,12 @@ S1 adds the adapter operation `readLogs(ref, options, sink, signal)`:
 - It opens the existing WS route with `follow=false&format=json&timestamps=true` and maps frames
   through `mapLog`.
 - It calls `sink(lines)` per frame and resolves with
-  `{reason: "end" | "cap-lines" | "cap-bytes" | "aborted" | "unavailable", lines, bytes}`:
+  `{reason: "end" | "cap-lines" | "cap-bytes" | "aborted" | "unavailable" | "interrupted", lines, bytes}`:
   - `unavailable`: the capability is not available, or the socket fails or closes before it opens.
+  - `interrupted` (AUTO-2): the socket opened but closed without the normal close (1000). Every
+    path ends a complete read with 1000 (the hub, the Direct relay and the Edge proxy forward it); an
+    Edge tunnel that drops a slow stream closes without one. Lines read so far are kept, and every
+    consumer says that lines may be missing, with a way to read again.
     One generic notice covers both, because the transport has no stable reason; the web never
     parses log text for authorisation.
   - A log source failure (missing container, an `until` the upstream rejects) arrives as an ordinary
@@ -148,7 +152,9 @@ Break map S1:
   connection, not through the shared live hub. The live hub drops a slow viewer to protect the
   others. A finite read writes every record in order, and a slow reader slows the Docker read
   instead. The read ends with a normal close after the last record. The candidate run on b80bae99
-  showed the loss: 128 of 50,000 lines, then close 1006.
+  showed the loss: 128 of 50,000 lines, then close 1006. On Edge, the tunnel's existing overflow and
+  delivery limits can still end a long read early (delta 4: about 25,000 of 50,000 lines); the web
+  reports it as `interrupted` instead of a complete read, and flow control stays a follow-up (#698).
 - **Agent versions.** Agent updates are mandatory (maintainer, 2026-11-28), so no older-agent path
   is designed or tested. The web filter in `readLogs` only keeps the window invariant.
 

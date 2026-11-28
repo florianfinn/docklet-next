@@ -198,3 +198,25 @@ it("keeps long lines on one row and scrolls them sideways", async () => {
   const row = screen.getByRole("listitem"), list = screen.getByRole("list");
   expect([row.classList.contains("whitespace-pre"), row.classList.contains("break-all"), list.classList.contains("overflow-auto")]).toEqual([true, false, true]);
 });
+
+it("says when the pattern read was interrupted instead of presenting it as complete", async () => {
+  setAppLocale("en-US");
+  const callbacks: FrameRequestCallback[] = [];
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => { callbacks.push(cb); return callbacks.length; });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  const demo = createDemoAdapter();
+  renderWithApp(<PatternMode kind="container" id="example" select={() => {}} />, { ...demo, readLogs: async (_ref, _options, sink) => { sink(PATTERN_LINES.slice(0, 10)); return { reason: "interrupted", lines: 10, bytes: 100 }; } });
+  await act(async () => { await Promise.resolve(); });
+  while (callbacks.length) act(() => callbacks.splice(0).forEach((cb) => cb(0)));
+  expect(screen.getByRole("alert").textContent).toBe("Reading was interrupted. Only the covered time span shown above was grouped; read again for the rest.");
+});
+
+it("says when a bin read was interrupted and lets it continue", async () => {
+  setAppLocale("en-US");
+  const fold = new PatternFold(); fold.add(head);
+  const demo = createDemoAdapter();
+  renderWithApp(<PatternSlice kind="container" id="example" pattern={fold.snapshot()[0]!} slice={{ start: Date.parse(head.ts), end: Date.parse(head.ts) + 1000 }} close={() => {}} />, { ...demo, readLogs: async (_ref, _options, sink) => { sink([head]); return { reason: "interrupted", lines: 1, bytes: 13 }; } });
+  await act(settleLogs);
+  expect(screen.getByRole("alert").textContent).toBe("Reading this period was interrupted after the first line.");
+  expect(screen.getByRole("button", { name: "Load more lines" })).toBeDefined();
+});
