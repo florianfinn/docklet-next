@@ -182,7 +182,7 @@ export const enStacks = {
       "warn": "Warning",
       "error": "Error"
     },
-    previousError: "Previous error/warning", nextError: "Next error/warning", density: "Error and warning density", densitySpan: "{start} – {end}",
+    previousError: "Previous error/warning", nextError: "Next error/warning", density: "Error and warning density", densityBinAt: "{errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}} at {time}",
     densityBin: "{errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}} from {start} to {end}", expandRepeats: "Expand {count} repeats", collapseRepeats: "Collapse {count} repeats",
     keyboardHint: "Arrow keys move between lines; Home and End jump to the first and last line; End resumes the live tail. · [ / ]: previous/next error or warning",
     delivery: {

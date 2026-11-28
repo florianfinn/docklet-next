@@ -183,7 +183,7 @@ export const deStacks: typeof enStacks = {
       "warn": "Warnung",
       "error": "Fehler"
     },
-    previousError: "Vorheriger Fehler/Warnung", nextError: "Nächster Fehler/Warnung", density: "Fehler- und Warndichte", densitySpan: "{start} – {end}",
+    previousError: "Vorheriger Fehler/Warnung", nextError: "Nächster Fehler/Warnung", density: "Fehler- und Warndichte", densityBinAt: "{errors, plural, one {# Fehler} other {# Fehler}}, {warnings, plural, one {# Warnung} other {# Warnungen}} um {time}",
     densityBin: "{errors, plural, one {# Fehler} other {# Fehler}}, {warnings, plural, one {# Warnung} other {# Warnungen}} von {start} bis {end}", expandRepeats: "{count} Wiederholungen ausklappen", collapseRepeats: "{count} Wiederholungen einklappen",
     keyboardHint: "Pfeiltasten wechseln die Zeile; Pos1 und Ende springen zur ersten und letzten Zeile; Ende setzt die Live-Ansicht fort. · [ / ]: vorheriger/nächster Fehler oder Warnung",
     delivery: {

@@ -9,20 +9,22 @@ import type { LogLine } from "@/domain/model";
 import { Button } from "@/shared/ui/button";
 import { densityBins } from "./derive";
 import { BinStrip, type StripBin } from "./BinStrip";
-import { formatLogStamp } from "./log-time";
+import { formatLogSpan, formatLogStamp } from "./log-time";
 
 export function RepeatButton({ count, expanded, onClick }: { count?: number; expanded: boolean; onClick: () => void }) {
   const t = useTranslations("stacks.logs");
   return count ? <button type="button" className="ml-2 rounded border px-1 font-sans" aria-expanded={expanded} aria-label={t(expanded ? "collapseRepeats" : "expandRepeats", { count })} onClick={onClick}>×{count}</button> : null;
 }
-type Translate = (key: "densityBin" | "densitySpan", values: Record<string, string | number>) => string;
+type Translate = (key: "densityBin" | "densityBinAt", values: Record<string, string | number>) => string;
 function densityStrip(lines: readonly LogLine[], t: Translate, onSelect: (id: string) => void): StripBin[] {
   const bins = densityBins(lines);
   return bins.map((bin) => {
-    const span = { start: formatLogStamp(bin.start), end: formatLogStamp(bin.end, false) };
+    // A bin inside one second names one instant, like formatLogSpan.
+    const start = formatLogStamp(bin.start), instant = start === formatLogStamp(bin.end);
+    const counts = { errors: bin.errors, warnings: bin.warnings };
     return bin.errors + bin.warnings > 0
-      ? { tone: bin.errors ? "bg-destructive/70" : "bg-warning/70", label: t("densityBin", { errors: bin.errors, warnings: bin.warnings, ...span }), onSelect: () => bin.firstId && onSelect(bin.firstId) }
-      : { tone: "bg-muted", label: t("densitySpan", span) };
+      ? { tone: bin.errors ? "bg-destructive/70" : "bg-warning/70", label: instant ? t("densityBinAt", { ...counts, time: start }) : t("densityBin", { ...counts, start, end: formatLogStamp(bin.end, false) }), onSelect: () => bin.firstId && onSelect(bin.firstId) }
+      : { tone: "bg-muted", label: formatLogSpan(bin.start, bin.end) };
   });
 }
 /** Reusable density over the loaded, filtered lines, independent of repeat presentation. */

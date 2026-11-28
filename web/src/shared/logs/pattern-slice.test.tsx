@@ -227,3 +227,11 @@ it("shows log times to the second and one instant for a span inside one second",
   const stamp = formatLogStamp(T0 + 123);
   expect([/\d[.,]\d{3}\b/.test(stamp), formatLogSpan(T0, T0 + 900) === formatLogStamp(T0), formatLogSpan(T0, T0 + 2000).includes(" – ")]).toEqual([false, true, true]);
 });
+
+it("names one instant in a density hint when the bin lies inside one second", async () => {
+  setAppLocale("en-US");
+  const lines = [line(1, T0, "INFO ok"), { ...line(2, T0 + 300, "ERROR boom"), level: "error" as const }, line(3, T0 + 600, "INFO ok")];
+  renderWithApp(<LogDensity lines={lines} onSelect={() => {}} />, createDemoAdapter());
+  const label = screen.getByRole("button").getAttribute("aria-label")!;
+  expect([label === `1 error, 0 warnings at ${formatLogStamp(T0 + 300)}`, label.includes(" to ")]).toEqual([true, false]);
+});
