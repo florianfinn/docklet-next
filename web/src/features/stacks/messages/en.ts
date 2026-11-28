@@ -136,7 +136,9 @@ export const enStacks = {
     trigger: { deploy: "Deploy", redeploy: "Redeploy", update: "Update", restore: "Restore" },
   },
   logs: {
-    keyboardHint: "Arrow keys move between lines; Home and End jump to the first and last line; End resumes the live tail.",
+    previousError: "Previous error/warning", nextError: "Next error/warning", density: "Error and warning density",
+    densityBin: "{errors} errors, {warnings} warnings from {start} to {end}", expandRepeats: "Expand {count} repeats", collapseRepeats: "Collapse {count} repeats",
+    keyboardHint: "Arrow keys move between lines; Home and End jump to the first and last line; End resumes the live tail. · [ / ]: previous/next error or warning",
     delivery: {
       connecting: "Connecting to logs …", live: "Live logs", retrying: "Connection lost. Retrying …", offline: "Offline. Reconnect resumes when online.",
       unavailable: "Logs are unavailable for this resource.", error: "Log delivery failed. Retry to request a new tail.", unauthenticated: "Sign in to receive logs.",

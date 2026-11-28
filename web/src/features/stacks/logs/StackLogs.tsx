@@ -1,3 +1,5 @@
+import { useCollapsedLogs } from "@/shared/logs/use-collapsed-logs";
+import { RepeatButton, LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { useLogKeyboard } from "./use-log-keyboard";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { ArrowDownToLine, Eraser, Pause, Play, Search, WrapText } from "lucide-react";
@@ -59,7 +61,8 @@ function StackLogsView({ stack }: { stack: Stack }) {
   }, [lines, services, level, query, clearedIds]);
 
   const scroller = useRef<HTMLDivElement>(null);
-  const keyboard = useLogKeyboard(shown, follow, setFollow, scroller);
+  const collapsed = useCollapsedLogs(shown);
+  const keyboard = useLogKeyboard(collapsed.rows, follow, setFollow, scroller);
 
   return (
     <Card className="gap-0 overflow-hidden py-0">
@@ -115,10 +118,12 @@ function StackLogsView({ stack }: { stack: Stack }) {
           <SimulationBadge />
         </span>
       </div>
+      <div className="flex gap-2 p-2"><ErrorJump jump={keyboard.jump} /></div>
+      <LogDensity lines={shown} byService onSelect={(id) => { collapsed.reveal(id); keyboard.select(id); }} />
       <LogDeliveryNotice lines={lines} paused={paused} />
       <div role="log" aria-live={paused ? "off" : "polite"} className="relative"><p id={keyboard.hintId} className="sr-only">{t("keyboardHint")}</p>
       <div ref={scroller} {...keyboard.region} aria-label={t("title")} className="h-[max(24rem,calc(100dvh-24rem))] overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
-        {shown.map((l) => {
+        {collapsed.rows.map((l) => {
           const tone = tones.get(l.service) ?? "info";
           return (
             <div key={l.id} {...keyboard.row(l.id)} className={cn(keyboard.active === l.id && "bg-muted/30 outline outline-primary", "flex gap-3 px-3 hover:bg-muted/30", LEVEL_CLASS[l.level], wrap ? "whitespace-pre-wrap" : "whitespace-pre")}>
@@ -126,7 +131,7 @@ function StackLogsView({ stack }: { stack: Stack }) {
               <span data-tone={tone} className={cn("shrink-0 text-(--tone) select-none", keyboard.active === l.id ? "whitespace-normal" : "w-28 truncate")}>
                 <LogSource line={l} active={keyboard.active === l.id} />
               </span>
-              <span className="min-w-0"><LogMessage line={l} /></span>
+              <span className="min-w-0"><LogMessage line={l} /><RepeatButton count={collapsed.counts.get(l.id)} expanded={collapsed.expanded.has(l.id)} onClick={() => collapsed.toggle(l.id)} /></span>
             </div>
           );
         })}

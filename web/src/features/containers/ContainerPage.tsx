@@ -1,3 +1,5 @@
+import { useCollapsedLogs } from "@/shared/logs/use-collapsed-logs";
+import { RepeatButton, LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { useLogKeyboard } from "@/features/stacks/logs/use-log-keyboard";
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { useAdapter } from "@/data/use-adapter";
@@ -53,7 +55,8 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
   const shown = useMemo(() => lines.slice(-120), [lines]);
   const [follow, setFollow] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
-  const keyboard = useLogKeyboard(shown, follow, setFollow, scroller);
+  const collapsed = useCollapsedLogs(shown);
+  const keyboard = useLogKeyboard(collapsed.rows, follow, setFollow, scroller);
   const logs = useTranslations("stacks.logs");
   return (
     <Card className="gap-0 overflow-hidden py-0" data-slot="container-logs">
@@ -70,14 +73,16 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
           </Button>
         )}
       </CardHeader>
+      <div className="flex gap-2 p-2"><ErrorJump jump={keyboard.jump} /></div>
+      <LogDensity lines={shown} onSelect={(id) => { collapsed.reveal(id); keyboard.select(id); }} />
       <LogDeliveryNotice lines={lines} paused={paused} />
       <div role="log" aria-live={paused ? "off" : "polite"} className="relative"><p id={keyboard.hintId} className="sr-only">{logs("keyboardHint")}</p>
       <div ref={scroller} {...keyboard.region} aria-label={t("logs")} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
-        {shown.map((l) => (
+        {collapsed.rows.map((l) => (
           <div key={l.id} {...keyboard.row(l.id)} className={cn("flex gap-3 px-3 whitespace-pre-wrap", LEVEL_CLASS[l.level], keyboard.active === l.id && "bg-muted/30 outline outline-primary")}>
             <span className="shrink-0 text-muted-foreground/70 select-none">{formatTime(l.ts, true)}</span>
             <span className={cn("shrink-0 text-muted-foreground select-none", keyboard.active === l.id ? "whitespace-normal" : "w-28 truncate")}><LogSource line={l} active={keyboard.active === l.id} /></span>
-            <span className="min-w-0 break-words"><LogMessage line={l} /></span>
+            <span className="min-w-0 break-words"><LogMessage line={l} /><RepeatButton count={collapsed.counts.get(l.id)} expanded={collapsed.expanded.has(l.id)} onClick={() => collapsed.toggle(l.id)} /></span>
           </div>
         ))}
       </div>
@@ -213,12 +218,12 @@ function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | un
       </div>
       <Card className="mt-4 gap-3 py-4">
         <CardHeader className="px-4"><CardTitle className="text-sm">{th("title")}</CardTitle></CardHeader>
-        <CardContent className="px-4"><HealthDetails key={c.id} containerId={c.id} /></CardContent>
+        <CardContent className="px-4"><HealthDetails key={c.id} containerId={c.id} condition={c.condition} state={c.state} /></CardContent>
       </Card>
       <div className="mt-4">
         <ContainerHistory hostId={c.hostId} name={c.name} />
       </div>
-      <div className="mt-4">
+      <div id="container-logs" className="mt-4">
         <ContainerTerminalTabs key={c.id} c={c} host={host}><ContainerLogs c={c} /></ContainerTerminalTabs>
       </div>
     </>

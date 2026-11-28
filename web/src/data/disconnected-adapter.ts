@@ -102,6 +102,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     subscribeMetrics: subscribe,
     subscribeLogs: subscribe,
     subscribeContainerLogs: subscribe,
+    readLogs: async (_ref, _options, _sink, signal) => ({ reason: signal.aborted ? "aborted" : "unavailable", lines: 0, bytes: 0 }),
     subscribeChanges: subscribe,
     updateHost: unavailable,
     restartAgent: unavailable,

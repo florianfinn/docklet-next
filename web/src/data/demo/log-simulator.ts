@@ -1,3 +1,4 @@
+import { classifyLevel } from "@/shared/logs/level";
 import type { LogLine } from "@/domain/model";
 
 import { FALLBACK_TEMPLATES, LOG_TEMPLATES } from "./fixtures/logs";
@@ -23,6 +24,11 @@ export class LogSimulator {
 
   constructor(stacks: () => LogSource[]) {
     this.stacks = stacks;
+  }
+
+  snapshot(stackId: string): LogLine[] {
+    if (!this.buffers.has(stackId)) this.buffers.set(stackId, this.seed(stackId));
+    return this.buffers.get(stackId) ?? [];
   }
 
   subscribe(stackId: string, listener: (lines: LogLine[]) => void): () => void {
@@ -59,6 +65,8 @@ export class LogSimulator {
       const tpl = this.pick(svc.name);
       lines.push(this.line(svc.name, tpl[0], tpl[1], new Date(now - i * 47_000)));
     }
+    const service = stack.services[0]?.name;
+    if (service) for (const message of ['{"level":"error","event":"probe failed"}', 'level=warn msg="retry"', '[W] read error: closed', ...Array<string>(6).fill("Heartbeat ok")]) lines.push(this.line(service, classifyLevel(message), message, new Date(now - lines.length)));
     return lines;
   }
 

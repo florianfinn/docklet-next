@@ -18,7 +18,16 @@ export function useLogKeyboard(lines: LogLine[], follow: boolean, setFollow: (va
     if (follow && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     else if (active) document.getElementById(`${prefix}-${active}`)?.scrollIntoView?.({ block: "nearest" });
   }, [lines, follow, active, prefix, scrollRef]);
+  const select = (id: string) => { setSelected(id); setFollow(false); };
+  const jump = (direction: -1 | 1) => {
+    const index = lines.findIndex((l) => l.id === active);
+    const candidates = lines.map((l, i) => ({ l, i })).filter(({ l }) => l.level === "warn" || l.level === "error");
+    const next = direction === 1 ? candidates.find(({ i }) => i > index) : candidates.toReversed().find(({ i }) => i < (index < 0 ? lines.length : index));
+    if (next) select(next.l.id);
+  };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.defaultPrevented || (event.target as HTMLElement).closest("button,input,textarea,select")) return;
+    if (event.key === "[" || event.key === "]") { event.preventDefault(); jump(event.key === "[" ? -1 : 1); return; }
     if (!["ArrowDown", "ArrowUp", "Home", "End", "Escape"].includes(event.key)) return;
     event.preventDefault();
     if (event.key === "Escape" || event.key === "End") {
@@ -30,5 +39,5 @@ export function useLogKeyboard(lines: LogLine[], follow: boolean, setFollow: (va
     const next = event.key === "Home" ? 0 : event.key === "ArrowDown" ? Math.min(lines.length - 1, index + 1) : index < 0 ? lines.length - 1 : Math.max(0, index - 1);
     setSelected(lines[next]?.id); setFollow(false);
   };
-  return { active, hintId: `${prefix}-hint`, region: { role: "listbox" as const, tabIndex: 0, "aria-activedescendant": active ? rowId(active) : undefined, "aria-describedby": `${prefix}-hint`, onKeyDown }, row: (id: string) => ({ id: rowId(id), role: "option" as const, "aria-selected": id === active }) };
+  return { select, jump, active, hintId: `${prefix}-hint`, region: { role: "listbox" as const, tabIndex: 0, "aria-activedescendant": active ? rowId(active) : undefined, "aria-describedby": `${prefix}-hint`, onKeyDown }, row: (id: string) => ({ id: rowId(id), role: "option" as const, "aria-selected": id === active }) };
 }

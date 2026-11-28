@@ -68,11 +68,11 @@ it("toggles raw data by keyboard and renders probe output as plain text", async 
   toggle.focus();
   await user.keyboard("{Enter}");
   expect(screen.getByText(check.test[1]!).textContent).toBe(check.test[1]);
-  expect([...container.querySelectorAll("pre")].map((pre) => pre.textContent)).toEqual([raw, "older probe"]);
+  expect([...container.querySelectorAll("pre")].map((pre) => pre.textContent)).toEqual([raw, raw, "older probe"]);
   expect(container.querySelector("pre b") === null).toBe(true);
   expect(screen.getByText("default").textContent).toBe("default");
   await user.keyboard("{Enter}");
-  expect(container.querySelector("pre") === null).toBe(true);
+  expect(container.querySelector("pre")?.textContent).toBe(raw);
 });
 
 it("changes every row history request with the shared range control", async () => {

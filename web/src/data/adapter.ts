@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. Acceptance #85: preserve live inventory state, names, host isolation and accurate resource presentation. Issue #102: optional classified activity source read-health subscription. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. List summaries and owned detail reads with bounded recovery (#225, #223). Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. M11 #262: live vulnerability reads, scan controls and security settings. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M23 #391: maintenance observation port. M23 #428 #389: identity-owned scope retention, independent recovery reasons, metrics lifetime and automatic inventory refresh tags. M24 S6: observed recovery and update UI follow-ups. M25 latest agent restart read. M26 #462: bounded shell counts and raw inventory ownership.; M36 #568: record baseline without pulling images. M39 #612: host scan run summaries.
 
+import type { LogsApi } from "./api";
 import type { ReadTag } from "./http/host-read-policy";
 import type { components } from "@/api/generated/schema";
 import type {
@@ -121,7 +122,7 @@ export interface RuntimeReleaseInput {
 /**
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
-export interface DockletAdapter extends VulnerabilityCandidatesApi, VulnerabilityAdvisoryApi, UpdatesApi, AuthApi, UsersApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi, HistoryApi, ContainerHealthApi, UiPreferencesApi, ServiceWidgetsApi {
+export interface DockletAdapter extends LogsApi, VulnerabilityCandidatesApi, VulnerabilityAdvisoryApi, UpdatesApi, AuthApi, UsersApi, HostsApi, VolumesApi, SettingsApi, NotificationsApi, AutoHealApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi, HistoryApi, ContainerHealthApi, UiPreferencesApi, ServiceWidgetsApi {
   readonly tailnet?: import("@/domain/tailnet").TailnetApi;
   readonly kind: "demo" | "http" | "disconnected";
   readonly hubUpdateSession?: import("./http/hub-update-session").HubUpdateSession;

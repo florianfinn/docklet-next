@@ -346,3 +346,10 @@ export interface AutoHealApi {
   getAutoHealSettings(hostId: string): Promise<AutoHealSettings>;
   saveAutoHealSettings(hostId: string, input: AutoHealInput): Promise<AutoHealSettings>;
 }
+
+/** One finite read; abort discards pending delivery, and caps count UTF-8 message bytes. */
+export interface LogReadOptions { tail?: number | "all"; since?: string; until?: string; maxLines: number; maxBytes: number }
+export interface LogReadResult { reason: "end" | "cap-lines" | "cap-bytes" | "aborted" | "unavailable"; lines: number; bytes: number }
+export interface LogsApi {
+  readLogs(ref: { kind: "container" | "stack"; id: string }, options: LogReadOptions, sink: (lines: import("@/domain/model").LogLine[]) => void, signal: AbortSignal): Promise<LogReadResult>;
+}

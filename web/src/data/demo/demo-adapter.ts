@@ -63,6 +63,11 @@ const clone = <T>(v: T): T => structuredClone(v);
 /** In-memory adapter: synthetic data, simulated actions, no Docker calls. */
 export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdapter {
   const db = new DemoDb();
+  if (options.logHealthInsights) db.stacks = db.stacks.map((stack) => ({ ...stack, services: stack.services.map((svc) => {
+    const reason = svc.name === "forgejo" ? "exit" : svc.name === "cache" ? "oom" : svc.name === "broker" ? "restart-loop" : svc.health === "unhealthy" ? "health" : undefined;
+    return { ...svc, state: reason === "exit" || reason === "oom" ? "stopped" : reason === "restart-loop" ? "restarting" : svc.state,
+      condition: reason ? { containerId: svc.containerId!, condition: reason === "health" ? "unhealthy" : "down", reason, exitCode: reason === "oom" ? 137 : reason === "exit" ? 1 : undefined, restarts10m: reason === "restart-loop" ? 12 : undefined, sampledAt: new Date().toISOString() } : undefined };
+  }) }));
   if (options.hosts) db.hosts = structuredClone([...options.hosts]);
   const composeTarget = (stack: Stack): ComposeTarget => ({ project: stack.id, services: stack.services.map((s) => ({ name: s.name, image: imageRef(s.image) })), hostName: db.host(stack.hostId)?.name ?? stack.hostId });
   const runner = new ActionRunner(options.seedRuns ?? SEED_RUNS, (run) => {
@@ -603,6 +608,26 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
     subscribeActions: (listener) => runner.subscribe((runs) => listener(encodeDemoRuns(runs))),
     subscribeMetrics: (listener) => metrics.subscribe(listener),
+    async readLogs(ref, options, sink, signal) {
+      if (signal.aborted) return { reason: "aborted", lines: 0, bytes: 0 };
+      const c = ref.kind === "container" ? db.containers().find((x) => x.id === ref.id) : undefined;
+      let rows = logs.snapshot(ref.kind === "stack" ? ref.id : c?.stackId ?? `container:${ref.id}`);
+      if (c?.serviceName) rows = rows.filter((l) => l.service === c.serviceName);
+      rows = rows.filter((l) => (!options.since || Date.parse(l.ts) >= Date.parse(options.since)) && (!options.until || Date.parse(l.ts) <= Date.parse(options.until)));
+      if (typeof options.tail === "number") rows = options.tail === 0 ? [] : rows.slice(-options.tail);
+      const kept = []; let bytes = 0;
+      let reason: import("../api").LogReadResult["reason"] = "end";
+      for (const line of rows) {
+        if (kept.length >= options.maxLines) { reason = "cap-lines"; break; }
+        const size = new TextEncoder().encode(line.message).length;
+        if (bytes + size > options.maxBytes) { reason = "cap-bytes"; break; }
+        kept.push(line); bytes += size;
+        if (kept.length === options.maxLines) { reason = "cap-lines"; break; }
+        if (bytes === options.maxBytes) { reason = "cap-bytes"; break; }
+      }
+      if (!signal.aborted) sink(kept);
+      return { reason: signal.aborted ? "aborted" : reason, lines: kept.length, bytes };
+    },
     subscribeLogs: (stackId, listener) => logs.subscribe(stackId, listener),
     subscribeContainerLogs: (containerId, listener) => {
       const c = db.containers().find((x) => x.id === containerId);

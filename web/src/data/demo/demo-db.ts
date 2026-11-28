@@ -42,7 +42,10 @@ const SECRET_KEY = /PASS|SECRET|TOKEN|KEY/i;
 /** Mutable in-memory database behind the demo adapter. */
 export class DemoDb {
   hosts: Host[] = structuredClone(HOSTS).map((h) => (h.status === "pending" ? h : { ...h, agentReport: agentReport(h, h.lastSeen) }));
-  stacks: Stack[] = structuredClone(STACKS);
+  stacks: Stack[] = structuredClone(STACKS).map((stack) => ({ ...stack, services: stack.services.map((svc) => {
+    const id = containerId(stack.id, svc.name);
+    return { ...svc, containerId: id, containerName: `${stack.id}-${svc.name}-1` };
+  }) }));
   standalone: ContainerInfo[] = structuredClone(STANDALONE);
   compose: Record<string, string> = { ...COMPOSE };
   env: Record<string, string> = { ...ENV_FILES };
@@ -145,6 +148,7 @@ export class DemoDb {
           originSource: "detected",
           originNote: `Compose-Projekt ${stack.id}`,
           image: svc.image,
+          condition: svc.condition,
           state: svc.state,
           health: svc.health,
           ports: svc.ports,
