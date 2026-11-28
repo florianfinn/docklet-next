@@ -21,12 +21,25 @@ import type { HostContainerHistory, HistoryBucket } from "@/domain/history";
 import { mapHostContainerHistory } from "@/data/http/history";
 import DisruptionsPage from "./DisruptionsPage";
 import { CombinedWindow } from "./CombinedWindow";
+import type { LogsApi } from "@/data/api";
 import { selectWindow, type WindowSelection } from "./participants";
 const bucket: HistoryBucket = { start: "2026-01-02T03:00:00Z", end: "2026-01-02T03:15:00Z", state: "down", minutes: { running: 0, down: 1, unhealthy: 0, stopped: 0 } };
 const history = (hostId: string, name: string): HostContainerHistory => ({ hostId, range: "24h", truncated: false, containers: [{ name, buckets: [bucket] }] });
 const selection: WindowSelection = { since: "2026-01-02T02:55:00Z", until: "2026-01-02T03:20:00Z", omitted: 0, participants: [{ hostId: "atlas", host: "Atlas", name: "web", id: "atlas~old", minutes: 1 }, { hostId: "boreal", host: "Boreal", name: "api", id: "boreal~api", minutes: 1 }] };
 beforeEach(() => { setAppLocale("en-US"); simulationStore.set((s) => ({ ...s, latency: "instant", live: false })); });
 afterEach(() => { vi.unstubAllGlobals(); setAppLocale("de"); simulationStore.reset(); sidebarStore.reset(); });
+it("the error jump visits warnings too and starts at the last marked line going back", async () => {
+  const user = userEvent.setup();
+  const readLogs = vi.fn<LogsApi["readLogs"]>(async (_ref, _options, sink) => {
+    sink([{ id: "1", service: "web", ts: "2026-01-02T03:00:00Z", level: "error", message: "first failure" }, { id: "2", service: "web", ts: "2026-01-02T03:01:00Z", level: "info", message: "calm" }, { id: "3", service: "web", ts: "2026-01-02T03:02:00Z", level: "warn", message: "late warning" }]);
+    return { reason: "end", lines: 3, bytes: 30 };
+  });
+  renderRoutes([{ path: "/", element: <CombinedWindow selection={{ ...selection, participants: [selection.participants[0]!] }} /> }], ["/"], { ...createDemoAdapter(), readLogs });
+  await screen.findByText(/late warning/);
+  await user.click(screen.getByRole("button", { name: "Previous error/warning" }));
+  expect(screen.getByText(/late warning/).className.includes("bg-muted")).toBe(true);
+});
+
 it("S2.6 combines real transport reads, drops an out-of-window middle frame and retains later frames", async () => {
   const f = logFixture(), adapter = { ...createDemoAdapter(), readLogs: f.owner.readLogs };
   renderWithApp(<CombinedWindow selection={selection} />, adapter);

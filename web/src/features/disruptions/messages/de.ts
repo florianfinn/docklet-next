@@ -15,7 +15,7 @@ export const deDisruptions = {
   "emptyLogs": "Keine Zeilen in diesem Zeitfenster. Das Log könnte vor einer Container-Neuerstellung liegen.",
   "capped": "Logs am Leselimit abgeschnitten.",
   "retry": "Erneut lesen",
-  "truncated": "Nur die ersten 500 betroffenen Container werden angezeigt.",
+  "truncated": "Nur die 500 am stärksten gestörten Container dieses Hosts werden angezeigt.",
   "empty": "Keine Störungen in diesem Zeitraum.",
   "omitted": "{count} weitere Teilnehmer ausgelassen (Limit: 20).",
   "bucket": "{container}: {state}, {start} – {end}",

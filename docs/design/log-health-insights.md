@@ -172,7 +172,7 @@ Break map S1:
     with the id it was started for, so a container recreated mid-read never takes over the old
     result.
   - Each participant gets `readLogs({kind: "container", id}, {since, until, tail: "all",
-    maxLines: 5000, maxBytes: 2 MiB})`, with at most 20 participants, by disrupted minutes.
+    maxLines: 2000, maxBytes: 1 MiB})`, with at most 20 participants, by disrupted minutes.
   - Lines are merged by timestamp, with the container and host as prefix, and use the S1 density
     strip and error jump.
   - A participant whose read ends `unavailable` shows "Logs not available for this container".
@@ -259,4 +259,5 @@ See the M47 kickoff matrix (closing issue #695).
 - Event table as the timeline source: 500 entries in total, about one day on a real hub.
 - Server-side pattern computation: it needs a new agent endpoint and protocol, for data the browser
   can fold within the cap.
-- A sidebar entry for the Disruptions page: it is reached from problems, not as a daily view.
+- A sidebar entry shown by default: the page is reached from problems, not as a daily view. The
+  entry exists, but only behind a personal switch that defaults to off (K-2).

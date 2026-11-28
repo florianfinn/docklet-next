@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original disruption timeline and bounded combined log window for #693.
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import type { LogReadResult } from "@/data/api";
@@ -14,6 +14,8 @@ import { LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { Button } from "@/shared/ui/button";
 import type { WindowSelection } from "./participants";
 interface Read { lines: LogLine[]; result?: LogReadResult }
+// Up to 20 participants × 2,000 lines keeps the merged, rendered window within 40,000 rows.
+const PARTICIPANT_LINES = 2000;
 export function CombinedWindow({ selection }: { selection: WindowSelection }) {
   const t = useTranslations("disruptions"), adapter = useAdapter();
   const lifetime = logLifetime(adapter.subscribeLogs);
@@ -32,17 +34,17 @@ export function CombinedWindow({ selection }: { selection: WindowSelection }) {
     };
     for (const p of selection.participants) if (p.id) {
       const id = p.id;
-      void adapter.readLogs({ kind: "container", id }, { since: selection.since, until: selection.until, tail: "all", maxLines: 5000, maxBytes: 2 * 1024 * 1024 }, (lines) => update(id, lines), controller.signal).then((result) => update(id, undefined, result)).catch(() => update(id, undefined, { reason: "unavailable", lines: 0, bytes: 0 }));
+      void adapter.readLogs({ kind: "container", id }, { since: selection.since, until: selection.until, tail: "all", maxLines: PARTICIPANT_LINES, maxBytes: 1024 * 1024 }, (lines) => update(id, lines), controller.signal).then((result) => update(id, undefined, result)).catch(() => update(id, undefined, { reason: "unavailable", lines: 0, bytes: 0 }));
     }
     return () => controller.abort();
   }, [selection, adapter, generation, attempt]);
   const reads = view?.selection === selection && view.adapter === adapter && view.generation === generation && view.attempt === attempt ? view.reads : {};
-  const lines = selection.participants.flatMap((p) => (p.id ? reads[p.id]?.lines ?? [] : []).map((line, i) => ({ ...line, id: `${p.id}:${i}`, service: `${p.name} · ${p.host} [${p.id}]` }))).sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+  const lines = useMemo(() => selection.participants.flatMap((p) => (p.id ? reads[p.id]?.lines ?? [] : []).map((line, i) => ({ ...line, id: `${p.id}:${i}`, service: `${p.name} · ${p.host} [${p.id}]` }))).sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts)), [selection, reads]);
   const focus = (id: string) => { setFocused(id); document.getElementById(`disruption-log-${id}`)?.scrollIntoView?.({ block: "nearest" }); };
   const jump = (direction: -1 | 1) => {
-    const errors = lines.filter((l) => l.level === "error");
-    const index = errors.findIndex((l) => l.id === focused);
-    const next = errors[(index + direction + errors.length) % errors.length];
+    const marked = lines.filter((l) => l.level === "error" || l.level === "warn");
+    const index = marked.findIndex((l) => l.id === focused);
+    const next = index < 0 ? marked.at(direction === 1 ? 0 : -1) : marked[(index + direction + marked.length) % marked.length];
     if (next) focus(next.id);
   };
   return <section className="grid min-w-0 gap-3 rounded-xl border p-4" aria-label={t("combined")}>

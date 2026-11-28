@@ -15,7 +15,7 @@ export const enDisruptions = {
   "emptyLogs": "No lines in this window. The log may predate a container recreation.",
   "capped": "Logs cut off at the read limit.",
   "retry": "Read again",
-  "truncated": "Only the first 500 affected containers are shown.",
+  "truncated": "Only the 500 most disrupted containers of this host are shown.",
   "empty": "No disruptions in this range.",
   "omitted": "{count} further participants omitted (limit: 20).",
   "bucket": "{container}: {state}, {start} – {end}",
