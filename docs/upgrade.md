@@ -177,13 +177,22 @@ with `agent.update-required`. Update every agent to 1.10.0 after the hub.
 
 Upgrading to 1.11.0: migration `009_image_update_age` adds the image
 observation column and the first-seen table on hub and agent databases; back up
-the hub first. The optional variable `UPDATE_MINIMUM_AGE_DAYS` (default 0, off)
-sets the minimum image age for scheduled updates. The agent contract moves to 26
-and the minimum stays 18. Agents on 1.6.0 to 1.10.0 keep working; until they are
-updated, age-gated stack updates skip them and they miss the executor fixes of
-this release. Log windows that end in the past (the Disruptions page) rely on
-agents applying the new `until` bound. Update every agent to 1.11.0 after the
-hub; "Update everything" does this in one step from now on.
+the hub first. Forwarded client addresses now trust only proxies listed in
+`TRUSTED_PROXIES`; private, loopback and link-local peers are no longer trusted
+implicitly. Before upgrading, list your reverse proxy's range there, or the hub
+records the proxy's address as the client. The optional variable
+`UPDATE_MINIMUM_AGE_DAYS` (default 0, off) sets the minimum image age for
+scheduled updates. The agent contract moves to 26 and the minimum stays 18.
+
+Update the hub first. On the 1.11.0 hub, "Update everything" updates every
+eligible agent in one step; update skipped agents with **Update agent**. Agents
+on 1.6.0 to 1.10.0 keep working; until they are updated:
+- log reads that end in the past (Disruptions windows, pattern custom ranges and
+  bin reads) need the agent to apply the new `until` bound;
+- age-gated stack updates skip them, and with a minimum image age, container
+  candidates whose check reply lacks the platform manifest wait with unknown age;
+- they keep the hard-linked proxy directory read refusal fixed by #665 and miss
+  the other executor fixes of this release.
 
 ## Recover a failed in-app update
 
