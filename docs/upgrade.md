@@ -175,6 +175,16 @@ keep working; until they are updated, their proxy writes still refuse targets
 with extended attributes and a metadata-loss confirmation to them is answered
 with `agent.update-required`. Update every agent to 1.10.0 after the hub.
 
+Upgrading to 1.11.0: migration `009_image_update_age` adds the image
+observation column and the first-seen table on hub and agent databases; back up
+the hub first. The optional variable `UPDATE_MINIMUM_AGE_DAYS` (default 0, off)
+sets the minimum image age for scheduled updates. The agent contract moves to 26
+and the minimum stays 18. Agents on 1.6.0 to 1.10.0 keep working; until they are
+updated, age-gated stack updates skip them and they miss the executor fixes of
+this release. Log windows that end in the past (the Disruptions page) rely on
+agents applying the new `until` bound. Update every agent to 1.11.0 after the
+hub; "Update everything" does this in one step from now on.
+
 ## Recover a failed in-app update
 
 The helper keeps a per-operation backup beside the interpolation env file:
