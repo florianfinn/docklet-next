@@ -6,7 +6,7 @@
 
 export const deHealth = {
   latestFailure: "Letzte fehlgeschlagene Prüfung", exitCode: "Exit-Code: {code}", restarts: "Neustarts in 10 Minuten: {count}",
-  lastLines: "Letzte Logzeilen", logsUnavailable: "Logs für diesen Container nicht verfügbar", retry: "Erneut versuchen", openLogs: "Im Logs-Tab öffnen",
+  lastLines: "Letzte Logzeilen", logsUnavailable: "Logs für diesen Container nicht verfügbar", logsCutOff: "Lange Zeilen wurden nach 64 KiB abgeschnitten.", retry: "Erneut versuchen", openLogs: "Im Logs-Tab öffnen",
   conditionReasons: { oom: "Wegen Speichermangel beendet (OOM).", "restart-loop": "Container startet ständig neu.", exit: "Container wurde beendet.", health: "Healthcheck fehlgeschlagen.", paused: "Container vom Betreiber pausiert.", intent: "Container wie vorgesehen gestoppt.", "never-started": "Container wurde noch nie gestartet.", "operator-stop": "Container vom Betreiber gestoppt." },
   title: "Health", showHealth: "Health anzeigen",
   noContainer: "Kein Container",

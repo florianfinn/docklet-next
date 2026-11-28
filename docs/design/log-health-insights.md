@@ -107,7 +107,7 @@ Break map S1:
 | 1 | external data entry | wire level `info` (real producer) with JSON, logfmt, bracket and misread messages | classifier order above | `level.test.ts` table incl. the three misreads, plus `mapLog` over real producer frames | drop the structured step → misread fixture fails; trust wire `info` → JSON error stays info |
 | 2 | external data entry | wire `warn`/`error`/`debug` (demo, source failure) | kept | `log-mapping` test | always classify → a source failure line without error words becomes `info` |
 | 3 | late response / identity | Health read for container A answers after the service shows container B (recreate) | read keyed by container id; aborted on unmount or id change | component test with held response | remove the abort → B shows A's lines |
-| 4 | partial state | read ends on cap or error | shows lines plus a "cut off" or "unavailable" note and a retry | `read-logs` test | ignore `reason` → no note |
+| 4 | partial state | read ends on the byte cap or `unavailable` | byte cap: a "cut off" note; `unavailable`: a notice and a retry. The 20-line cap is the normal end of a tail-20 read and shows nothing | consumer render test | ignore `reason` → no note |
 | 5 | consumer writes shared read result | collapse or density mutating the shared `published` array | pure derivations over a copy | test that freezes `published` | in-place sort → throws |
 
 ## S2 (#693) Disruption timeline: hub + web, red

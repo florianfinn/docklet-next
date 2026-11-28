@@ -46,6 +46,25 @@ it("shows unavailable with retry and silently accepts a capped read", async () =
   await waitFor(() => expect(screen.queryByText("Logs not available for this container") === null).toBe(true));
   expect(readLogs).toHaveBeenCalledTimes(2);
 });
+it("a read cut at the byte cap says so; the 20-line cap stays silent", async () => {
+  const readLogs = vi.fn<LogsApi["readLogs"]>().mockResolvedValue({ reason: "cap-bytes", lines: 3, bytes: 64 * 1024 });
+  renderRoutes([{ path: "/", element: <HealthDetails containerId="example" state="stopped" /> }], ["/"], { ...createDemoAdapter(), readLogs });
+  await waitFor(() => expect(readLogs).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.queryByText("Long lines were cut off after 64 KiB.") !== null).toBe(true));
+});
+it("on the container page the link reveals the log card on the same page", async () => {
+  const user = userEvent.setup();
+  const onOpenLogs = vi.fn();
+  const readLogs = vi.fn<LogsApi["readLogs"]>().mockResolvedValue({ reason: "end", lines: 0, bytes: 0 });
+  renderRoutes([{ path: "/", element: <HealthDetails containerId="example" state="stopped" onOpenLogs={onOpenLogs} /> }], ["/"], { ...createDemoAdapter(), readLogs });
+  await user.click(await screen.findByRole("button", { name: "Open in Logs tab" }));
+  expect(onOpenLogs).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("link", { name: "Open in Logs tab" }) === null).toBe(true);
+});
+it("a running healthy container shows no restart line", async () => {
+  renderRoutes([{ path: "/", element: <HealthDetails containerId="example" state="running" condition={{ containerId: "example", condition: "running", reason: "", sampledAt: "2026-01-01T00:00:00Z" }} /> }], ["/"], { ...createDemoAdapter(), readLogs: vi.fn<LogsApi["readLogs"]>() });
+  expect(screen.queryByText("Restarts in 10 minutes: 0") === null).toBe(true);
+});
 it("running containers start no read and operator stops show zero restarts", async () => {
   const readLogs = vi.fn<LogsApi["readLogs"]>();
   renderRoutes([{ path: "/", element: <HealthDetails containerId="example" state="running" condition={{ containerId: "example", condition: "stopped", reason: "operator-stop", sampledAt: "2026-01-01T00:00:00Z" }} /> }], ["/"], { ...createDemoAdapter(), readLogs });

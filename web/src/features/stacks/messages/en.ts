@@ -137,7 +137,7 @@ export const enStacks = {
   },
   logs: {
     previousError: "Previous error/warning", nextError: "Next error/warning", density: "Error and warning density",
-    densityBin: "{errors} errors, {warnings} warnings from {start} to {end}", expandRepeats: "Expand {count} repeats", collapseRepeats: "Collapse {count} repeats",
+    densityBin: "{errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}} from {start} to {end}", expandRepeats: "Expand {count} repeats", collapseRepeats: "Collapse {count} repeats",
     keyboardHint: "Arrow keys move between lines; Home and End jump to the first and last line; End resumes the live tail. · [ / ]: previous/next error or warning",
     delivery: {
       connecting: "Connecting to logs …", live: "Live logs", retrying: "Connection lost. Retrying …", offline: "Offline. Reconnect resumes when online.",

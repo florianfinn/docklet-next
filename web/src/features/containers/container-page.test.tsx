@@ -41,6 +41,19 @@ const routes = [
 const restarts = async (adapter: ReturnType<typeof createDemoAdapter>) => (await adapter.listActions()).filter((r) => r.kind === "restart").length;
 
 describe("container inspector and page", () => {
+  it("the health card link of a stopped container reveals the log card on the same page", async () => {
+    const user = userEvent.setup();
+    const scrolled: string[] = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.id); };
+    try {
+      renderRoutes(routes, ["/containers/c-whoami-test"]);
+      await user.click(await screen.findByRole("button", { name: "Im Logs-Tab öffnen" }));
+      expect(scrolled.includes("container-logs")).toBe(true);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
   it("keeps the side sheet to an overview, without lifecycle or edit buttons, and its page link closes it", async () => {
     const { router } = renderRoutes(routes, ["/containers?c=c-uptime-kuma"]);
     const sheet = await screen.findByRole("dialog", { name: "uptime-kuma" });

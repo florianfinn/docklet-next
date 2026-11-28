@@ -138,7 +138,7 @@ export const deStacks: typeof enStacks = {
   },
   logs: {
     previousError: "Vorheriger Fehler/Warnung", nextError: "Nächster Fehler/Warnung", density: "Fehler- und Warndichte",
-    densityBin: "{errors} Fehler, {warnings} Warnungen von {start} bis {end}", expandRepeats: "{count} Wiederholungen ausklappen", collapseRepeats: "{count} Wiederholungen einklappen",
+    densityBin: "{errors} Fehler, {warnings, plural, one {# Warnung} other {# Warnungen}} von {start} bis {end}", expandRepeats: "{count} Wiederholungen ausklappen", collapseRepeats: "{count} Wiederholungen einklappen",
     keyboardHint: "Pfeiltasten wechseln die Zeile; Pos1 und Ende springen zur ersten und letzten Zeile; Ende setzt die Live-Ansicht fort. · [ / ]: vorheriger/nächster Fehler oder Warnung",
     delivery: {
       connecting: "Verbindung zu den Logs wird hergestellt …", live: "Live-Logs", retrying: "Verbindung unterbrochen. Neuer Versuch …", offline: "Offline. Die Verbindung wird fortgesetzt, sobald du online bist.",

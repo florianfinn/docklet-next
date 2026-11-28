@@ -27,7 +27,7 @@ it("collapses filtered repeats, expands by keyboard, jumps errors and density wi
   await user.click(screen.getByRole("button", { name: "Next error/warning" }));
   expect(screen.getByRole("button", { name: "Follow" }).getAttribute("aria-pressed")).toBe("false");
   expect(screen.getAllByRole("option")[0]!.getAttribute("aria-selected")).toBe("true");
-  const bin = screen.getAllByRole("button").find((b) => b.getAttribute("aria-label")?.startsWith("1 errors, 0 warnings from"))!;
+  const bin = screen.getAllByRole("button").find((b) => b.getAttribute("aria-label")?.startsWith("1 error, 0 warnings from"))!;
   await user.click(bin);
   expect(screen.getAllByRole("option")[3]!.getAttribute("aria-selected")).toBe("true");
 });

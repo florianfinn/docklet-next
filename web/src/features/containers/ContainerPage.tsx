@@ -47,6 +47,13 @@ const ProxyContext = import.meta.env.DEV ? lazy(() => import("@/features/design-
 
 const LEVEL_CLASS = { info: "", debug: "text-muted-foreground", warn: "bg-warning/8 text-warning", error: "bg-destructive/10 text-destructive" } as const;
 
+/** The log card is on the same page: scroll to it and move focus into its log region. */
+function revealContainerLogs() {
+  const card = document.getElementById("container-logs");
+  card?.scrollIntoView({ block: "start" });
+  card?.querySelector<HTMLElement>("[role=log] [tabindex]")?.focus({ preventScroll: true });
+}
+
 /** Latest lines of this container only; the stack page keeps the full multiplexed viewer. */
 function ContainerLogs({ c }: { c: ContainerInfo }) {
   const t = useTranslations("containers.page");
@@ -218,7 +225,7 @@ function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | un
       </div>
       <Card className="mt-4 gap-3 py-4">
         <CardHeader className="px-4"><CardTitle className="text-sm">{th("title")}</CardTitle></CardHeader>
-        <CardContent className="px-4"><HealthDetails key={c.id} containerId={c.id} condition={c.condition} state={c.state} /></CardContent>
+        <CardContent className="px-4"><HealthDetails key={c.id} containerId={c.id} condition={c.condition} state={c.state} onOpenLogs={revealContainerLogs} /></CardContent>
       </Card>
       <div className="mt-4">
         <ContainerHistory hostId={c.hostId} name={c.name} />
