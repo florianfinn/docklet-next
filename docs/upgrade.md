@@ -185,8 +185,11 @@ records the proxy's address as the client. The optional variable
 scheduled updates. The agent contract moves to 26 and the minimum stays 18.
 
 Update the hub first. On the 1.11.0 hub, "Update everything" updates every
-eligible agent in one step; update skipped agents with **Update agent**. Agents
-on 1.6.0 to 1.10.0 keep working; until they are updated:
+eligible agent in one step and names each skipped host with its reason. An agent
+skipped while offline or busy can be updated later with **Update agent**; a
+manual or custom installation follows [Upgrade manually](#upgrade-manually); an
+agent already on 1.11.0 needs nothing. Agents on 1.6.0 to 1.10.0 keep working;
+until they are updated:
 - log reads that end in the past (Disruptions windows, pattern custom ranges and
   bin reads) need the agent to apply the new `until` bound;
 - age-gated stack updates skip them, and with a minimum image age, container
