@@ -248,10 +248,13 @@ Break map S2:
     the bin's last millisecond.
   - Marking follows the fold: matching head lines plus the continuation lines after them in the same
     source. Continuation lines before their source's first head in the read stay unmarked.
-  - A full page states how many lines are shown and offers "Load more lines". The next page starts
-    at the last shown millisecond again, because the browser cannot name the producer nanosecond in
-    between, and skips the lines of that millisecond it already shows; a page that adds no line
-    offers no further page.
+  - A full page states how many lines are shown and offers "Load more lines". The next page reads
+    the bin from its start again, because a stack merges its containers concurrently and no
+    timestamp cursor is safe. Its budget is the previous read's lines and bytes plus one page
+    (500 lines / 1 MiB), and the lines already shown are taken out as a multiset (source, time,
+    text), so each page adds at least one page of new lines or ends the bin. A page that adds no
+    line offers no further page. The list is sorted by time; the sort is stable, so each source
+    keeps its own order.
   - Long lines stay on one row; the list and the samples scroll sideways (K-7).
 - **Measurement.** Fold time for 100,000 synthetic lines: desktop Chromium unthrottled, and Chromium
   with 4× CPU throttle and a phone viewport. Both are documented with the longest main-thread task.

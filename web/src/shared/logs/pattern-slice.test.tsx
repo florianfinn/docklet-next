@@ -163,7 +163,7 @@ it("scrolls the list to its first marked line", async () => {
   offsets.mockRestore();
 });
 
-it("loads the next page from the last shown millisecond without repeating its lines", async () => {
+it("reads the next page from the bin start with one more page of budget, without repeating lines", async () => {
   setAppLocale("en-US");
   const start = Date.parse(head.ts);
   const at = (i: number, ms: number, message: string): LogLine => ({ id: `p${i}`, service: "web", ts: new Date(start + ms).toISOString(), level: "info", message });
@@ -183,7 +183,7 @@ it("loads the next page from the last shown millisecond without repeating its li
   expect(screen.getByText("Showing the first 500 lines; this period has more.")).toBeDefined();
   await userEvent.setup().click(screen.getByRole("button", { name: "Load more lines" }));
   await act(settleLogs);
-  expect(calls[1]).toMatchObject({ since: new Date(start + 600).toISOString(), until: "2026-01-02T03:04:05.999999999Z", maxLines: 502 });
+  expect(calls[1]).toMatchObject({ since: new Date(start).toISOString(), until: "2026-01-02T03:04:05.999999999Z", maxLines: 1000, maxBytes: 100 + 1024 * 1024 });
   expect([screen.getAllByText("INFO tick a").length, screen.getAllByText("INFO tick c").length, screen.getAllByRole("listitem").length]).toEqual([1, 1, 502]);
   expect(screen.queryByRole("button", { name: "Load more lines" })).toBeNull();
 });

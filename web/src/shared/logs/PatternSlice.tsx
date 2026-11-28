@@ -15,28 +15,25 @@ import { Spinner } from "@/shared/ui/spinner";
 import { formatLogSpan, formatLogStamp } from "./log-time";
 import { patternMembers, type LogPattern } from "./patterns";
 
-/** The lines of one pattern time bin, read in pages of 500 lines / 1 MiB from its start, the pattern's lines marked. */
+/** The lines of one pattern time bin, read in pages of 500 lines / 1 MiB, the pattern's lines marked. */
 export const SLICE_PAGE = 500;
+const PAGE_BYTES = 1024 * 1024;
 /** Bin bounds in integer milliseconds, `end` exclusive (see `binBounds`). */
 export interface SliceTarget { start: number; end: number }
 // The browser keeps millisecond timestamps while Docker filters producer nanoseconds, so `until`
 // covers every nanosecond of the bin's last millisecond.
 const untilOf = (end: number) => new Date(end - 1).toISOString().replace("Z", "999999Z");
 const identity = (line: LogLine) => `${line.service}\u0001${line.ts}\u0001${line.message}`;
-/** `from` is how many lines were shown before the current page; a page that adds none offers no further page. */
-interface SliceRead { key: string; page: number; from: number; lines: LogLine[]; result?: LogReadResult }
 /**
- * Bounds of the next page. It starts at the last shown millisecond again, because the browser cannot
- * name the producer nanosecond in between, and skips the lines of that millisecond it already shows.
+ * A later page reads the bin from its start again: a stack merges its containers concurrently, so no
+ * timestamp cursor is safe. Its budget is the previous read's lines and bytes plus one page, and the
+ * lines already shown are taken out as a multiset, so every page adds at least one page of new lines
+ * or ends the bin.
  */
-function nextPage(shown: readonly LogLine[], start: number) {
-  const last = shown.at(-1);
-  if (!last) return { since: start, skip: new Map<string, number>(), skipped: 0 };
-  const since = Date.parse(last.ts), skip = new Map<string, number>();
-  let skipped = 0;
-  for (const line of shown) if (Date.parse(line.ts) === since) { skip.set(identity(line), (skip.get(identity(line)) ?? 0) + 1); skipped++; }
-  return { since, skip, skipped };
-}
+interface Replay { seen: Map<string, number>; maxLines: number; maxBytes: number }
+const firstPage = (): Replay => ({ seen: new Map(), maxLines: SLICE_PAGE, maxBytes: PAGE_BYTES });
+/** `budget` is what the last completed read consumed; `from` how many lines were shown before this page. */
+interface SliceRead { key: string; page: number; from: number; lines: LogLine[]; budget: { lines: number; bytes: number }; result?: LogReadResult }
 export function PatternSlice({ kind, id, pattern, slice, close }: { kind: "stack" | "container"; id: string; pattern: LogPattern; slice: SliceTarget; close: () => void }) {
   const t = useTranslations("stacks.logs.patterns"), adapter = useAdapter();
   const lifetime = logLifetime(adapter.subscribeLogs);
@@ -45,17 +42,21 @@ export function PatternSlice({ kind, id, pattern, slice, close }: { kind: "stack
   const [read, setRead] = useState<SliceRead>();
   const current = read?.key === key ? read : undefined;
   const page = current?.page ?? 0;
-  const cursor = useRef(nextPage([], slice.start));
+  const replay = useRef(firstPage());
   const list = useRef<HTMLOListElement>(null);
   useEffect(() => {
     const controller = new AbortController();
-    const { since, skip, skipped } = page === 0 ? nextPage([], slice.start) : cursor.current;
-    const append = (lines: LogLine[], result?: LogReadResult) => setRead((old) => ({ key, page, from: old?.key === key ? old.from : 0, lines: [...(old?.key === key ? old.lines : []), ...lines], result }));
-    void adapter.readLogs({ kind, id }, { since: new Date(since).toISOString(), until: untilOf(slice.end), tail: "all", maxLines: SLICE_PAGE + skipped, maxBytes: 1024 * 1024 }, (lines) => {
+    const { seen, maxLines, maxBytes } = page === 0 ? firstPage() : replay.current;
+    const append = (lines: LogLine[], result?: LogReadResult) => setRead((old) => {
+      const same = old?.key === key;
+      const budget = result && result.reason !== "unavailable" ? { lines: result.lines, bytes: result.bytes } : same ? old.budget : { lines: 0, bytes: 0 };
+      return { key, page, from: same ? old.from : 0, lines: [...(same ? old.lines : []), ...lines], budget, result };
+    });
+    void adapter.readLogs({ kind, id }, { since: new Date(slice.start).toISOString(), until: untilOf(slice.end), tail: "all", maxLines, maxBytes }, (lines) => {
       if (controller.signal.aborted) return;
       append(lines.filter((line) => {
-        const left = Date.parse(line.ts) === since ? skip.get(identity(line)) : undefined;
-        if (left) skip.set(identity(line), left - 1);
+        const left = seen.get(identity(line));
+        if (left) seen.set(identity(line), left - 1);
         return !left;
       }));
     }, controller.signal).then((result) => {
@@ -68,10 +69,13 @@ export function PatternSlice({ kind, id, pattern, slice, close }: { kind: "stack
   }, [adapter, key, page]);
   const more = () => {
     if (!current) return;
-    cursor.current = nextPage(current.lines, slice.start);
+    const seen = new Map<string, number>();
+    for (const line of current.lines) seen.set(identity(line), (seen.get(identity(line)) ?? 0) + 1);
+    replay.current = { seen, maxLines: current.budget.lines + SLICE_PAGE, maxBytes: current.budget.bytes + PAGE_BYTES };
     setRead({ ...current, page: current.page + 1, from: current.lines.length, result: undefined });
   };
-  const lines = useMemo(() => current?.lines ?? [], [current]);
+  // Pages arrive in producer order; a stable sort by time keeps each source's own order.
+  const lines = useMemo(() => [...(current?.lines ?? [])].sort((x, y) => Date.parse(x.ts) - Date.parse(y.ts)), [current]);
   const members = useMemo(() => patternMembers(lines, pattern), [lines, pattern]);
   const firstMatch = current?.page === 0 && current.result ? members.indexOf(true) : -1;
   useEffect(() => {
