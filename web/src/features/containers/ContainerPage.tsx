@@ -6,7 +6,7 @@ import { useLogKeyboard } from "@/features/stacks/logs/use-log-keyboard";
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
-import { LogDeliveryNotice, LogMessage, LogSource } from "@/features/stacks/logs/log-presentation";
+import { LogDeliveryNotice, LogMessage, LogSource, ToolbarHint } from "@/features/stacks/logs/log-presentation";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { ArrowLeft, Boxes, Cpu, Layers, Lock, Package, Pencil, Play, RotateCw, Square } from "lucide-react";
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
@@ -77,9 +77,11 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
         {pattern && <PatternFilter clear={() => setPattern(undefined)} />}
         <SimulationBadge />
         <span className="flex-1" />
-        <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("logsResume") : t("logsPause")}>
-          {paused ? <Play /> : <Square />}
-        </Toggle>
+        <ToolbarHint label={paused ? t("logsResume") : t("logsPause")}>
+          <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("logsResume") : t("logsPause")}>
+            {paused ? <Play /> : <Square />}
+          </Toggle>
+        </ToolbarHint>
         {c.stackId && (
           <Button size="sm" variant="outline" asChild>
             <Link to={`/stacks/${c.stackId}?tab=logs${c.serviceName ? `&service=${encodeURIComponent(c.serviceName)}` : ""}`}>{t("logsInStack")}</Link>

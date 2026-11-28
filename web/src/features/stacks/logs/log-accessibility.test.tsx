@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original keyboard and screen-reader checks on both log surfaces. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
 
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { localeStore } from "@/app/i18n/locale-store";
@@ -77,4 +77,15 @@ it.each(["en-US", "de"] as const)("%s WH-B4 source streams have real keyboard ro
     expect(screen.queryByText("future line only") !== null).toBe(true);
     view.unmount();
   }
+});
+
+it("names the container page's pause toggle in a short tooltip", async () => {
+  localeStore.set("de");
+  simulationStore.set((s) => ({ ...s, latency: "instant", live: false }));
+  const base = createDemoAdapter();
+  const container = (await base.listContainers())[0]!;
+  renderRoutes([{ path: "/containers/:containerId", element: <ContainerPage /> }], [`/containers/${container.id}`], base);
+  const pause = await screen.findByRole("button", { name: "Logs anhalten" });
+  act(() => pause.focus());
+  await waitFor(() => expect(screen.getAllByRole("tooltip").map((tip) => tip.textContent)).toContain("Logs anhalten"));
 });

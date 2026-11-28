@@ -5,12 +5,12 @@ import { RepeatButton, LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { useLogKeyboard } from "./use-log-keyboard";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { ArrowDownToLine, Eraser, Pause, Play, Search, WrapText } from "lucide-react";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { logGap } from "@/data/log-buffer";
-import { LogDeliveryNotice, LogMessage, LogSource } from "./log-presentation";
+import { LogDeliveryNotice, LogMessage, LogSource, ToolbarHint } from "./log-presentation";
 import { useStackLogs } from "@/data/live";
 import { formatTime } from "@/domain/format";
 import type { LogLevel, Stack } from "@/domain/model";
@@ -18,7 +18,6 @@ import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { cn } from "@/shared/lib/utils";
 import { Card } from "@/shared/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/shared/ui/input-group";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { Toggle } from "@/shared/ui/toggle";
 
 const SERVICE_TONES = ["info", "violet", "teal", "orange", "pink", "lime", "cyan"] as const;
@@ -160,10 +159,4 @@ function StackLogsView({ stack }: { stack: Stack }) {
       </>}
     </Card>
   );
-}
-
-/** Short name of an icon toggle on hover and keyboard focus. The span carries the trigger, so the
- * tooltip's data-state does not replace the toggle's pressed state. */
-function ToolbarHint({ label, children }: { label: string; children: ReactNode }) {
-  return <Tooltip><TooltipTrigger asChild><span className="inline-flex">{children}</span></TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>;
 }
