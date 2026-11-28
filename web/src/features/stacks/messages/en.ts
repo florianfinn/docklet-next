@@ -167,7 +167,7 @@ export const enStacks = {
       "sliceTitle": "Lines {span}",
       "sliceClose": "Close",
       "sliceReading": "Reading the lines of this period…",
-      "sliceCapped": "Showing the first {count, number} lines of this period.",
+      "sliceCapped": "Read limit reached: {count, plural, =0 {not even the first line of this period fits} one {showing the first line of this period} other {showing the first # lines of this period}}.",
       "sliceEmpty": "No lines in this period.",
       "fallback": "No loaded live lines match this pattern. Showing samples from the pattern read.",
       "clear": "Clear pattern filter",

@@ -243,6 +243,12 @@ Break map S2:
   `tail: all`, at most 2,000 lines / 1 MiB from its start) and lists those lines below the pattern,
   with the pattern's own lines marked and the first one scrolled into view. Raw keeps only live
   lines, so the bin read is the way to reach older log positions.
+  - Bounds are the integer milliseconds the fold counted in the bin. The browser keeps millisecond
+    timestamps while Docker filters producer nanoseconds, so `until` ends at the last nanosecond of
+    the bin's last millisecond.
+  - Marking follows the fold: matching head lines plus the continuation lines after them in the same
+    source. Continuation lines before their source's first head in the read stay unmarked.
+  - A reached cap states how many lines are shown.
 - **Measurement.** Fold time for 100,000 synthetic lines: desktop Chromium unthrottled, and Chromium
   with 4× CPU throttle and a phone viewport. Both are documented with the longest main-thread task.
 

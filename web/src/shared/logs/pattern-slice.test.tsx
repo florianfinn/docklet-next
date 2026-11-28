@@ -15,8 +15,11 @@ import { renderWithApp } from "@/test/render";
 import { formatLogSpan } from "./log-time";
 import { LogDensity } from "./LogInsights";
 import { PatternMode } from "./PatternMode";
+import { PatternSlice } from "./PatternSlice";
+import { binBounds, binIndex, PatternFold } from "./patterns";
+import { logFixture, settleLogs } from "@/data/http/logs.test-support";
 
-afterEach(() => { setAppLocale("de"); vi.unstubAllGlobals(); });
+afterEach(() => { setAppLocale("de"); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const T0 = Date.parse("2026-01-02T03:00:00Z");
 const line = (i: number, ms: number, message: string): LogLine => ({ id: String(i), service: "web", ts: new Date(ms).toISOString(), level: "info", message });
 const PATTERN_LINES = [...Array.from({ length: 30 }, (_, i) => line(i, T0 + i * 1000, "GET /a 200")), line(99, T0 + 15_000, "ERROR boom")];
@@ -52,8 +55,8 @@ it("reads exactly the tapped bin and marks the pattern's lines in it", async () 
   const read = calls.at(-1)!;
   expect(read.tail).toBe("all");
   expect(read.since).toBe(new Date(T0).toISOString());
-  expect(read.until).toBe(new Date(T0 + 29_000 / 30).toISOString());
-  const region = screen.getByRole("region", { name: `Lines ${formatLogSpan(T0, T0 + 29_000 / 30)}` });
+  expect(read.until).toBe("2026-01-02T03:00:00.966999999Z");
+  const region = screen.getByRole("region", { name: `Lines ${formatLogSpan(T0, T0 + 966)}` });
   expect(within(region).getByText("GET /a 200").closest("li")?.hasAttribute("data-match")).toBe(true);
   expect(within(region).getByText("worker tick").closest("li")?.hasAttribute("data-match")).toBe(false);
 });
@@ -84,4 +87,63 @@ it("shows a density bin's time and counts on hover", async () => {
   expect(screen.queryByText(label)).toBeNull();
   await userEvent.setup().hover(bin);
   expect(screen.getByText(label).getAttribute("aria-hidden")).toBe("true");
+});
+
+it("bounds every bin by exactly the milliseconds the fold counted in it", () => {
+  for (const [first, last] of [[T0, T0 + 29_000], [T0, T0 + 1_000], [T0, T0 + 7], [T0, T0]] as const) {
+    const bounds = Array.from({ length: 30 }, (_, i) => binBounds(i, first, last));
+    expect(bounds[0]!.start).toBe(first);
+    expect(bounds[29]!.end).toBe(last + 1);
+    for (let t = first; t <= last; t++) {
+      const i = binIndex(t, first, last);
+      expect(bounds[i]!.start <= t && t < bounds[i]!.end).toBe(true);
+    }
+    for (let i = 1; i < 30; i++) expect(bounds[i]!.start).toBe(bounds[i - 1]!.end);
+  }
+});
+
+const head = { id: "one", ts: "2026-01-02T03:04:05.000Z", service: "web", level: "error" as const, message: "ERROR failure" };
+it("lets the final bin's read reach the producer's nanoseconds of its last millisecond", async () => {
+  setAppLocale("en-US");
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(head.ts) + 60_000);
+  const demo = createDemoAdapter(), fixture = logFixture();
+  renderWithApp(<PatternMode kind="container" id="0~example" select={() => {}} />, { ...demo, readLogs: fixture.owner.readLogs });
+  await act(settleLogs);
+  act(() => { fixture.sockets[0]!.send({ seq: 1, service: "web", timestamp: head.ts, message: "ERROR failure" }); fixture.sockets[0]!.send({ seq: 2, service: "web", timestamp: "2026-01-02T03:04:35.000900000Z", message: "ERROR failure" }); fixture.sockets[0]!.disconnect(); fixture.flush(); });
+  await act(settleLogs); act(fixture.flush);
+  await userEvent.setup().click(within(strips()[0]!).getAllByRole("button").at(-1)!);
+  await act(settleLogs);
+  const query = new URL(fixture.urls.at(-1)!).searchParams;
+  expect(query.get("until")).toBe("2026-01-02T03:04:35.000999999Z");
+  expect(query.get("since")! > "2026-01-02T03:04:05.000Z").toBe(true);
+});
+
+it("states how many lines a capped bin read actually shows", async () => {
+  setAppLocale("en-US");
+  const fold = new PatternFold(); fold.add(head);
+  const demo = createDemoAdapter(), fixture = logFixture();
+  renderWithApp(<PatternSlice kind="container" id="0~example" pattern={fold.snapshot()[0]!} slice={{ start: Date.parse(head.ts), end: Date.parse(head.ts) + 1000 }} close={() => {}} />, { ...demo, readLogs: fixture.owner.readLogs });
+  await act(settleLogs);
+  act(() => { fixture.sockets[0]!.send({ seq: 1, timestamp: head.ts, message: "x".repeat(600 * 1024) }); fixture.sockets[0]!.send({ seq: 2, timestamp: head.ts, message: "x".repeat(600 * 1024) }); });
+  await act(settleLogs);
+  expect(screen.getByText("Read limit reached: showing the first line of this period.")).toBeDefined();
+});
+
+it("marks the continuation lines the fold counts in the pattern, per source", async () => {
+  setAppLocale("en-US");
+  const lines: LogLine[] = [
+    { ...head, id: "lead", service: "api", message: "    at orphan (lead.js:1)" },
+    head,
+    { ...head, id: "api", service: "api", message: "INFO other" },
+    { ...head, id: "two", message: "    at worker (entry.js:42)" },
+    { ...head, id: "three", service: "api", message: "    at api (api.js:7)" },
+  ];
+  const fold = new PatternFold(); for (const l of lines.slice(1)) fold.add(l);
+  const pattern = fold.snapshot().find((row) => row.key.startsWith("ERROR"))!;
+  expect(pattern.count).toBe(2);
+  const demo = createDemoAdapter();
+  renderWithApp(<PatternSlice kind="container" id="example" pattern={pattern} slice={{ start: Date.parse(head.ts), end: Date.parse(head.ts) + 1000 }} close={() => {}} />, { ...demo, readLogs: async (_ref, _options, sink) => { sink(lines); return { reason: "end", lines: lines.length, bytes: 80 }; } });
+  await act(settleLogs);
+  const matched = (text: string) => screen.getByText(text).closest("li")!.hasAttribute("data-match");
+  expect([matched("ERROR failure"), matched("at worker (entry.js:42)"), matched("at api (api.js:7)"), matched("at orphan (lead.js:1)")]).toEqual([true, true, false, false]);
 });

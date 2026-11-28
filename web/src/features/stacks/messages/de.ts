@@ -168,7 +168,7 @@ export const deStacks: typeof enStacks = {
       "sliceTitle": "Zeilen {span}",
       "sliceClose": "Schließen",
       "sliceReading": "Zeilen dieses Abschnitts werden gelesen…",
-      "sliceCapped": "Die ersten {count, number} Zeilen dieses Abschnitts werden angezeigt.",
+      "sliceCapped": "Leselimit erreicht: {count, plural, =0 {schon die erste Zeile dieses Abschnitts passt nicht hinein} one {die erste Zeile dieses Abschnitts wird angezeigt} other {die ersten # Zeilen dieses Abschnitts werden angezeigt}}.",
       "sliceEmpty": "Keine Zeilen in diesem Abschnitt.",
       "fallback": "Keine geladenen Live-Zeilen passen zu diesem Muster. Beispiele aus dem Muster-Lesevorgang werden angezeigt.",
       "clear": "Musterfilter entfernen",

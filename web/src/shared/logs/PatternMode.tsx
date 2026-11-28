@@ -15,7 +15,7 @@ import { BinStrip } from "./BinStrip";
 import { formatLogSpan } from "./log-time";
 import { PatternSlice, type SliceTarget } from "./PatternSlice";
 import { usePatternRead, type PatternRange } from "./use-pattern-read";
-import type { LogPattern } from "./patterns";
+import { binBounds, type LogPattern } from "./patterns";
 
 export function LogModeToggle({ mode, onChange }: { mode: "raw" | "patterns"; onChange: (mode: "raw" | "patterns") => void }) {
   const t = useTranslations("stacks.logs.patterns");
@@ -47,7 +47,6 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
   const count = rows.filter((row) => !row.other).length;
   const visible = rows.filter((row) => filter === "all" || row.level === "error" || row.level === "warn").slice(0, 200);
   const first = view?.first ? Date.parse(view.first) : NaN, last = view?.last ? Date.parse(view.last) : NaN;
-  const width = Math.max(1, last - first) / 30;
   const draftSince = Date.parse(draft.from), draftUntil = Date.parse(draft.to);
   const draftValid = Number.isFinite(draftSince) && Number.isFinite(draftUntil) && draftSince < draftUntil;
   const choose = (value: string) => {
@@ -82,10 +81,10 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
         {row.other ? <span>{t("other")}</span> : <button type="button" className="min-w-0 break-all text-left font-mono underline" onClick={() => select(row)}>{row.key}</button>}
       </div>
       <BinStrip className="mt-6 h-8" label={t("distribution")} bins={row.bins.map((bin, i) => {
-        const start = first + i * width, end = i === 29 ? last : first + (i + 1) * width;
+        const { start, end } = binBounds(i, first, last);
         const selected = slice?.row === rowId(row) && slice.start === start;
         return { tone: bin ? "bg-primary" : "bg-muted", height: bin ? bin / Math.max(1, ...row.bins) : 0, selected,
-          label: t("binHint", { span: formatLogSpan(start, end), count: bin }),
+          label: t("binHint", { span: formatLogSpan(start, end - 1), count: bin }),
           onSelect: bin && Number.isFinite(first) ? () => setSlice(selected ? undefined : { row: rowId(row), start, end }) : undefined };
       })} />
       {slice?.row === rowId(row) && <PatternSlice kind={kind} id={id} pattern={row} slice={slice} close={() => setSlice(undefined)} />}

@@ -32,6 +32,25 @@ export function patternKey(line: Pick<LogLine, "message">): string {
     .replace(/\b(?:0x)?[0-9a-f]{8,}\b/gi, "<hex>");
   return (json ? shape : shape.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, "<quoted>")).replace(/\b\d+(?:\.\d+)?\b/g, "<number>");
 }
+/** The fold's bin of a millisecond timestamp inside the covered span `[first, last]`. */
+export function binIndex(time: number, first: number, last: number): number {
+  return Math.min(29, Math.floor((time - first) / Math.max(1, last - first) * 30));
+}
+/**
+ * Integer millisecond bounds of bin `i`: `start` is its first millisecond, `end` the first millisecond
+ * after it, so every timestamp the fold counted in the bin satisfies `start <= t < end`.
+ */
+export function binBounds(i: number, first: number, last: number): { start: number; end: number } {
+  const lowest = (bin: number) => {
+    if (bin <= 0) return first;
+    if (bin >= 30) return last + 1;
+    let t = Math.ceil(first + bin * Math.max(1, last - first) / 30);
+    while (t > first && binIndex(t - 1, first, last) >= bin) t--;
+    while (t <= last && binIndex(t, first, last) < bin) t++;
+    return t;
+  };
+  return { start: lowest(i), end: lowest(i + 1) };
+}
 /** A live line belongs to a pattern when its shape and its level both match; the level keeps info and error lines of one shape apart. */
 export function matchesPattern(line: Pick<LogLine, "message">, pattern: Pick<LogPattern, "key" | "level">): boolean {
   return patternKey(line) === pattern.key && classifyLevel(stripAnsi(line.message)) === pattern.level;
@@ -87,8 +106,21 @@ export class PatternFold {
   snapshot(): LogPattern[] {
     return [...this.patterns.values(), ...(this.other ? [this.other] : [])].map(({ times, ...row }) => {
       const bins = Array<number>(30).fill(0);
-      for (const time of times) bins[Math.min(29, Math.floor((time - this.first) / Math.max(1, this.last - this.first) * 30))]!++;
+      for (const time of times) bins[binIndex(time, this.first, this.last)]!++;
       return { ...row, samples: [...row.samples], bins };
     }).sort((a, b) => b.count - a.count);
   }
+}
+/** Lines of the pattern as the fold counts them: matching heads plus the continuation lines that follow
+ * them in the same source. Continuation lines before the first head of their source in the slice stay unmarked. */
+export function patternMembers(lines: readonly LogLine[], pattern: LogPattern): Set<string> {
+  const members = new Set<string>(), heads = new Map<string, boolean>();
+  if (pattern.other) return members;
+  for (const line of lines) {
+    const head = patternKey(line) !== "";
+    const member = head ? matchesPattern(line, pattern) : heads.get(line.service) ?? false;
+    if (head) heads.set(line.service, member);
+    if (member) members.add(line.id);
+  }
+  return members;
 }
