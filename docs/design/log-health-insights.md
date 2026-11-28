@@ -211,12 +211,19 @@ Break map S2:
 - **Reading.** Selecting Patterns starts `readLogs` with:
   - window 1 h / 24 h / 7 d (default 24 h) as `since`, or a custom range from the browser's date
     and time inputs as `since` and `until` (K-6);
+  - a line limit chosen on the lines badge: 10,000, 50,000 or 100,000 lines (default and maximum
+    100,000; K-8). The limit costs browser time, transfer and Docker log reading, but no hub or agent
+    memory, because records pass through one at a time;
   - `tail: 100000`, so Docker returns the newest lines inside the window. For a stack, compose applies
     `tail` per container, so a stack read shows the time span it actually covered. It does not claim
     to hold the globally newest lines;
   - `maxLines: 100000` and `maxBytes: 20 MiB`.
 
-  Leaving the mode or the page aborts the read.
+  Leaving the mode or the page aborts the read. A complete or capped result is remembered per
+  window and limit while the app runs (at most eight; K-8), so switching back shows it at once and
+  "Read again" refreshes only the shown window. Interrupted or failed reads are not remembered. The
+  key carries the log and identity generations, so another session or viewer never sees a
+  remembered result. Only folded patterns are kept, never raw lines.
 - **Folding.**
   - Continuation lines are lines that start with whitespace, `at `, `Caused by`, `Traceback` or
     `File "`. One counts as part of the last head line of the same source: the service in a stack,

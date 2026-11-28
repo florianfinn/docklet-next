@@ -8,13 +8,15 @@ import { useState } from "react";
 import { useTranslations } from "use-intl";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { formatBytes } from "@/domain/format";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/shared/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
 import { Input } from "@/shared/ui/input";
 import { Spinner } from "@/shared/ui/spinner";
 import { BinStrip } from "./BinStrip";
 import { formatLogSpan } from "./log-time";
 import { PatternSlice, type SliceTarget } from "./PatternSlice";
-import { usePatternRead, type PatternRange } from "./use-pattern-read";
+import { PATTERN_LIMITS, usePatternRead, type PatternRange } from "./use-pattern-read";
 import { binBounds, type LogPattern } from "./patterns";
 
 export function LogModeToggle({ mode, onChange }: { mode: "raw" | "patterns"; onChange: (mode: "raw" | "patterns") => void }) {
@@ -39,10 +41,13 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
   const [draft, setDraft] = useState(() => ({ from: localInput(Date.now() - 86_400_000), to: localInput(Date.now()) }));
   const [custom, setCustom] = useState<PatternRange>();
   const [filter, setFilter] = useState("all");
-  const [retry, setRetry] = useState(0);
+  const [limit, setLimit] = useState<number>(PATTERN_LIMITS.at(-1)!);
+  // "Read again" refreshes only the shown window; other remembered windows keep their result.
+  const [retries, setRetries] = useState<Record<string, number>>({});
   const [slice, setSlice] = useState<{ row: string } & SliceTarget>();
   const range: PatternRange = window === "custom" && custom ? custom : { hours: Number(window === "custom" ? "24" : window) };
-  const view = usePatternRead(kind, id, range, retry);
+  const shownWindow = JSON.stringify([range, limit]);
+  const view = usePatternRead(kind, id, range, retries[shownWindow] ?? 0, limit);
   const rows = view?.rows ?? [];
   const count = rows.filter((row) => !row.other).length;
   const visible = rows.filter((row) => filter === "all" || row.level === "error" || row.level === "warn").slice(0, 200);
@@ -58,7 +63,7 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
     <div className="flex flex-wrap gap-2">
       <SegmentedToggle value={window} onChange={choose} label={t("window")} fit="content" options={[...PRESETS.map((value) => ({ value, label: t(`hours${value}`) })), { value: "custom", label: t("custom") }]} />
       <SegmentedToggle value={filter} onChange={setFilter} label={t("filter")} fit="content" options={[{ value: "all", label: t("all") }, { value: "warnings", label: t("warnings") }]} />
-      <Button variant="outline" size="sm" onClick={() => { setSlice(undefined); setRetry((n) => n + 1); }}>{t("retry")}</Button>
+      <Button variant="outline" size="sm" onClick={() => { setSlice(undefined); setRetries((r) => ({ ...r, [shownWindow]: (r[shownWindow] ?? 0) + 1 })); }}>{t("retry")}</Button>
     </div>
     {window === "custom" && <div className="flex flex-wrap items-end gap-2">
       <label className="grid gap-1 text-xs">{t("from")}<Input type="datetime-local" value={draft.from} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))} /></label>
@@ -67,7 +72,19 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
       {!draftValid && <p className="text-xs text-destructive">{t("invalidRange")}</p>}
     </div>}
     <div role="status" className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="rounded-full bg-primary/15 px-2.5 py-0.5 font-medium text-primary">{t("lines", { lines: view?.lines ?? 0 })}</span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" aria-label={t("limitLabel", { lines: view?.lines ?? 0, limit })} className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2.5 py-0.5 font-medium text-primary">
+            {t("lines", { lines: view?.lines ?? 0 })}<ChevronDown className="size-3.5" aria-hidden="true" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuLabel>{t("limit")}</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={String(limit)} onValueChange={(value) => { setSlice(undefined); setLimit(Number(value)); }}>
+            {PATTERN_LIMITS.map((value) => <DropdownMenuRadioItem key={value} value={String(value)}>{t("limitOption", { count: value })}</DropdownMenuRadioItem>)}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <span className="rounded-full bg-info/15 px-2.5 py-0.5 font-medium text-info">{formatBytes(view?.bytes ?? 0)}</span>
       <span className="rounded-full bg-success/15 px-2.5 py-0.5 font-medium text-success">{Number.isFinite(first) && Number.isFinite(last) ? formatLogSpan(first, last) : t("noSpan")}</span>
     </div>
