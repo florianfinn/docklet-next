@@ -49,7 +49,8 @@ export function PatternSlice({ kind, id, pattern, slice, close }: { kind: "stack
   const firstMatch = current?.result ? lines.find(marked)?.id : undefined;
   useEffect(() => {
     const box = list.current, row = firstMatch ? document.getElementById(`pattern-slice-${firstMatch}`) : null;
-    if (box && row) box.scrollTop = row.offsetTop - box.offsetTop;
+    // The list is positioned, so it is the rows' offset parent and offsetTop is already list-relative.
+    if (box && row) box.scrollTop = row.offsetTop;
   }, [firstMatch]);
   const millis = slice.end - slice.start < 60_000, span = formatLogSpan(slice.start, slice.end - 1);
   return <div className="mt-2 grid gap-2 rounded-md border bg-muted/40 p-2" role="region" aria-label={t("sliceTitle", { span })}>

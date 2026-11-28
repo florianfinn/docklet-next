@@ -147,3 +147,17 @@ it("marks the continuation lines the fold counts in the pattern, per source", as
   const matched = (text: string) => screen.getByText(text).closest("li")!.hasAttribute("data-match");
   expect([matched("ERROR failure"), matched("at worker (entry.js:42)"), matched("at api (api.js:7)"), matched("at orphan (lead.js:1)")]).toEqual([true, true, false, false]);
 });
+
+it("scrolls the list to its first marked line", async () => {
+  setAppLocale("en-US");
+  const offsets = vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+    return this.tagName === "OL" ? 300 : this.dataset.match !== undefined ? 500 : 0;
+  });
+  const lines: LogLine[] = [{ ...head, id: "a", message: "INFO other" }, head];
+  const fold = new PatternFold(); fold.add(head);
+  const demo = createDemoAdapter();
+  renderWithApp(<PatternSlice kind="container" id="example" pattern={fold.snapshot()[0]!} slice={{ start: Date.parse(head.ts), end: Date.parse(head.ts) + 1000 }} close={() => {}} />, { ...demo, readLogs: async (_ref, _options, sink) => { sink(lines); return { reason: "end", lines: 2, bytes: 40 }; } });
+  await act(settleLogs);
+  expect(screen.getByRole("list").scrollTop).toBe(500);
+  offsets.mockRestore();
+});
