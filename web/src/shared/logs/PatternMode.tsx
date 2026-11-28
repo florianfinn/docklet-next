@@ -44,7 +44,7 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
     {(view?.result?.reason === "cap-lines" || view?.result?.reason === "cap-bytes") && <p>{t("capped")}</p>}
     {count > 2000 && <p>{t("variable", { count })}</p>}
     <p className="text-xs text-muted-foreground">{t("top")}</p>
-    {visible.map((row) => <div key={row.other ? "other" : row.key} className="rounded border p-2 text-sm">
+    {visible.map((row) => <div key={row.other ? "other" : `${row.level}\u0001${row.key}`} className="rounded border p-2 text-sm">
       <div className="flex flex-wrap gap-2"><span>{t(row.level)}</span><strong>×{row.count}</strong>
         {row.other ? <span>{t("other")}</span> : <button type="button" className="min-w-0 break-all text-left font-mono underline" onClick={() => select(row)}>{row.key}</button>}
       </div>
