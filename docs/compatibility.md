@@ -3,7 +3,7 @@ Source: docklet-next/issues/363
 Revision: b11b3e70e671dd3c862b966b1d279251842c7319
 Retrieved: 2026-11-09
 License: Apache-2.0
-Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472); agent contract 21 (#568); agent contract 22 (#586); agent contract 23 (#602); agent contract 24 (#626); agent contract 25 (#663).
+Deviations: Original release compatibility and supported-layout reference; agent contract 19 and module boundary (#472); agent contract 21 (#568); agent contract 22 (#586); agent contract 23 (#602); agent contract 24 (#626); agent contract 25 (#663); agent contract 26 (#681).
 -->
 
 # Compatibility
@@ -31,14 +31,14 @@ that external Compose version. Updates require the supported layout described in
 
 | Boundary | This release |
 | --- | --- |
-| Agent contract advertised by hub and agent (`AgentHubVersion`) | `25` |
+| Agent contract advertised by hub and agent (`AgentHubVersion`) | `26` |
 | Minimum accepted agent contract (`MinimumAgentVersion`) | `18` |
 | Edge protocol marker | `edge-protocol/1` |
 | Minimum Edge marker value | `1` |
 
 Contract numbers are wire-contract versions, not product SemVer. Agents with
 contracts older than 18 cannot become compatible hosts; the hub reports
-`update-required` and `agent.update-required`. Contracts 18 to 25 must also have
+`update-required` and `agent.update-required`. Contracts 18 to 26 must also have
 their expected schema fingerprints. Health/version reads and the agent update
 recovery routes remain available with authentication. This is the first release
 compatibility boundary for both Direct and Edge agents.
