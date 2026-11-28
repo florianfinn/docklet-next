@@ -143,6 +143,11 @@ Break map S1:
   `backend/internal/container/service_streams.go`, `backend/internal/project/service_workspace.go`,
   `projectdetails.Logs`, `backend/pkg/projects/cmds.go` and their test fakes. Edge forwards the raw
   query unchanged (`edge/ws_proxy.go`), and Direct proxies the raw query as well.
+- **Finite reads are lossless.** A non-following read (`follow=false`) is served on its own
+  connection, not through the shared live hub. The live hub drops a slow viewer to protect the
+  others. A finite read writes every record in order, and a slow reader slows the Docker read
+  instead. The read ends with a normal close after the last record. The candidate run on b80bae99
+  showed the loss: 128 of 50,000 lines, then close 1006.
 - **Agent versions.** Agent updates are mandatory (maintainer, 2026-11-28), so no older-agent path
   is designed or tested. The web filter in `readLogs` only keeps the window invariant.
 
