@@ -69,6 +69,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       condition: reason ? { containerId: svc.containerId!, condition: reason === "health" ? "unhealthy" : "down", reason, exitCode: reason === "oom" ? 137 : reason === "exit" ? 1 : undefined, restarts10m: reason === "restart-loop" ? 12 : undefined, sampledAt: new Date().toISOString() } : undefined };
   }) }));
   if (options.hosts) db.hosts = structuredClone([...options.hosts]);
+  const logHealthInsights = options.logHealthInsights;
   const composeTarget = (stack: Stack): ComposeTarget => ({ project: stack.id, services: stack.services.map((s) => ({ name: s.name, image: imageRef(s.image) })), hostName: db.host(stack.hostId)?.name ?? stack.hostId });
   const runner = new ActionRunner(options.seedRuns ?? SEED_RUNS, (run) => {
     const stack = run.stackId ? db.stack(run.stackId) : undefined;
@@ -172,7 +173,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     updateSignIn: async (input) => { db.settings.auth.mode = input.mode; return { id: "demo-admin", username: db.settings.auth.local.username, requiresPasswordChange: false, isAdmin: true, assignments: [] }; },
     updateMyLocale: async (locale) => ({ id: "demo-admin", username: db.settings.auth.local.username, locale, requiresPasswordChange: false, isAdmin: true, assignments: [] }),
     ...createDemoHubBackups(options),
-    ...createDemoHistory(() => db.hosts.map((h) => h.id)),
+    ...createDemoHistory(() => db.hosts.map((h) => h.id), () => db.containers(), options.logHealthInsights),
     ...createDemoContainerHealth(() => db.containers()),
     ...serviceWidgets(),
     ...uiPreferences(),
@@ -614,6 +615,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       let rows = logs.snapshot(ref.kind === "stack" ? ref.id : c?.stackId ?? `container:${ref.id}`);
       if (c?.serviceName) rows = rows.filter((l) => l.service === c.serviceName);
       rows = rows.filter((l) => (!options.since || Date.parse(l.ts) >= Date.parse(options.since)) && (!options.until || Date.parse(l.ts) <= Date.parse(options.until)));
+      if (logHealthInsights && c && options.until && options.since && options.tail === "all") rows = [...rows, { id: `disruption:${c.id}`, ts: new Date(Math.max(Date.parse(options.since), Math.min(Date.now(), Date.parse(options.until)))).toISOString(), service: c.serviceName ?? c.name, level: "error", message: "ERROR synthetic overlapping disruption" }];
       if (typeof options.tail === "number") rows = options.tail === 0 ? [] : rows.slice(-options.tail);
       const kept = []; let bytes = 0;
       let reason: import("../api").LogReadResult["reason"] = "end";

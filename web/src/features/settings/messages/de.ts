@@ -143,6 +143,7 @@ export const deSettings: typeof enSettings = {
     languageValue: "Deutsch (weitere Sprachen später)",
   },
   appearance: {
+    disruptions: "Störungen in der Navigation anzeigen",
     theme: "Farbschema",
     dark: "Dunkel",
     light: "Hell",

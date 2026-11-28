@@ -18,6 +18,7 @@ import { RouteError } from "./shell/RouteError";
 import { AppShell } from "./shell/AppShell";
 import { navigationForRoutes } from "./shell/nav-items";
 
+const DisruptionsPage = lazy(() => import("@/features/disruptions/DisruptionsPage"));
 const DashboardPage = lazy(() => import("@/features/dashboard/DashboardPage"));
 const UserDashboard = lazy(() => import("@/features/dashboard/UserDashboard"));
 const StacksPage = lazy(() => import("@/features/stacks/overview/StacksPage"));
@@ -63,6 +64,7 @@ const shellRoutes: RouteObject[] = [
     errorElement: <RouteError />,
     children: [
       { index: true, element: <LandingRoute /> },
+      { path: "disruptions", element: <DisruptionsPage /> },
       { path: "dashboard", element: <DashboardRoute /> },
       { path: "stacks", element: <StacksPage /> },
       { path: "stacks/new", element: <StackPage /> },

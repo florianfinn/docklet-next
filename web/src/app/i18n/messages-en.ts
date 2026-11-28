@@ -1,3 +1,4 @@
+import { enDisruptions } from "@/features/disruptions/messages/en";
 import { enConnections } from "@/features/connections/messages/en";
 import { enTailnetContract } from "@/data/messages/tailnet-en";
 import { enProxyContract } from "@/data/messages/proxy-en";
@@ -48,6 +49,7 @@ export const enMessages = {
   lab: import.meta.env.DEV ? enLab : ({} as typeof enLab),
   proxyLab: import.meta.env.DEV ? enProxy : ({} as typeof enProxy),
   visual: enVisual,
+  disruptions: enDisruptions,
   dashboard: enDashboard,
   proxyContract: enProxyContract,
   connections: enConnections,

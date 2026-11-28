@@ -17,6 +17,7 @@ import {
 import { matchRoutes, type RouteObject } from "react-router";
 
 export type NavKey =
+  | "disruptions"
   | "dashboard"
   | "stacks"
   | "containers"
@@ -50,6 +51,7 @@ export const NAV: NavGroup[] = [
   {
     key: "operate",
     items: [
+      { key: "disruptions", to: "/disruptions", icon: BellRing },
       { key: "dashboard", to: "/dashboard", icon: LayoutDashboard },
       { key: "stacks", to: "/stacks", icon: Layers },
       { key: "containers", to: "/containers", icon: Boxes },

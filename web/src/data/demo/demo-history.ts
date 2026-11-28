@@ -77,8 +77,15 @@ export function demoCapacity(hostIds: readonly string[], now = Date.now()): Host
   });
 }
 
-export function createDemoHistory(hostIds: () => readonly string[]): HistoryApi {
+export function createDemoHistory(hostIds: () => readonly string[], containers: () => { name: string; hostId: string }[] = () => [], insights = false): HistoryApi {
   return {
+    getHostContainerHistory: async (hostId, range) => ({
+      hostId, range, truncated: false,
+      containers: insights ? containers().filter((c) => c.hostId === hostId).slice(0, 1).map((c) => {
+        const buckets = demoHistory(`disruption:${c.name}`, range).buckets.map((b, i, all) => ({ ...b, state: i === all.length - 1 ? (hostIds().indexOf(hostId) % 2 ? "unhealthy" as const : "down" as const) : "running" as const, minutes: { running: i === all.length - 1 ? 0 : HISTORY_BUCKETS[range].minutes, down: i === all.length - 1 && hostIds().indexOf(hostId) % 2 === 0 ? 1 : 0, unhealthy: i === all.length - 1 && hostIds().indexOf(hostId) % 2 !== 0 ? 1 : 0, stopped: 0 } }));
+        return { name: c.name, buckets };
+      }) : [],
+    }),
     getContainerHistory: async ({ hostId, name }, range) => demoHistory(`c:${hostId}:${name}`, range),
     getStackHistory: async (stackId, range) => demoHistory(`s:${stackId}`, range),
     getCapacity: async () => demoCapacity(hostIds()),

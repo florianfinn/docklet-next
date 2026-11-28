@@ -1,3 +1,5 @@
+import { sidebarStore } from "@/shared/preferences/sidebar-store";
+import { useStore } from "@/shared/lib/store";
 import { useModuleStates } from "@/data/use-module";
 import { Activity } from "lucide-react";
 import { NavLink, useLocation } from "react-router";
@@ -68,6 +70,7 @@ export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
   const t = useTranslations("shell");
   const tc = useTranslations("comingSoon");
   const ta = useTranslations("activity");
+  const showDisruptions = useStore(sidebarStore, (s) => s.disruptions);
   const counts = useNavCounts();
   const running = useRunningActionCount();
   const { pathname } = useLocation();
@@ -129,7 +132,7 @@ export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
-        {effectiveNavigation(navigation, backupAccess.data?.read === true, modules.data).map((group) => (
+        {effectiveNavigation(navigation.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "disruptions" || showDisruptions) })), backupAccess.data?.read === true, modules.data).map((group) => (
           <SidebarGroup key={group.key}>
             <SidebarGroupLabel className="text-[11px] font-medium tracking-wide">
               {t(`groups.${group.key}`)}

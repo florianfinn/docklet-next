@@ -142,6 +142,7 @@ export const enSettings = {
     languageValue: "German (more languages later)",
   },
   appearance: {
+    disruptions: "Show Disruptions in the navigation",
     theme: "Color scheme",
     dark: "Dark",
     light: "Light",
