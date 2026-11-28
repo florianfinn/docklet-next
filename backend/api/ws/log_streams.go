@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; bounded producer records and optional metadata; classify daemon errors through errdefs predicates. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Local module namespace; functional cut: removed Swarm; bounded producer records and optional metadata; classify daemon errors through errdefs predicates. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M47 #693/#694: `until` bound and lossless finite reads.
 
 package ws
 
@@ -41,8 +41,8 @@ type wsLogStream struct {
 	seq             atomic.Uint64
 }
 
-func buildLogStreamKeyInternal(envID, kind, resourceID, format string, batched, follow bool, tail, since string, timestamps bool) string {
-	encoded, _ := json.Marshal([]any{envID, kind, resourceID, format, batched, follow, tail, since, timestamps})
+func buildLogStreamKeyInternal(envID, kind, resourceID, format string, batched, follow bool, tail, since, until string, timestamps bool) string {
+	encoded, _ := json.Marshal([]any{envID, kind, resourceID, format, batched, follow, tail, since, until, timestamps})
 	return string(encoded)
 }
 
@@ -114,6 +114,7 @@ func (h *WebSocketHandler) markLogStreamDoneInternal(key string, stream *wsLogSt
 type logStreamParams struct {
 	tail       string
 	since      string
+	until      string
 	format     string
 	follow     bool
 	timestamps bool
@@ -125,6 +126,7 @@ func parseLogStreamParamsInternal(c *echo.Context) logStreamParams {
 		follow:     cmp.Or(c.QueryParam("follow"), "true") == "true",
 		tail:       cmp.Or(c.QueryParam("tail"), "100"),
 		since:      c.QueryParam("since"),
+		until:      c.QueryParam("until"),
 		timestamps: c.QueryParam("timestamps") == "true",
 		format:     cmp.Or(c.QueryParam("format"), "text"),
 		batched:    c.QueryParam("batched") == "true",
@@ -146,7 +148,7 @@ func (h *WebSocketHandler) serveLogStreamInternal(
 		return
 	}
 
-	streamKey := buildLogStreamKeyInternal(c.Param("id"), kind, resourceID, params.format, params.batched, params.follow, params.tail, params.since, params.timestamps)
+	streamKey := buildLogStreamKeyInternal(c.Param("id"), kind, resourceID, params.format, params.batched, params.follow, params.tail, params.since, params.until, params.timestamps)
 	stream := h.getOrCreateLogStreamInternal(streamKey, func(onEmpty func(*wsLogStream)) *wsLogStream {
 		return hubBuilder(streamKey, onEmpty)
 	})
@@ -179,6 +181,7 @@ func (h *WebSocketHandler) serveLogStreamInternal(
 //	@Param			follow		query	bool	false	"Follow log output"						default(true)
 //	@Param			tail		query	string	false	"Number of lines to show from the end"	default(100)
 //	@Param			since		query	string	false	"Show logs since timestamp"
+//	@Param			until		query	string	false	"Show logs before timestamp"
 //	@Param			timestamps	query	bool	false	"Show timestamps"				default(false)
 //	@Param			format		query	string	false	"Output format (text or json)"	default(text)
 //	@Param			batched		query	bool	false	"Batch log messages"			default(false)
@@ -195,6 +198,10 @@ func (h *WebSocketHandler) ProjectLogs(c *echo.Context) error {
 	}
 
 	params := parseLogStreamParamsInternal(c)
+	if !params.follow {
+		h.serveFiniteLogStreamInternal(c, systemtypes.WSKindProjectLogs, projectID, "project", params, streamLogs, normalizeProjectLogMessageInternal, normalizeProjectLogTextInternal)
+		return nil
+	}
 	h.serveLogStreamInternal(c, systemtypes.WSKindProjectLogs, projectID, params, func(streamKey string, onEmpty func(*wsLogStream)) *wsLogStream {
 		return h.startLogHubInternal(
 			streamKey,
@@ -256,7 +263,7 @@ func normalizeProjectLogTextInternal(line string) string {
 func (h *WebSocketHandler) startLogHubInternal(
 	key, resourceID, label string,
 	params logStreamParams,
-	stream func(context.Context, string, chan<- string, bool, string, string, bool) error,
+	stream logStreamer,
 	normalizeJSON func(string) wshub.LogMessage,
 	normalizeText func(string) string,
 	onEmptyHook func(*wsLogStream),
@@ -280,7 +287,7 @@ func (h *WebSocketHandler) startLogSourceInternal(
 	ctx context.Context,
 	key, resourceID, label string,
 	params logStreamParams,
-	stream func(context.Context, string, chan<- string, bool, string, string, bool) error,
+	stream logStreamer,
 	ls *wsLogStream,
 ) <-chan sourceLogLine {
 	lines := make(chan sourceLogLine, 256)
@@ -292,7 +299,18 @@ func (h *WebSocketHandler) startLogSourceInternal(
 			return
 		case <-ls.firstSubscriber:
 		}
+		runLogSourceInternal(ctx, resourceID, label, params, stream, lines, func() { h.markLogStreamDoneInternal(key, ls) })
+	}()
 
+	return lines
+}
+
+type logStreamer func(context.Context, string, chan<- string, bool, string, string, string, bool) error
+
+// runLogSourceInternal streams one source into lines. ended runs when the source ends on its own
+// (the end of a finite read, or a failure before its diagnostic line), never on cancellation.
+func runLogSourceInternal(ctx context.Context, resourceID, label string, params logStreamParams, stream logStreamer, lines chan<- sourceLogLine, ended func()) {
+	{
 		legacy := make(chan string)
 		joined := make(chan struct{})
 		go func() {
@@ -314,7 +332,7 @@ func (h *WebSocketHandler) startLogSourceInternal(
 				return ctx.Err()
 			}
 		})
-		err := stream(sourceCtx, resourceID, legacy, params.follow, params.tail, params.since, params.timestamps)
+		err := stream(sourceCtx, resourceID, legacy, params.follow, params.tail, params.since, params.until, params.timestamps)
 		close(legacy)
 		<-joined
 		if err != nil {
@@ -327,7 +345,7 @@ func (h *WebSocketHandler) startLogSourceInternal(
 			// Server logs retain only a fixed error class; authorized viewers below
 			// receive the bounded upstream diagnostic, which may contain sensitive text.
 			slog.WarnContext(ctx, "log source failed", "kind", kind, "resourceId", resource, "errorCategory", logSourceErrorCategory(err))
-			h.markLogStreamDoneInternal(key, ls)
+			ended()
 			text, cut := docker.BoundLogText("Failed to stream "+label+" logs: "+err.Error(), docker.MaxLogLineBytes)
 			select {
 			case lines <- sourceLogLine{record: docker.LogRecord{Message: text, Truncated: cut}, failure: true}:
@@ -337,11 +355,9 @@ func (h *WebSocketHandler) startLogSourceInternal(
 		}
 
 		if ctx.Err() == nil {
-			h.markLogStreamDoneInternal(key, ls)
+			ended()
 		}
-	}()
-
-	return lines
+	}
 }
 
 func logSourceErrorCategory(err error) string {
@@ -438,6 +454,7 @@ func mapLogLinesInternal[S, T any](ctx context.Context, lines <-chan S, transfor
 //	@Param			follow		query	bool	false	"Follow log output"						default(true)
 //	@Param			tail		query	string	false	"Number of lines to show from the end"	default(100)
 //	@Param			since		query	string	false	"Show logs since timestamp"
+//	@Param			until		query	string	false	"Show logs before timestamp"
 //	@Param			timestamps	query	bool	false	"Show timestamps"				default(false)
 //	@Param			format		query	string	false	"Output format (text or json)"	default(text)
 //	@Param			batched		query	bool	false	"Batch log messages"			default(false)
@@ -454,6 +471,15 @@ func (h *WebSocketHandler) ContainerLogs(c *echo.Context) error {
 	}
 
 	params := parseLogStreamParamsInternal(c)
+	normalizeContainer := func(line string) wshub.LogMessage {
+		msg := normalizeContainerLogMessageInternal(line)
+		msg.ContainerID = containerID
+		return msg
+	}
+	if !params.follow {
+		h.serveFiniteLogStreamInternal(c, systemtypes.WSKindContainerLogs, containerID, "container", params, streamLogs, normalizeContainer, nil)
+		return nil
+	}
 	h.serveLogStreamInternal(c, systemtypes.WSKindContainerLogs, containerID, params, func(streamKey string, onEmpty func(*wsLogStream)) *wsLogStream {
 		return h.startLogHubInternal(
 			streamKey,
@@ -461,11 +487,7 @@ func (h *WebSocketHandler) ContainerLogs(c *echo.Context) error {
 			"container",
 			params,
 			streamLogs,
-			func(line string) wshub.LogMessage {
-				msg := normalizeContainerLogMessageInternal(line)
-				msg.ContainerID = containerID
-				return msg
-			},
+			normalizeContainer,
 			nil,
 			onEmpty,
 		)

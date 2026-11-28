@@ -1,3 +1,7 @@
+import { LogModeToggle, PatternMode, PatternSamples, PatternFilter } from "@/shared/logs/PatternMode";
+import { matchesPattern, type LogPattern } from "@/shared/logs/patterns";
+import { useCollapsedLogs } from "@/shared/logs/use-collapsed-logs";
+import { RepeatButton, LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { useLogKeyboard } from "./use-log-keyboard";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { ArrowDownToLine, Eraser, Pause, Play, Search, WrapText } from "lucide-react";
@@ -6,7 +10,7 @@ import { useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { logGap } from "@/data/log-buffer";
-import { LogDeliveryNotice, LogMessage, LogSource } from "./log-presentation";
+import { LogDeliveryNotice, LogMessage, LogSource, ToolbarHint } from "./log-presentation";
 import { useStackLogs } from "@/data/live";
 import { formatTime } from "@/domain/format";
 import type { LogLevel, Stack } from "@/domain/model";
@@ -37,7 +41,9 @@ function StackLogsView({ stack }: { stack: Stack }) {
   const [params] = useSearchParams();
   const initial = params.get("service");
   const [paused, setPaused] = useState(false);
-  const lines = useStackLogs(stack.id, paused);
+  const [mode, setMode] = useState<"raw" | "patterns">("raw");
+  const [pattern, setPattern] = useState<LogPattern>();
+  const lines = useStackLogs(stack.id, paused || mode === "patterns");
   const [services, setServices] = useState<string[]>(initial && stack.services.some((service) => service.name === initial) ? [initial] : []);
   const [level, setLevel] = useState<LevelFilter>("all");
   const [query, setQuery] = useState("");
@@ -51,19 +57,22 @@ function StackLogsView({ stack }: { stack: Stack }) {
     const q = query.trim().toLowerCase();
     return lines.filter(
       (l) =>
-        !clearedIds.has(l.id) && (logGap(l) !== undefined || (
+        (!pattern || matchesPattern(l, pattern)) && !clearedIds.has(l.id) && (logGap(l) !== undefined || (
         (services.length === 0 || services.includes(l.service)) &&
         (level === "all" || l.level === level) &&
         (!q || l.message.toLowerCase().includes(q) || l.service.toLowerCase().includes(q)))),
     );
-  }, [lines, services, level, query, clearedIds]);
+  }, [lines, services, level, query, clearedIds, pattern]);
 
   const scroller = useRef<HTMLDivElement>(null);
-  const keyboard = useLogKeyboard(shown, follow, setFollow, scroller);
+  const collapsed = useCollapsedLogs(shown);
+  const keyboard = useLogKeyboard(collapsed.rows, follow, setFollow, scroller);
 
   return (
     <Card className="gap-0 overflow-hidden py-0">
       <div className="flex flex-wrap items-center gap-2 border-b p-3">
+        <LogModeToggle mode={mode} onChange={setMode} />
+        {pattern && <PatternFilter clear={() => setPattern(undefined)} />}
         <InputGroup className="w-full sm:w-64">
           <InputGroupAddon>
             <Search />
@@ -72,22 +81,34 @@ function StackLogsView({ stack }: { stack: Stack }) {
         </InputGroup>
         <SegmentedToggle<LevelFilter> value={level} onChange={setLevel} label={t("level")} options={(["all", "info", "warn", "error"] as const).map((l) => ({ value: l, label: t(`levels.${l}`) }))} fit="content" wrap />
         <span className="flex-1" />
-        <Toggle size="sm" variant="outline" pressed={follow} onPressedChange={setFollow} aria-label={t("follow")}>
-          <ArrowDownToLine /> <span className="hidden md:inline">{t("follow")}</span>
-        </Toggle>
-        <Toggle size="sm" variant="outline" pressed={stamps} onPressedChange={setStamps} aria-label={t("timestamps")}>
-          <span className="font-mono text-[11px]">12:00</span>
-        </Toggle>
-        <Toggle size="sm" variant="outline" pressed={wrap} onPressedChange={setWrap} aria-label={t("wrap")}>
-          <WrapText />
-        </Toggle>
-        <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("resume") : t("pause")}>
-          {paused ? <Play /> : <Pause />}
-        </Toggle>
-        <Toggle size="sm" variant="outline" pressed={false} onPressedChange={() => setClearedIds(new Set(lines.map((line) => line.id)))} aria-label={t("clear")}>
-          <Eraser />
-        </Toggle>
+        <ToolbarHint label={t("follow")}>
+          <Toggle size="sm" variant="outline" pressed={follow} onPressedChange={setFollow} aria-label={t("follow")}>
+            <ArrowDownToLine /> <span className="hidden md:inline">{t("follow")}</span>
+          </Toggle>
+        </ToolbarHint>
+        <ToolbarHint label={t("timestamps")}>
+          <Toggle size="sm" variant="outline" pressed={stamps} onPressedChange={setStamps} aria-label={t("timestamps")}>
+            <span className="font-mono text-[11px]">12:00</span>
+          </Toggle>
+        </ToolbarHint>
+        <ToolbarHint label={t("wrap")}>
+          <Toggle size="sm" variant="outline" pressed={wrap} onPressedChange={setWrap} aria-label={t("wrap")}>
+            <WrapText />
+          </Toggle>
+        </ToolbarHint>
+        <ToolbarHint label={paused ? t("resume") : t("pause")}>
+          <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("resume") : t("pause")}>
+            {paused ? <Play /> : <Pause />}
+          </Toggle>
+        </ToolbarHint>
+        <ToolbarHint label={t("clear")}>
+          <Toggle size="sm" variant="outline" pressed={false} onPressedChange={() => setClearedIds(new Set(lines.map((line) => line.id)))} aria-label={t("clear")}>
+            <Eraser />
+          </Toggle>
+        </ToolbarHint>
       </div>
+      {mode === "patterns" ? <PatternMode kind="stack" id={stack.id} select={(row) => { setPattern(row); setMode("raw"); }} /> : <>
+      {pattern && !lines.some((line) => matchesPattern(line, pattern)) && <PatternSamples pattern={pattern} clear={() => setPattern(undefined)} />}
       <div className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2" role="group" aria-label={t("services")}>
         {stack.services.map((s) => {
           const tone = tones.get(s.name) ?? "info";
@@ -115,10 +136,12 @@ function StackLogsView({ stack }: { stack: Stack }) {
           <SimulationBadge />
         </span>
       </div>
+      <div className="flex gap-2 p-2"><ErrorJump jump={keyboard.jump} /></div>
+      <LogDensity lines={shown} byService onSelect={(id) => { collapsed.reveal(id); keyboard.select(id); }} />
       <LogDeliveryNotice lines={lines} paused={paused} />
       <div role="log" aria-live={paused ? "off" : "polite"} className="relative"><p id={keyboard.hintId} className="sr-only">{t("keyboardHint")}</p>
       <div ref={scroller} {...keyboard.region} aria-label={t("title")} className="h-[max(24rem,calc(100dvh-24rem))] overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
-        {shown.map((l) => {
+        {collapsed.rows.map((l) => {
           const tone = tones.get(l.service) ?? "info";
           return (
             <div key={l.id} {...keyboard.row(l.id)} className={cn(keyboard.active === l.id && "bg-muted/30 outline outline-primary", "flex gap-3 px-3 hover:bg-muted/30", LEVEL_CLASS[l.level], wrap ? "whitespace-pre-wrap" : "whitespace-pre")}>
@@ -126,13 +149,14 @@ function StackLogsView({ stack }: { stack: Stack }) {
               <span data-tone={tone} className={cn("shrink-0 text-(--tone) select-none", keyboard.active === l.id ? "whitespace-normal" : "w-28 truncate")}>
                 <LogSource line={l} active={keyboard.active === l.id} />
               </span>
-              <span className="min-w-0"><LogMessage line={l} /></span>
+              <span className="min-w-0"><LogMessage line={l} /><RepeatButton count={collapsed.counts.get(l.id)} expanded={collapsed.expanded.has(l.id)} onClick={() => collapsed.toggle(l.id)} /></span>
             </div>
           );
         })}
       </div>
       {shown.length === 0 && <p className="pointer-events-none absolute inset-x-0 top-0 px-4 py-8 text-center text-muted-foreground">{t("empty")}</p>}
       </div>
+      </>}
     </Card>
   );
 }

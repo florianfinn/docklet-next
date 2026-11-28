@@ -950,7 +950,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     },
     subscribeMetrics: (listener) => principal?.isAdmin === false ? (() => {}) : metrics(listener),
     subscribeLogs: logs.subscribeLogs,
-    subscribeContainerLogs: logs.subscribeContainerLogs,
+    subscribeContainerLogs: logs.subscribeContainerLogs, readLogs: logs.readLogs,
     openContainerShell: (...args) => { invalidateCapabilities(); return shells.open(...args); },
   };
   registerIdentityLifetime(adapter.subscribeChanges, {

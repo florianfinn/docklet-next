@@ -18,6 +18,7 @@ export const deShell: typeof enShell = {
   navigationDescription: "Hauptnavigation",
   groups: { operate: "Betrieb", resources: "Ressourcen", system: "System", modules: "Module", later: "Später" },
   nav: {
+    disruptions: "Störungen",
     dashboard: "Dashboard",
     stacks: "Stacks",
     containers: "Container",

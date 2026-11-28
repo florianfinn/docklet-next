@@ -18,7 +18,7 @@ import (
 
 func TestRuntimeLogsRealWSSlowReaderReleasesProducer(t *testing.T) {
 	joined := make(chan struct{})
-	h := &WebSocketHandler{containerLogStreamer: func(ctx context.Context, _ string, _ chan<- string, _ bool, _, _ string, _ bool) error {
+	h := &WebSocketHandler{containerLogStreamer: func(ctx context.Context, _ string, _ chan<- string, _ bool, _, _, _ string, _ bool) error {
 		defer close(joined)
 		sink := docker.LogSinkFromContext(ctx)
 		record := docker.LogRecord{Message: strings.Repeat("x", 60000), Stream: "stdout"}
@@ -44,7 +44,7 @@ func TestRuntimeLogsRawAndMappedQueuesCancelWhenFull(t *testing.T) {
 	close(ls.firstSubscriber)
 	started := make(chan struct{})
 	joined := make(chan struct{})
-	lines := h.startLogSourceInternal(ctx, "full", "example", "container", logStreamParams{}, func(ctx context.Context, _ string, _ chan<- string, _ bool, _, _ string, _ bool) error {
+	lines := h.startLogSourceInternal(ctx, "full", "example", "container", logStreamParams{}, func(ctx context.Context, _ string, _ chan<- string, _ bool, _, _, _ string, _ bool) error {
 		defer close(joined)
 		close(started)
 		sink := docker.LogSinkFromContext(ctx)

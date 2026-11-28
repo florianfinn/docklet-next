@@ -5,6 +5,7 @@
 // Deviations: Connected first-run identity flow for #69. See web/PROVENANCE.md. M17 #335 #336 runtime history sections. M17 runtime history transport wiring. M17 hub service widgets replace the simulated widget configuration. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M23 #435: bounded Dashboard events window and timeline slots. M23 #435: Dashboard security from active counts (AUTO-6). M26 #462: bounded shell counts and raw inventory ownership. M39 #612: host scan run summaries query.
 
 export const queryKeys = {
+  hostContainerHistory: (hostId: string, range: string) => ["history", "host-containers", hostId, range] as const,
   authMode: ["auth-mode"],
   authConfiguration: ["auth-configuration"],
   currentUser: ["current-user"],

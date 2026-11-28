@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original shared, bounded WS log lifetime owner.
 
+import { createLogReads } from "./log-read";
 import type { LogLine } from "@/domain/model";
 import type { CapabilityDescriptor, ResourceRef } from "../capability";
 import { gapLine, LogBuffer, registerLogLifetime, setLogDelivery, type LogStatus } from "../log-buffer";
@@ -46,6 +47,7 @@ const HEALTHY_CONNECTION_MS = 30000;
 const DELAYS = [1000, 2000, 5000, 10000, 30000];
 
 export function createRuntimeLogs(options: Options) {
+  const reads = createLogReads(options);
   const channels = new Map<string, Channel>();
   const history = new Map<string, true>();
   const lifetimeListeners = new Set<() => void>();
@@ -186,8 +188,9 @@ export function createRuntimeLogs(options: Options) {
   const lifetime = { version: () => generation, listen: (notify: () => void) => { lifetimeListeners.add(notify); return () => { lifetimeListeners.delete(notify); }; } };
   registerLogLifetime(subscribeLogs, lifetime); registerLogLifetime(subscribeContainerLogs, lifetime);
   return {
-    subscribeLogs, subscribeContainerLogs,
+    subscribeLogs, subscribeContainerLogs, readLogs: reads.readLogs,
     reset() {
+      reads.reset();
       ++generation;
       for (const ch of channels.values()) {
         ch.active = false; close(ch); cancelFrame(ch); ch.buffer.clear();

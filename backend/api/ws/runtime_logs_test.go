@@ -27,8 +27,8 @@ import (
 )
 
 type logSourceOptions struct {
-	resource, tail, since string
-	follow, timestamps    bool
+	resource, tail, since, until string
+	follow, timestamps           bool
 }
 
 func logServer(t *testing.T, h *WebSocketHandler, allow bool, decorate ...func(*http.Request) *http.Request) string {
@@ -117,9 +117,9 @@ func TestRuntimeLogsRealWSSharedSourceOptionsAndLastRef(t *testing.T) {
 	joined := make(chan struct{})
 	observed := make(chan logSourceOptions, 1)
 	h := &WebSocketHandler{}
-	h.containerLogStreamer = func(ctx context.Context, id string, out chan<- string, follow bool, tail, since string, timestamps bool) error {
+	h.containerLogStreamer = func(ctx context.Context, id string, out chan<- string, follow bool, tail, since, until string, timestamps bool) error {
 		starts.Add(1)
-		observed <- logSourceOptions{id, tail, since, follow, timestamps}
+		observed <- logSourceOptions{id, tail, since, until, follow, timestamps}
 		defer close(joined)
 		select {
 		case <-trigger:
@@ -132,7 +132,7 @@ func TestRuntimeLogsRealWSSharedSourceOptionsAndLastRef(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	}
-	url := logServer(t, h, true) + "containers/example%20container/logs?format=json&follow=true&tail=100&timestamps=true&batched=false"
+	url := logServer(t, h, true) + "containers/example%20container/logs?format=json&follow=true&tail=100&until=2026-01-02T03:05:00Z&timestamps=true&batched=false"
 	one := dialLog(t, url)
 	two := dialLog(t, url)
 	nextOne := readyLogRead(t, one)
@@ -143,7 +143,7 @@ func TestRuntimeLogsRealWSSharedSourceOptionsAndLastRef(t *testing.T) {
 	case <-time.After(logTestTimeout):
 		t.Fatal("source not started")
 	}
-	require.Equal(t, logSourceOptions{"example container", "100", "", true, true}, opts)
+	require.Equal(t, logSourceOptions{"example container", "100", "", "2026-01-02T03:05:00Z", true, true}, opts)
 	require.Eventually(t, func() bool {
 		h.logStreamsMu.Lock()
 		defer h.logStreamsMu.Unlock()
@@ -191,7 +191,7 @@ func TestRuntimeLogsRealWSFormatsAndSourceMetadata(t *testing.T) {
 	for _, format := range []string{"text", "json", "batch"} {
 		t.Run(format, func(t *testing.T) {
 			h := &WebSocketHandler{}
-			h.projectLogStreamer = func(ctx context.Context, _ string, out chan<- string, _ bool, _, _ string, _ bool) error {
+			h.projectLogStreamer = func(ctx context.Context, _ string, out chan<- string, _ bool, _, _, _ string, _ bool) error {
 				// Legacy sources remain compatible, including text and existing JSON arrays.
 				for _, line := range []string{"web | 2026-01-02T03:04:06Z same", "worker | [STDERR] 2026-01-02T03:04:05Z same"} {
 					select {
@@ -239,10 +239,10 @@ func TestRuntimeLogsRealWSFormatsAndSourceMetadata(t *testing.T) {
 func TestRuntimeLogsAllSourceOptionsParticipateInKey(t *testing.T) {
 	base := logStreamParams{format: "json", follow: true, tail: "100", timestamps: true}
 	key := func(env, kind, id string, p logStreamParams) string {
-		return buildLogStreamKeyInternal(env, kind, id, p.format, p.batched, p.follow, p.tail, p.since, p.timestamps)
+		return buildLogStreamKeyInternal(env, kind, id, p.format, p.batched, p.follow, p.tail, p.since, p.until, p.timestamps)
 	}
 	original := key("0", "project", "example", base)
-	for _, change := range []func(*logStreamParams){func(p *logStreamParams) { p.format = "text" }, func(p *logStreamParams) { p.follow = false }, func(p *logStreamParams) { p.tail = "10" }, func(p *logStreamParams) { p.since = "example" }, func(p *logStreamParams) { p.timestamps = false }, func(p *logStreamParams) { p.batched = true }} {
+	for _, change := range []func(*logStreamParams){func(p *logStreamParams) { p.format = "text" }, func(p *logStreamParams) { p.follow = false }, func(p *logStreamParams) { p.tail = "10" }, func(p *logStreamParams) { p.since = "example" }, func(p *logStreamParams) { p.until = "example" }, func(p *logStreamParams) { p.timestamps = false }, func(p *logStreamParams) { p.batched = true }} {
 		p := base
 		change(&p)
 		require.NotEqual(t, original, key("0", "project", "example", p))
@@ -252,8 +252,8 @@ func TestRuntimeLogsAllSourceOptionsParticipateInKey(t *testing.T) {
 	require.NotEqual(t, original, key("0", "project", "other", base))
 }
 func TestRuntimeLogsSourceKeySeparatesDelimitedOptions(t *testing.T) {
-	one := buildLogStreamKeyInternal("0", "project", "example", "json", false, true, "100|extra", "", true)
-	two := buildLogStreamKeyInternal("0", "project", "example", "json", false, true, "100", "extra|", true)
+	one := buildLogStreamKeyInternal("0", "project", "example", "json", false, true, "100|extra", "", "", true)
+	two := buildLogStreamKeyInternal("0", "project", "example", "json", false, true, "100", "extra|", "", true)
 	require.NotEqual(t, one, two)
 }
 
@@ -261,7 +261,7 @@ func TestRuntimeLogsDeniedPermissionAndOriginStartNoSource(t *testing.T) {
 	for _, permission := range []bool{false, true} {
 		t.Run(map[bool]string{false: "permission", true: "origin"}[permission], func(t *testing.T) {
 			var starts atomic.Int32
-			h := &WebSocketHandler{containerLogStreamer: func(context.Context, string, chan<- string, bool, string, string, bool) error {
+			h := &WebSocketHandler{containerLogStreamer: func(context.Context, string, chan<- string, bool, string, string, string, bool) error {
 				starts.Add(1)
 				return nil
 			}}

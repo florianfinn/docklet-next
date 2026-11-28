@@ -55,6 +55,8 @@ type m15Transport struct {
 	peerHidden atomic.Value
 	// detailFailure makes the detail read answer with this agent code.
 	detailFailure atomic.Value
+	// wsQuery records the raw query of the last stream the agent received.
+	wsQuery atomic.Value
 	// baselineBody is the agent's exact baseline response.
 	baselineBody atomic.Value
 }
@@ -124,6 +126,7 @@ func newM15Transport(t *testing.T, mode string) *m15Transport {
 			return
 		}
 		if strings.Contains(r.URL.Path, "/ws/") {
+			x.wsQuery.Store(r.URL.Path + "?" + r.URL.RawQuery)
 			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 			if err != nil {
 				return

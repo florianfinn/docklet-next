@@ -63,7 +63,7 @@ export const GUARDED_WIRE_ENUMS = [
   { name: "HUB_BACKUP_STATUS_KEYS", keys: HUB_BACKUP_STATUS_KEYS, properties: ["BackupSystemBackupRun.status"] },
   { name: "BACKUP_DELIVERY_STATE_KEYS", keys: BACKUP_DELIVERY_STATE_KEYS, properties: ["BackupTargetHostDelivery.state"] },
   { name: "RESTART_STATE_KEYS", keys: RESTART_STATE_KEYS, properties: ["EnvironmentAgentRestartRun.state"] },
-  { name: "HISTORY_STATE_KEYS", keys: HISTORY_STATE_KEYS, properties: ["HistoryBucket.state"] },
+  { name: "HISTORY_STATE_KEYS", keys: HISTORY_STATE_KEYS, properties: ["HistoryBucket.state", "HistoryLaneBucket.state"] },
   { name: "PRUNE_FAILURE_KEYS", keys: PRUNE_FAILURE_KEYS, properties: ["VolumePruneFailed.code"] },
   { name: "PRUNE_CANDIDATE_KEYS", keys: PRUNE_CANDIDATE_KEYS, properties: ["VolumePrunePlanCandidate.reason"] },
   { name: "PRUNE_SKIP_KEYS", keys: PRUNE_SKIP_KEYS, properties: ["VolumePruneSkipped.reason"] },

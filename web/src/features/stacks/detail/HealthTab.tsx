@@ -24,11 +24,11 @@ export function HealthTab({ stack, host }: { stack: StackDetail; host?: Host }) 
     <ToggleGroup type="single" variant="outline" value={range} aria-label={t("rangeLabel")} onValueChange={(v) => { if (v) setRange(v as HistoryRange); }}>
       {HISTORY_RANGES.map((r) => <ToggleGroupItem key={r} value={r}>{t(`ranges.${RANGE_KEY[r]}`)}</ToggleGroupItem>)}
     </ToggleGroup>
-    {stack.services.map((service) => <ServiceHealth key={service.name} service={service} host={host} hostId={stack.hostId} range={range} focused={params.get("service") === service.name} />)}
+    {stack.services.map((service) => <ServiceHealth key={service.name} service={service} host={host} hostId={stack.hostId} stackId={stack.id} range={range} focused={params.get("service") === service.name} />)}
   </div>;
 }
 
-function ServiceHealth({ service, host, hostId, range, focused }: { service: Service; host?: Host; hostId: string; range: HistoryRange; focused: boolean }) {
+function ServiceHealth({ service, host, hostId, stackId, range, focused }: { service: Service; host?: Host; hostId: string; stackId: string; range: HistoryRange; focused: boolean }) {
   const ref = useRef<HTMLElement>(null);
   const t = useTranslations("common.status");
   const status = serviceRuntime(service, host);
@@ -40,6 +40,6 @@ function ServiceHealth({ service, host, hostId, range, focused }: { service: Ser
   }, [focused]);
   return <section ref={ref} tabIndex={-1} aria-label={service.name} className="grid min-w-0 scroll-mt-24 gap-3 rounded-xl border p-4 outline-none focus:ring-2 focus:ring-ring">
     <h3 className="flex items-center gap-3 font-medium">{service.name}<ToneBadge tone={RUNTIME_TONE[status]}>{t(status)}</ToneBadge></h3>
-    <HealthDetails key={service.containerId ?? "none"} containerId={service.containerId} historyRef={service.containerName ? { hostId, name: service.containerName } : undefined} range={range} />
+    <HealthDetails key={service.containerId ?? "none"} containerId={service.containerId} condition={service.condition} state={service.state} logsHref={`/stacks/${encodeURIComponent(stackId)}?tab=logs&service=${encodeURIComponent(service.name)}`} historyRef={service.containerName ? { hostId, name: service.containerName } : undefined} range={range} />
   </section>;
 }

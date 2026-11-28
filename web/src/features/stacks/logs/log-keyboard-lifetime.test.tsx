@@ -27,3 +27,15 @@ it.each(["filter", "stream eviction"])("WH-B4 %s clears focused ownership; Escap
   expect(document.activeElement === list).toBe(true); expect(list.getAttribute("data-follow")).toBe("false");
   await user.keyboard("{ArrowDown}{End}"); expect(list.scrollTop).toBe(800); expect(list.getAttribute("data-follow")).toBe("true");
 });
+it("jumps to warning/error rows with brackets and disables follow", async () => {
+  const user = userEvent.setup();
+  render(<Viewer rows={[{ id: "info", level: "info" }, { id: "warn", level: "warn" }, { id: "error", level: "error" }] as LogLine[]} />);
+  const list = screen.getByRole("listbox"); list.focus();
+  await user.keyboard("]");
+  expect(screen.getByText("warn").getAttribute("aria-selected")).toBe("true");
+  await user.keyboard("]");
+  expect(screen.getByText("error").getAttribute("aria-selected")).toBe("true");
+  await user.keyboard("[[");
+  expect(screen.getByText("warn").getAttribute("aria-selected")).toBe("true");
+  expect(list.getAttribute("data-follow")).toBe("false");
+});

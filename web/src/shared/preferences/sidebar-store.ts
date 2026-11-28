@@ -8,18 +8,20 @@ import { createStore, useStore } from "@/shared/lib/store";
 
 export interface SidebarPrefs {
   open: boolean;
+  disruptions: boolean;
 }
 
-export const DEFAULT_SIDEBAR: SidebarPrefs = { open: true };
+export const DEFAULT_SIDEBAR: SidebarPrefs = { open: true, disruptions: false };
 
 export function decodeSidebar(stored: unknown): SidebarPrefs {
   const open = stored && typeof stored === "object" ? (stored as { open?: unknown }).open : undefined;
-  return { open: typeof open === "boolean" ? open : DEFAULT_SIDEBAR.open };
+  const disruptions = stored && typeof stored === "object" ? (stored as { disruptions?: unknown }).disruptions : undefined;
+  return { open: typeof open === "boolean" ? open : DEFAULT_SIDEBAR.open, disruptions: typeof disruptions === "boolean" ? disruptions : false };
 }
 
 /** Desktop sidebar expanded or collapsed; the mobile sheet is not persisted. */
 export const sidebarStore = createStore<SidebarPrefs>(DEFAULT_SIDEBAR, { key: "docklet-react-opus.sidebar", version: 1, merge: decodeSidebar });
 
 export function useSidebarOpen(): [boolean, (open: boolean) => void] {
-  return [useStore(sidebarStore, (s) => s.open), (open) => sidebarStore.set((s) => (s.open === open ? s : { open }))];
+  return [useStore(sidebarStore, (s) => s.open), (open) => sidebarStore.set((s) => (s.open === open ? s : { ...s, open }))];
 }

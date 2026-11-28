@@ -2,8 +2,9 @@
 // Revision: 225dd4d1d1dc7fb16adc91179d3d9d6d675d2ced
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original shared localized log delivery notices. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271).
+// Deviations: Original shared localized log delivery notices. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M47 #694: short toolbar hints.
 
+import type { ReactNode } from "react";
 import { useTranslations } from "use-intl";
 import type { LogLine } from "@/domain/model";
 import { logDelivery, logGap } from "@/data/log-buffer";
@@ -35,4 +36,10 @@ export function LogMessage({ line }: { line: LogLine }) {
   const gap = logGap(line);
   if (gap !== undefined) return <span>{t("loss", { count: gap })}</span>;
   return <>{line.message}{line.truncated && <span className="ml-2 text-warning">{t("lineCut")}</span>}</>;
+}
+
+/** Short name of an icon toggle on hover and keyboard focus. The span carries the trigger, so the
+ * tooltip's data-state does not replace the toggle's pressed state. */
+export function ToolbarHint({ label, children }: { label: string; children: ReactNode }) {
+  return <Tooltip><TooltipTrigger asChild><span className="inline-flex">{children}</span></TooltipTrigger><TooltipContent>{label}</TooltipContent></Tooltip>;
 }

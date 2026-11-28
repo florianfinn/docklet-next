@@ -111,7 +111,8 @@ it("renders the container Health card above availability with a keyboard raw tog
   await user.keyboard("{Enter}");
   expect(container.querySelector("pre")?.textContent).toBe(raw);
   await user.keyboard("{Enter}");
-  expect(container.querySelector("pre") === null).toBe(true);
+  expect(container.querySelectorAll("pre").length).toBe(1);
+  expect(container.querySelector("pre")?.textContent).toBe(raw);
 });
 
 

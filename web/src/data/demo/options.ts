@@ -9,6 +9,8 @@ export interface DemoFailure {
 }
 
 export interface DemoAdapterOptions {
+  logHealthInsights?: boolean;
+  logPatterns?: "uniform" | "variable";
   hosts?: readonly Host[];
   uiConfigurationDisabledHosts?: readonly string[];
   nextFailure?: DemoFailure;

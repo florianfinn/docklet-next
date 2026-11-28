@@ -1,3 +1,4 @@
+import { DisruptionsLink } from "@/features/disruptions/DisruptionsLink";
 import { useCapability } from "@/data/use-capability";
 import { Boxes, HardDrive, History, PartyPopper, ShieldAlert, Siren, Sparkles, Unplug } from "lucide-react";
 import type { ReactNode } from "react";
@@ -103,11 +104,13 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
           <PartyPopper />
         </IconTile>
         {t("empty")}
+        <DisruptionsLink />
       </div>
     );
   }
   return (
     <ScrollArea className="h-full">
+          <DisruptionsLink />
       <ol className="flex flex-col gap-2 pr-2">
         {items.map((item) => (
           <li key={item.id} data-tone={item.tone} className="group relative flex items-start gap-3 overflow-hidden rounded-xl border border-(--tone)/25 bg-(--tone)/6 p-2.5">

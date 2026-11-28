@@ -27,7 +27,7 @@ describe("runtime log mapping", () => {
     expect(map({ seq: 1, message: "  raw text  " })).toMatchObject({ service: "example-container", ts: now(), level: "info", message: "  raw text  ", stream: "unknown", truncated: false });
     expect(map({ ...wireLog(2), service: "worker", stream: "stderr", level: "stderr" })).toMatchObject({ service: "worker", stream: "stderr", level: "info" });
     expect(map({ ...wireLog(2), level: "error" }).level).toBe("error");
-    expect(map({ ...wireLog(2), message: "ERROR fatal warning" }).level).toBe("info");
+    expect(map({ ...wireLog(2), message: "ERROR fatal warning", level: "info" }).level).toBe("error");
   });
   it.each([null, {}, { seq: 0, message: "x" }, { seq: 1.1, message: "x" }, { seq: 1, message: 0 }, { seq: 1, message: "x", timestamp: "wrong" }, { seq: 1, message: "x", stream: "invented" }, { seq: 1, message: "x", truncated: "true" }, { seq: 1, message: "x", service: 4 }])("refuses malformed mandatory or present optional fields %#", (value) => {
     expect(() => map(value)).toThrow();

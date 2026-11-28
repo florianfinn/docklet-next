@@ -127,3 +127,27 @@ export function useContainerLogs(containerId: string, paused: boolean): LogLine[
 export function useStackLogs(stackId: string, paused: boolean): LogLine[] {
   return useResourceLogs(stackId, paused, "stack");
 }
+
+/** Finite read keyed by resource/options; changing either aborts and hides the previous result. */
+export function useLogRead(ref: { kind: "stack" | "container"; id: string } | undefined, options: import("./api").LogReadOptions) {
+  const adapter = useAdapter();
+  const lifetime = logLifetime(adapter.subscribeLogs);
+  const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
+  const [retry, setRetry] = useState(0);
+  const key = JSON.stringify([ref, options, retry, generation]);
+  const [view, setView] = useState<{ key: string; adapter: DockletAdapter; lines: LogLine[]; result?: import("./api").LogReadResult }>();
+  useEffect(() => {
+    const controller = new AbortController();
+    const input = JSON.parse(key)[0] as typeof ref;
+    const opts = JSON.parse(key)[1] as typeof options;
+    if (input) {
+      void adapter.readLogs(input, opts, (lines) => {
+        if (!controller.signal.aborted) setView((old) => ({ key, adapter, lines: [...(old?.key === key ? old.lines : []), ...lines] }));
+      }, controller.signal).then((result) => {
+        if (!controller.signal.aborted) setView((old) => ({ key, adapter, lines: result.reason === "aborted" || old?.key !== key || old.adapter !== adapter ? [] : old.lines, result }));
+      });
+    }
+    return () => controller.abort();
+  }, [adapter, key]);
+  return { lines: view?.key === key && view.adapter === adapter ? view.lines : EMPTY_LOGS, result: view?.key === key && view.adapter === adapter ? view.result : undefined, retry: () => setRetry((n) => n + 1) };
+}

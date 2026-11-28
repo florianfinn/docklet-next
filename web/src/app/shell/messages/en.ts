@@ -17,6 +17,7 @@ export const enShell = {
   navigationDescription: "Main navigation",
   groups: { operate: "Operations", resources: "Resources", system: "System", modules: "Modules", later: "Later" },
   nav: {
+    disruptions: "Disruptions",
     dashboard: "Dashboard",
     stacks: "Stacks",
     containers: "Containers",

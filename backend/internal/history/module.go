@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original mode-aware history producer and hub read routes.
+// Deviations: Original mode-aware history producer and hub read routes. M47 #693: host container lanes route.
 
 package history
 
@@ -78,6 +78,9 @@ func (m *Module) RegisterRoutes(api huma.API, agent bool) {
 	})
 	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "get-host-history", Method: "GET", Path: "/environments/{id}/history/host", Summary: "Read host resource history", Tags: []string{"History"}, Security: handlerutil.DefaultOperationSecurity()}, authz.PermSystemRead, func(ctx context.Context, i *ReadInput) (*handlerutil.Out[dto.Response], error) {
 		return out(readHistory(ctx, m.service.db, "host", i.EnvironmentID, i.EnvironmentID, i.Range, time.Now().UTC()))
+	})
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "get-host-container-history", Method: "GET", Path: "/environments/{id}/history/containers", Summary: "Read the disrupted container lanes of a host", Tags: []string{"History"}, Security: handlerutil.DefaultOperationSecurity()}, authz.PermContainersRead, func(ctx context.Context, i *ReadInput) (*handlerutil.Out[dto.HostContainers], error) {
+		return out(readHostContainers(ctx, m.service.db, i.EnvironmentID, i.Range, time.Now().UTC()))
 	})
 	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "get-runtime-conditions", Method: "GET", Path: "/environments/{id}/runtime-conditions", Summary: "Read current assigned runtime conditions", Tags: []string{"History"}, Security: handlerutil.DefaultOperationSecurity()}, authz.PermProjectsList, func(ctx context.Context, i *SampleInput) (*handlerutil.Out[dto.Conditions], error) {
 		result, err := m.service.Conditions(ctx, i.EnvironmentID)

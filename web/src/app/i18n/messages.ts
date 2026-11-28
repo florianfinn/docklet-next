@@ -1,3 +1,4 @@
+import { deDisruptions } from "@/features/disruptions/messages/de";
 import { deConnections } from "@/features/connections/messages/de";
 import { deTailnetContract } from "@/data/messages/tailnet-de";
 import { deProxyContract } from "@/data/messages/proxy-de";
@@ -50,6 +51,7 @@ export const messages: typeof enMessages = {
   lab: import.meta.env.DEV ? deLab : ({} as typeof deLab),
   proxyLab: import.meta.env.DEV ? deProxy : ({} as typeof deProxy),
   visual: deVisual,
+  disruptions: deDisruptions,
   dashboard: deDashboard,
   proxyContract: deProxyContract,
   connections: deConnections,

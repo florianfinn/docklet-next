@@ -15,7 +15,8 @@ export class LogSocket implements MetricsSocket {
   onerror: MetricsSocket["onerror"] = null;
   close = vi.fn();
   send(value: unknown) { this.onmessage?.(new MessageEvent("message", { data: JSON.stringify(value) })); }
-  disconnect() { this.onclose?.(new CloseEvent("close")); }
+  /** The real producer ends a stream with a normal close; other codes model a dropped connection. */
+  disconnect(code = 1000) { this.onclose?.(new CloseEvent("close", { code, wasClean: code === 1000 })); }
 }
 export const wireLog = (seq: number, message = `line ${seq}`) => ({ seq, message, level: "stdout", timestamp: "2026-01-02T03:04:05Z" });
 export async function settleLogs() { for (let i = 0; i < 12; ++i) await Promise.resolve(); }

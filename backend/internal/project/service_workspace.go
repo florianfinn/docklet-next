@@ -607,12 +607,12 @@ func (s *ProjectService) projectServices(ctx context.Context, projectID string) 
 	return s.details.ComposeServices(ctx, composeProject, composeFileFullPath, projectsDirectory, autoInjectEnv, IconCatalogForContext(ctx))
 }
 
-func (s *ProjectService) StreamProjectLogs(ctx context.Context, projectID string, logsChan chan<- string, follow bool, tail, since string, timestamps bool) error {
+func (s *ProjectService) StreamProjectLogs(ctx context.Context, projectID string, logsChan chan<- string, follow bool, tail, since, until string, timestamps bool) error {
 	proj, err := s.GetProjectFromDatabaseByID(ctx, projectID)
 	if err != nil {
 		return err
 	}
-	return projectdetails.Logs(ctx, observedComposeName(*proj), logsChan, follow, tail, since, timestamps)
+	return projectdetails.Logs(ctx, observedComposeName(*proj), logsChan, follow, tail, since, until, timestamps)
 }
 
 func (s *ProjectService) GetProjectStatusCounts(ctx context.Context) (projecttypes.StatusCounts, error) {

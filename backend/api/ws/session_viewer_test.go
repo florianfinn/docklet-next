@@ -54,7 +54,7 @@ func TestSessionViewerRealLocalDirectEdgeActiveIdle(t *testing.T) {
 						return r.WithContext(ctx)
 					}
 					joined, entered := make(chan struct{}), make(chan struct{})
-					h := &WebSocketHandler{containerLogStreamer: func(ctx context.Context, _ string, out chan<- string, _ bool, _, _ string, _ bool) error {
+					h := &WebSocketHandler{containerLogStreamer: func(ctx context.Context, _ string, out chan<- string, _ bool, _, _, _ string, _ bool) error {
 						defer close(joined)
 						close(entered)
 						if active {
@@ -142,7 +142,7 @@ func TestSessionViewerTwoTabsOtherSessionAndSharedTunnelSurvive(t *testing.T) {
 				return r.WithContext(sessionlife.WithCadence(r.Context(), cadence(r.Context())))
 			}
 			produce, joined := make(chan string, 1), make(chan struct{})
-			h := &WebSocketHandler{containerLogStreamer: func(ctx context.Context, _ string, out chan<- string, _ bool, _, _ string, _ bool) error {
+			h := &WebSocketHandler{containerLogStreamer: func(ctx context.Context, _ string, out chan<- string, _ bool, _, _, _ string, _ bool) error {
 				defer close(joined)
 				for {
 					select {

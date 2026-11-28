@@ -6,7 +6,7 @@
 
 import type { components } from "@/api/generated/schema";
 import type { ContainerHealthApi } from "@/domain/health";
-import { HISTORY_BUCKETS, HISTORY_RANGES, type HistoryApi, type HistoryBucket, type HistoryRange, type HostCapacity, type RuntimeHistory } from "@/domain/history";
+import { HISTORY_BUCKETS, HISTORY_RANGES, type HostContainerHistory, type HistoryApi, type HistoryBucket, type HistoryRange, type HostCapacity, type RuntimeHistory } from "@/domain/history";
 import { isUiSection, type UiPreferencesApi, type UiPreferencesDocument } from "@/domain/ui-preferences";
 import { AdapterOutcomeError } from "../capability";
 import type { CsrfClient } from "./csrf-client";
@@ -89,6 +89,24 @@ export function mapCapacity(wire: WireCapacity): HostCapacity {
   };
 }
 
+/** Validate the external lane response before it reaches the timeline. */
+export function mapHostContainerHistory(input: unknown, hostId: string, range: HistoryRange): HostContainerHistory {
+  const invalid = () => failure({ code: "history.invalid-response" });
+  if (!input || typeof input !== "object") throw invalid();
+  const wire = input as components["schemas"]["HistoryHostContainers"];
+  if (wire.hostId !== hostId || wire.range !== range || typeof wire.truncated !== "boolean" || (wire.containers !== null && !Array.isArray(wire.containers))) throw invalid();
+  const minutes = HISTORY_BUCKETS[range].minutes;
+  const containers = (wire.containers ?? []).map((lane) => {
+    if (!lane || typeof lane.name !== "string" || !lane.name || !Array.isArray(lane.buckets)) throw invalid();
+    const buckets = lane.buckets.map((row): HistoryBucket => {
+      if (!row || typeof row.start !== "string" || !Number.isFinite(Date.parse(row.start)) || !["running", "unhealthy", "down", "stopped", "nodata"].includes(row.state) || !row.minutes || !["running", "unhealthy", "down", "stopped"].every((key) => { const n = row.minutes[key as keyof typeof row.minutes]; return typeof n === "number" && Number.isFinite(n) && n >= 0; }) || !Number.isInteger(row.exitCode)) throw invalid();
+      return { ...row, end: new Date(Date.parse(row.start) + minutes * 60_000).toISOString() };
+    });
+    return { name: lane.name, buckets };
+  });
+  return { hostId, range, truncated: wire.truncated, containers };
+}
+
 function mapDocument(wire: components["schemas"]["PreferencesDocument"]): UiPreferencesDocument {
   if (!wire || !Number.isInteger(wire.revision) || !wire.sections || typeof wire.sections !== "object") throw failure({ code: "preferences.invalid-response" });
   // Unknown sections from a newer hub stay on the server; the web only reads its own.
@@ -112,6 +130,9 @@ async function request<T>(client: CsrfClient, url: string, init: RequestInit = {
 export function createHttpHistory(baseUrl: string, client: CsrfClient): HistoryApi & ContainerHealthApi {
   const host = (id: string) => `${baseUrl}/environments/${encodeURIComponent(id)}`;
   return {
+    async getHostContainerHistory(hostId, range) {
+      return mapHostContainerHistory(await request(client, `${host(hostId)}/history/containers?range=${range}`), hostId, range);
+    },
     async getContainerHistory({ hostId, name }, range) {
       return mapHistory(await request<WireHistory>(client, `${host(hostId)}/containers/${encodeURIComponent(name)}/history?range=${range}`), range);
     },

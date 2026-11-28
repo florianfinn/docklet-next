@@ -73,7 +73,15 @@ export interface ContainerHistoryRef {
   name: string;
 }
 
+export interface HostContainerHistory {
+  range: HistoryRange;
+  hostId: string;
+  containers: { name: string; buckets: HistoryBucket[] }[];
+  truncated: boolean;
+}
+
 export interface HistoryApi {
+  getHostContainerHistory(hostId: string, range: HistoryRange): Promise<HostContainerHistory>;
   getContainerHistory(ref: ContainerHistoryRef, range: HistoryRange): Promise<RuntimeHistory>;
   getStackHistory(stackId: string, range: HistoryRange): Promise<RuntimeHistory>;
   getCapacity(): Promise<HostCapacity[]>;

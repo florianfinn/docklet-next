@@ -1,3 +1,6 @@
+import { useIsUser } from "@/data/use-principal";
+import { sidebarStore } from "@/shared/preferences/sidebar-store";
+import { Switch } from "@/shared/ui/switch";
 import { Moon, Sun } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslations } from "use-intl";
@@ -17,7 +20,7 @@ import { useSectionDraft } from "../use-section-draft";
 
 const TOKEN_FIELDS = ["theme", "palette", "density", "motion"] as const;
 type TokenField = (typeof TOKEN_FIELDS)[number];
-type Appearance = Pick<DesignTokens, TokenField> & { stacksMode: OverviewMode; containersMode: OverviewMode; sidebarWidth: number };
+type Appearance = Pick<DesignTokens, TokenField> & { stacksMode: OverviewMode; containersMode: OverviewMode; sidebarWidth: number; disruptions: boolean };
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -33,10 +36,12 @@ function tokenChanges(draft: Appearance, base: Appearance): Partial<DesignTokens
 export function AppearanceSection() {
   const t = useTranslations("settings");
   const ta = useTranslations("settings.appearance");
+  const isUser = useIsUser();
+  const disruptions = useStore(sidebarStore, (s) => s.disruptions);
   const tokens = useStore(designStore, (s) => s.tokens);
   const prefs = useStore(preferencesStore, (p) => p);
   const sidebarWidth = useVisualStyle("sidebarWidth");
-  const saved: Appearance = { theme: tokens.theme, palette: tokens.palette, density: tokens.density, motion: tokens.motion, stacksMode: prefs.stacksMode, containersMode: prefs.containersMode, sidebarWidth };
+  const saved: Appearance = { theme: tokens.theme, palette: tokens.palette, density: tokens.density, motion: tokens.motion, stacksMode: prefs.stacksMode, containersMode: prefs.containersMode, sidebarWidth, disruptions };
   const { draft, patch, dirty, reset, commit } = useSectionDraft(saved, { rebase: "fields" });
   const preview = draft ? tokenChanges(draft, saved) : {};
   const previewKey = JSON.stringify(preview);
@@ -67,11 +72,13 @@ export function AppearanceSection() {
         if (Object.keys(preview).length) setTokens(preview);
         if (draft.stacksMode !== saved.stacksMode || draft.containersMode !== saved.containersMode) preferencesStore.set((p) => ({ ...p, stacksMode: draft.stacksMode, containersMode: draft.containersMode }));
         if (draft.sidebarWidth !== saved.sidebarWidth) setVisualStyle({ sidebarWidth: draft.sidebarWidth });
+        if (!isUser && draft.disruptions !== saved.disruptions) sidebarStore.set((s) => ({ ...s, disruptions: draft.disruptions }));
         commit(draft);
       }}
       note={ta("labHint")}
     >
       <FieldGroup>
+        {!isUser && <Field orientation="horizontal"><FieldLabel htmlFor="ap-disruptions">{ta("disruptions")}</FieldLabel><Switch id="ap-disruptions" checked={draft.disruptions} onCheckedChange={(disruptions) => patch({ disruptions })} /></Field>}
         <p className="rounded-lg border border-primary/25 bg-primary/8 p-2.5 text-xs text-muted-foreground" aria-live="polite">
           {dirty ? ta("previewActive") : ta("previewHint")}
         </p>

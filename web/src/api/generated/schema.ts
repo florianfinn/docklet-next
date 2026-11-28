@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 35cd5611581ba4b0a607bfd5b28e977f95a14d1352af51dfef3035601afca46a
+// Revision: a7b44cbb238aed4e9b3cef6cdbfac2bcb309014f0d0b0b72df77d27f9da72c78
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1729,6 +1729,23 @@ export interface paths {
          * @description Update the heartbeat timestamp for an environment
          */
         post: operations["updateHeartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/history/containers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the disrupted container lanes of a host */
+        get: operations["get-host-container-history"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7323,6 +7340,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseHistoryHostContainers: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseHistoryHostContainers.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["HistoryHostContainers"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseHistoryResponse: {
             /**
              * Format: uri
@@ -10824,6 +10853,10 @@ export interface components {
             /** Format: date-time */
             sampledAt: string;
         };
+        HistoryContainerLane: {
+            buckets: components["schemas"]["HistoryLaneBucket"][] | null;
+            name: string;
+        };
         HistoryContainerSample: {
             /** Format: int64 */
             exitCode: number;
@@ -10863,6 +10896,13 @@ export interface components {
             /** Format: double */
             networkTx: number;
         };
+        HistoryHostContainers: {
+            containers: components["schemas"]["HistoryContainerLane"][] | null;
+            hostId: string;
+            /** @enum {string} */
+            range: "24h" | "7d" | "30d";
+            truncated: boolean;
+        };
         HistoryHostSample: {
             /** Format: double */
             cpuBusy: number;
@@ -10881,6 +10921,15 @@ export interface components {
             networkRx: number;
             /** Format: double */
             networkTx: number;
+        };
+        HistoryLaneBucket: {
+            /** Format: int64 */
+            exitCode: number;
+            minutes: components["schemas"]["HistoryMinutes"];
+            /** Format: date-time */
+            start: string;
+            /** @enum {string} */
+            state: "running" | "unhealthy" | "down" | "stopped" | "nodata";
         };
         HistoryLoadAlertMetadata: {
             container: string;
@@ -22133,6 +22182,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-host-container-history": {
+        parameters: {
+            query?: {
+                range?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseHistoryHostContainers"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"] | components["schemas"]["RequestProblem"];
+                };
+            };
+            /** @description Typed history or personal preference failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryProblem"];
                 };
             };
             /** @description Error */

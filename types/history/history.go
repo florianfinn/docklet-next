@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original history, capacity and immutable condition read contracts.
+// Deviations: Original history, capacity and immutable condition read contracts. M47 #693: host container lanes.
 
 package history
 
@@ -81,4 +81,26 @@ type Capacity struct {
 	DaysUntilFull     *float64 `json:"daysUntilFull"`
 	GrowthUnavailable bool     `json:"growthUnavailable"`
 	History           Response `json:"history"`
+}
+
+// LaneBucket is one state bucket of a host container lane, without resource metrics.
+type LaneBucket struct {
+	Start    time.Time `json:"start"`
+	State    State     `json:"state" enum:"running,unhealthy,down,stopped,nodata"`
+	Minutes  Minutes   `json:"minutes"`
+	ExitCode int       `json:"exitCode"`
+}
+
+// ContainerLane is the bucket series of one container name on a host.
+type ContainerLane struct {
+	Name    string       `json:"name"`
+	Buckets []LaneBucket `json:"buckets"`
+}
+
+// HostContainers lists the containers of one host with down or unhealthy minutes in the range.
+type HostContainers struct {
+	Range      string          `json:"range" enum:"24h,7d,30d"`
+	HostID     string          `json:"hostId"`
+	Containers []ContainerLane `json:"containers"`
+	Truncated  bool            `json:"truncated"`
 }

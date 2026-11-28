@@ -1,3 +1,4 @@
+import { DisruptionsLink } from "@/features/disruptions/DisruptionsLink";
 import { useBulkCheckCounts } from "./bulk-check-counts";
 import { JobUpdateOutcomes } from "@/shared/components/updates/job-update-outcomes";
 import { useRunTarget } from "./use-run-target";
@@ -272,6 +273,7 @@ export function ActivityCenter() {
       <SheetContent className="w-full gap-0 p-0 shadow-2xl sm:max-w-lg" data-layer="activity" onInteractOutside={keepOpenForCoordinatedLayers}>
         <SheetHeader className="border-b">
           <SheetTitle>{t("title")}</SheetTitle>
+          <DisruptionsLink />
           <SheetDescription>{t("description")}</SheetDescription>
         </SheetHeader>
         <Tabs value={ui.tab} onValueChange={(tab) => activityStore.set((s) => ({ ...s, tab: tab as typeof s.tab }))} className="min-h-0 flex-1 gap-0">

@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original hub-only history route classification.
+// Deviations: Original hub-only history route classification. M47 #693: host container lanes.
 
 package middleware
 
@@ -12,7 +12,7 @@ func isHistoryManagementPath(method, suffix string) bool {
 	if method != "GET" {
 		return false
 	}
-	if suffix == "/runtime-conditions" || suffix == "/history/host" {
+	if suffix == "/runtime-conditions" || suffix == "/history/host" || suffix == "/history/containers" {
 		return true
 	}
 	parts := strings.Split(strings.Trim(suffix, "/"), "/")

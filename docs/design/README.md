@@ -86,5 +86,6 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Optional modules](optional-modules.md) | M27 design: in-image modules on the feature registry, access-then-gate refusal, admission fence, setup step and host compatibility |
 | [Proxy module](proxy-module.md) | M27 design: agent-owned Traefik and Caddy writes, journaled write protocol with recovery and release, verification evidence and measured baseline |
 | [Proxy file metadata](proxy-file-metadata.md) | M44 design: replacements keep or report extended attributes and extra links, metadata-loss acknowledgement (contract 25), resolver files |
+| [Log and health insights](log-health-insights.md) | M47 design: log level from the line, bounded log reads, Health facts, repeat collapse and density strip, host container history and Disruptions page, browser pattern mode |
 
 Historical plans belong in the [history index](../history/README.md).

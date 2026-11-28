@@ -128,14 +128,15 @@ func TestAccessRoutesEqualHubSpec(t *testing.T) {
 
 func TestM17RuleCompleteness(t *testing.T) {
 	want := map[string]access.Rule{
-		"get-history-sample":     {Kind: access.Admin},
-		"get-container-history":  {Kind: access.App, Ref: access.ContainerPath, Level: access.Restricted},
-		"get-project-history":    {Kind: access.App, Ref: access.ProjectPath, Level: access.Restricted},
-		"get-runtime-conditions": {Kind: access.AppList},
-		"get-host-history":       {Kind: access.Admin},
-		"get-history-capacity":   {Kind: access.Admin},
-		"get-my-ui-preferences":  {Kind: access.Self},
-		"put-my-ui-preferences":  {Kind: access.Self},
+		"get-history-sample":         {Kind: access.Admin},
+		"get-container-history":      {Kind: access.App, Ref: access.ContainerPath, Level: access.Restricted},
+		"get-project-history":        {Kind: access.App, Ref: access.ProjectPath, Level: access.Restricted},
+		"get-runtime-conditions":     {Kind: access.AppList},
+		"get-host-history":           {Kind: access.Admin},
+		"get-host-container-history": {Kind: access.Admin},
+		"get-history-capacity":       {Kind: access.Admin},
+		"get-my-ui-preferences":      {Kind: access.Self},
+		"put-my-ui-preferences":      {Kind: access.Self},
 	}
 	registered := map[string]bool{}
 	for _, path := range api.SetupAPIForSpec().OpenAPI().Paths {

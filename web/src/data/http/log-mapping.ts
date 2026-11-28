@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original existing-WS log mapping with arrival identities.
 
+import { classifyLevel } from "@/shared/logs/level";
 import type { LogLine } from "@/domain/model";
 import { boundLogLine } from "../log-buffer";
 import { splitInventoryId } from "./inventory-mapping";
@@ -19,7 +20,7 @@ export function logAddress(baseUrl: string, kind: LogKind, id: string) {
   return { url: url.href, host, raw, key: JSON.stringify([host, kind, raw, LOG_OPTIONS]) };
 }
 const streams = new Set(["stdout", "stderr", "combined", "unknown"]);
-const levels = new Set(["info", "warn", "error", "debug"]);
+const levels = new Set(["warn", "error", "debug"]);
 function wireTimestamp(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length > 64) return;
   const parts = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.(\d+))?(Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(value);
@@ -32,18 +33,19 @@ function wireTimestamp(value: unknown): string | undefined {
   return `${value.slice(0, 19)}.${(parts[7] ?? "").padEnd(3, "0").slice(0, 3)}${parts[8]}`;
 }
 function text(value: unknown, max = 1024): value is string { return typeof value === "string" && value.length <= max; }
-export function mapLog(value: unknown, scope: string, attempt: number, fallbackService: string, now: () => string): LogLine {
+export function mapLog(value: unknown, scope: string, attempt: number, fallbackService: string, now: () => string, bounded = true): LogLine {
   const v = value as Record<string, unknown> | null;
   const timestamp = wireTimestamp(v?.timestamp);
   if (!v || typeof v !== "object" || Array.isArray(v) || !Number.isSafeInteger(v.seq) || (v.seq as number) < 1 || typeof v.message !== "string" ||
       (v.level !== undefined && !text(v.level, 64)) || (v.timestamp !== undefined && timestamp === undefined) ||
       (v.service !== undefined && !text(v.service)) || (v.containerId !== undefined && !text(v.containerId)) ||
       (v.stream !== undefined && (typeof v.stream !== "string" || !streams.has(v.stream))) || (v.truncated !== undefined && typeof v.truncated !== "boolean")) throw new Error("logs.invalid-response");
-  return boundLogLine({
+  const line: LogLine = {
     id: JSON.stringify([scope, attempt, v.seq]), seq: v.seq as number,
     ts: timestamp ?? now(),
     service: (v.service || v.containerId || fallbackService) as string,
-    level: levels.has(v.level as string) ? v.level as LogLine["level"] : "info",
+    level: levels.has(v.level as string) ? v.level as LogLine["level"] : classifyLevel(v.message),
     message: v.message, stream: (v.stream ?? "unknown") as NonNullable<LogLine["stream"]>, truncated: v.truncated === true,
-  });
+  };
+  return bounded ? boundLogLine(line) : line;
 }

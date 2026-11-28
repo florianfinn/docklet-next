@@ -1,8 +1,12 @@
+import { LogModeToggle, PatternMode, PatternSamples, PatternFilter } from "@/shared/logs/PatternMode";
+import { matchesPattern, type LogPattern } from "@/shared/logs/patterns";
+import { useCollapsedLogs } from "@/shared/logs/use-collapsed-logs";
+import { RepeatButton, LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { useLogKeyboard } from "@/features/stacks/logs/use-log-keyboard";
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
-import { LogDeliveryNotice, LogMessage, LogSource } from "@/features/stacks/logs/log-presentation";
+import { LogDeliveryNotice, LogMessage, LogSource, ToolbarHint } from "@/features/stacks/logs/log-presentation";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { ArrowLeft, Boxes, Cpu, Layers, Lock, Package, Pencil, Play, RotateCw, Square } from "lucide-react";
 import { lazy, Suspense, useMemo, useRef, useState } from "react";
@@ -45,44 +49,63 @@ const ProxyContext = import.meta.env.DEV ? lazy(() => import("@/features/design-
 
 const LEVEL_CLASS = { info: "", debug: "text-muted-foreground", warn: "bg-warning/8 text-warning", error: "bg-destructive/10 text-destructive" } as const;
 
+/** The log card is on the same page: scroll to it and move focus into its log region. */
+function revealContainerLogs() {
+  const card = document.getElementById("container-logs");
+  card?.scrollIntoView({ block: "start" });
+  card?.querySelector<HTMLElement>("[role=log] [tabindex]")?.focus({ preventScroll: true });
+}
+
 /** Latest lines of this container only; the stack page keeps the full multiplexed viewer. */
 function ContainerLogs({ c }: { c: ContainerInfo }) {
   const t = useTranslations("containers.page");
   const [paused, setPaused] = useState(false);
-  const lines = useContainerLogs(c.id, paused);
-  const shown = useMemo(() => lines.slice(-120), [lines]);
+  const [mode, setMode] = useState<"raw" | "patterns">("raw");
+  const [pattern, setPattern] = useState<LogPattern>();
+  const lines = useContainerLogs(c.id, paused || mode === "patterns");
+  const shown = useMemo(() => lines.filter((line) => !pattern || matchesPattern(line, pattern)).slice(-120), [lines, pattern]);
   const [follow, setFollow] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
-  const keyboard = useLogKeyboard(shown, follow, setFollow, scroller);
+  const collapsed = useCollapsedLogs(shown);
+  const keyboard = useLogKeyboard(collapsed.rows, follow, setFollow, scroller);
   const logs = useTranslations("stacks.logs");
   return (
     <Card className="gap-0 overflow-hidden py-0" data-slot="container-logs">
       <CardHeader className="flex flex-row flex-wrap items-center gap-2 border-b px-4 py-3">
         <CardTitle className="text-sm">{t("logs")}</CardTitle>
+        <LogModeToggle mode={mode} onChange={setMode} />
+        {pattern && <PatternFilter clear={() => setPattern(undefined)} />}
         <SimulationBadge />
         <span className="flex-1" />
-        <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("logsResume") : t("logsPause")}>
-          {paused ? <Play /> : <Square />}
-        </Toggle>
+        <ToolbarHint label={paused ? t("logsResume") : t("logsPause")}>
+          <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("logsResume") : t("logsPause")}>
+            {paused ? <Play /> : <Square />}
+          </Toggle>
+        </ToolbarHint>
         {c.stackId && (
           <Button size="sm" variant="outline" asChild>
             <Link to={`/stacks/${c.stackId}?tab=logs${c.serviceName ? `&service=${encodeURIComponent(c.serviceName)}` : ""}`}>{t("logsInStack")}</Link>
           </Button>
         )}
       </CardHeader>
+      <div className="flex gap-2 p-2"><ErrorJump jump={keyboard.jump} /></div>
+      {mode === "patterns" ? <PatternMode kind="container" id={c.id} select={(row) => { setPattern(row); setMode("raw"); }} /> : <>
+      {pattern && !lines.some((line) => matchesPattern(line, pattern)) && <PatternSamples pattern={pattern} clear={() => setPattern(undefined)} />}
+      <LogDensity lines={shown} onSelect={(id) => { collapsed.reveal(id); keyboard.select(id); }} />
       <LogDeliveryNotice lines={lines} paused={paused} />
       <div role="log" aria-live={paused ? "off" : "polite"} className="relative"><p id={keyboard.hintId} className="sr-only">{logs("keyboardHint")}</p>
       <div ref={scroller} {...keyboard.region} aria-label={t("logs")} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
-        {shown.map((l) => (
+        {collapsed.rows.map((l) => (
           <div key={l.id} {...keyboard.row(l.id)} className={cn("flex gap-3 px-3 whitespace-pre-wrap", LEVEL_CLASS[l.level], keyboard.active === l.id && "bg-muted/30 outline outline-primary")}>
             <span className="shrink-0 text-muted-foreground/70 select-none">{formatTime(l.ts, true)}</span>
             <span className={cn("shrink-0 text-muted-foreground select-none", keyboard.active === l.id ? "whitespace-normal" : "w-28 truncate")}><LogSource line={l} active={keyboard.active === l.id} /></span>
-            <span className="min-w-0 break-words"><LogMessage line={l} /></span>
+            <span className="min-w-0 break-words"><LogMessage line={l} /><RepeatButton count={collapsed.counts.get(l.id)} expanded={collapsed.expanded.has(l.id)} onClick={() => collapsed.toggle(l.id)} /></span>
           </div>
         ))}
       </div>
       {shown.length === 0 && <p className="pointer-events-none absolute inset-x-0 top-0 px-4 py-8 text-center text-muted-foreground">{t("logsEmpty")}</p>}
       </div>
+      </>}
     </Card>
   );
 }
@@ -213,12 +236,12 @@ function Body({ c, host, onEdit, onUpdate }: { c: ContainerInfo; host: Host | un
       </div>
       <Card className="mt-4 gap-3 py-4">
         <CardHeader className="px-4"><CardTitle className="text-sm">{th("title")}</CardTitle></CardHeader>
-        <CardContent className="px-4"><HealthDetails key={c.id} containerId={c.id} /></CardContent>
+        <CardContent className="px-4"><HealthDetails key={c.id} containerId={c.id} condition={c.condition} state={c.state} onOpenLogs={revealContainerLogs} /></CardContent>
       </Card>
       <div className="mt-4">
         <ContainerHistory hostId={c.hostId} name={c.name} />
       </div>
-      <div className="mt-4">
+      <div id="container-logs" className="mt-4">
         <ContainerTerminalTabs key={c.id} c={c} host={host}><ContainerLogs c={c} /></ContainerTerminalTabs>
       </div>
     </>
