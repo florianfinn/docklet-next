@@ -1,5 +1,5 @@
 import { LogModeToggle, PatternMode, PatternSamples, PatternFilter } from "@/shared/logs/PatternMode";
-import { patternKey, type LogPattern } from "@/shared/logs/patterns";
+import { matchesPattern, type LogPattern } from "@/shared/logs/patterns";
 import { useCollapsedLogs } from "@/shared/logs/use-collapsed-logs";
 import { RepeatButton, LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { useLogKeyboard } from "@/features/stacks/logs/use-log-keyboard";
@@ -63,7 +63,7 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
   const [mode, setMode] = useState<"raw" | "patterns">("raw");
   const [pattern, setPattern] = useState<LogPattern>();
   const lines = useContainerLogs(c.id, paused || mode === "patterns");
-  const shown = useMemo(() => lines.filter((line) => !pattern || patternKey(line) === pattern.key).slice(-120), [lines, pattern]);
+  const shown = useMemo(() => lines.filter((line) => !pattern || matchesPattern(line, pattern)).slice(-120), [lines, pattern]);
   const [follow, setFollow] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
   const collapsed = useCollapsedLogs(shown);
@@ -88,7 +88,7 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
       </CardHeader>
       <div className="flex gap-2 p-2"><ErrorJump jump={keyboard.jump} /></div>
       {mode === "patterns" ? <PatternMode kind="container" id={c.id} select={(row) => { setPattern(row); setMode("raw"); }} /> : <>
-      {pattern && !lines.some((line) => patternKey(line) === pattern.key) && <PatternSamples pattern={pattern} clear={() => setPattern(undefined)} />}
+      {pattern && !lines.some((line) => matchesPattern(line, pattern)) && <PatternSamples pattern={pattern} clear={() => setPattern(undefined)} />}
       <LogDensity lines={shown} onSelect={(id) => { collapsed.reveal(id); keyboard.select(id); }} />
       <LogDeliveryNotice lines={lines} paused={paused} />
       <div role="log" aria-live={paused ? "off" : "polite"} className="relative"><p id={keyboard.hintId} className="sr-only">{logs("keyboardHint")}</p>

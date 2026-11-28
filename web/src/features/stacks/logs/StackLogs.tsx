@@ -1,5 +1,5 @@
 import { LogModeToggle, PatternMode, PatternSamples, PatternFilter } from "@/shared/logs/PatternMode";
-import { patternKey, type LogPattern } from "@/shared/logs/patterns";
+import { matchesPattern, type LogPattern } from "@/shared/logs/patterns";
 import { useCollapsedLogs } from "@/shared/logs/use-collapsed-logs";
 import { RepeatButton, LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { useLogKeyboard } from "./use-log-keyboard";
@@ -57,7 +57,7 @@ function StackLogsView({ stack }: { stack: Stack }) {
     const q = query.trim().toLowerCase();
     return lines.filter(
       (l) =>
-        (!pattern || patternKey(l) === pattern.key) && !clearedIds.has(l.id) && (logGap(l) !== undefined || (
+        (!pattern || matchesPattern(l, pattern)) && !clearedIds.has(l.id) && (logGap(l) !== undefined || (
         (services.length === 0 || services.includes(l.service)) &&
         (level === "all" || l.level === level) &&
         (!q || l.message.toLowerCase().includes(q) || l.service.toLowerCase().includes(q)))),
@@ -98,7 +98,7 @@ function StackLogsView({ stack }: { stack: Stack }) {
         </Toggle>
       </div>
       {mode === "patterns" ? <PatternMode kind="stack" id={stack.id} select={(row) => { setPattern(row); setMode("raw"); }} /> : <>
-      {pattern && !lines.some((line) => patternKey(line) === pattern.key) && <PatternSamples pattern={pattern} clear={() => setPattern(undefined)} />}
+      {pattern && !lines.some((line) => matchesPattern(line, pattern)) && <PatternSamples pattern={pattern} clear={() => setPattern(undefined)} />}
       <div className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2" role="group" aria-label={t("services")}>
         {stack.services.map((s) => {
           const tone = tones.get(s.name) ?? "info";

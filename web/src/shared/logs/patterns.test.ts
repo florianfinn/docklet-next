@@ -6,7 +6,7 @@
 
 import { expect, it } from "vitest";
 import type { LogLine } from "@/domain/model";
-import { PatternFold, patternKey, PATTERN_LINES, PATTERN_BYTES } from "./patterns";
+import { matchesPattern, PatternFold, patternKey, PATTERN_LINES, PATTERN_BYTES } from "./patterns";
 import { PatternQueue } from "./pattern-queue";
 import { logFixture, settleLogs } from "@/data/http/logs.test-support";
 
@@ -55,4 +55,22 @@ it("drops queued frames on clear and stops a slice before eight milliseconds", (
   expect(queue.fold.lines).toBe(2); expect(queue.pending).toBe(1);
   queue.clear(); expect(queue.pending).toBe(0); queue.enqueue([line("late")]); queue.slice(() => 0);
   expect(queue.fold.lines).toBe(2);
+});
+
+it("keeps JSON and logfmt levels apart and keeps JSON keys and messages in the shape", () => {
+  const fold = new PatternFold();
+  const info = line('{"level":"info","msg":"request served","path":"/a","ms":12}', "A", 0);
+  const errors = [line('{"level":"error","msg":"request served","path":"/b","ms":40}', "A", 1), line('{"level":"error","msg":"request served","path":"/c","ms":41}', "A", 2)];
+  const other = line('{"level":"info","msg":"cache warmed","path":"/a","ms":3}', "A", 3);
+  const logfmt = [line('level="error" msg="disk full"', "A", 4), line('level="info" msg="disk full"', "A", 5)];
+  [info, ...errors, other, ...logfmt].forEach((value) => fold.add(value));
+  const rows = fold.snapshot();
+  const json = rows.filter((row) => row.key.startsWith("{"));
+  expect(json.map((row) => `${row.level}:${row.count}`).sort()).toEqual(["error:2", "info:1", "info:1"]);
+  expect(json.some((row) => row.key.includes('"msg":"cache warmed"'))).toBe(true);
+  const quotedLevels = rows.filter((row) => row.key.startsWith("level="));
+  expect(quotedLevels.map((row) => row.level).sort()).toEqual(["error", "info"]);
+  const errorRow = json.find((row) => row.level === "error")!;
+  expect(matchesPattern(errors[0]!, errorRow)).toBe(true);
+  expect(matchesPattern(info, errorRow)).toBe(false);
 });

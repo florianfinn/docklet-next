@@ -15,17 +15,26 @@ const encoder = new TextEncoder();
 // eslint-disable-next-line no-control-regex -- ANSI escape and bell bytes delimit terminal control sequences.
 export const stripAnsi = (text: string) => text.replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))/g, "");
 export const continuation = (text: string) => /^(?:\s|at |Caused by|Traceback|File ")/.test(stripAnsi(text));
+// JSON keys and the values that name a line (level, message, event, logger) stay part of the shape;
+// other JSON string values become placeholders. Plain-text lines replace every quoted string.
+const KEPT_JSON = /^(?:level|lvl|severity|log\.level|msg|message|event|logger)$/i;
+const jsonShape = (text: string) => text.replace(/"((?:\\.|[^"\\])*)"(\s*:\s*)("(?:\\.|[^"\\])*")?/g, (_all, key: string, separator: string, value?: string) =>
+  `"${key}"${separator}${value === undefined ? "" : KEPT_JSON.test(key) ? value : "<quoted>"}`);
 export function patternKey(line: Pick<LogLine, "message">): string {
   const text = stripAnsi(line.message);
   if (continuation(text)) return "";
-  return text
+  const json = text.trimStart().startsWith("{");
+  const shape = (json ? jsonShape(text) : text)
     .replace(/\b\d{4}[-/]\d{2}[-/]\d{2}(?:[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?\b/g, "<time>")
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "<uuid>")
     .replace(/(?:\b[0-9a-f]{1,4})?(?::[0-9a-f]{0,4}){2,}(?:%[\w-]+)?/gi, "<ip>")
     .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, "<ip>")
-    .replace(/\b(?:0x)?[0-9a-f]{8,}\b/gi, "<hex>")
-    .replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, "<quoted>")
-    .replace(/\b\d+(?:\.\d+)?\b/g, "<number>");
+    .replace(/\b(?:0x)?[0-9a-f]{8,}\b/gi, "<hex>");
+  return (json ? shape : shape.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, "<quoted>")).replace(/\b\d+(?:\.\d+)?\b/g, "<number>");
+}
+/** A live line belongs to a pattern when its shape and its level both match; the level keeps info and error lines of one shape apart. */
+export function matchesPattern(line: Pick<LogLine, "message">, pattern: Pick<LogPattern, "key" | "level">): boolean {
+  return patternKey(line) === pattern.key && classifyLevel(stripAnsi(line.message)) === pattern.level;
 }
 export interface LogPattern {
   key: string;
@@ -55,10 +64,12 @@ export class PatternFold {
     const time = Date.parse(line.ts);
     if (Number.isFinite(time)) { this.first = Math.min(this.first, time); this.last = Math.max(this.last, time); }
     const key = patternKey(line);
-    let row = key ? this.patterns.get(key) : this.heads.get(line.service);
+    const level = key ? classifyLevel(stripAnsi(line.message)) : "info";
+    const slot = `${level}\u0001${key}`;
+    let row = key ? this.patterns.get(slot) : this.heads.get(line.service);
     if (!row && key) {
-      const fresh = (): Accumulator => ({ key, other: false, level: classifyLevel(stripAnsi(line.message)), count: 0, first: line.ts, last: line.ts, samples: [], times: [] });
-      if (this.patterns.size < PATTERN_LIMIT) { row = fresh(); this.patterns.set(key, row); }
+      const fresh = (): Accumulator => ({ key, other: false, level, count: 0, first: line.ts, last: line.ts, samples: [], times: [] });
+      if (this.patterns.size < PATTERN_LIMIT) { row = fresh(); this.patterns.set(slot, row); }
       else { row = this.other ??= { ...fresh(), key: "", other: true }; }
     }
     // An orphan continuation is counted in the overflow row, never as its own shape.
