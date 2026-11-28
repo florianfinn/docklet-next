@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original regression evidence for remembered pattern windows and the selectable line limit (M47 K-8).
 
+import { StrictMode } from "react";
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
@@ -11,6 +12,7 @@ import { setAppLocale } from "@/app/i18n/locale-store";
 import type { LogReadOptions, LogReadResult } from "@/data/api";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { registerIdentityLifetime } from "@/data/identity-lifetime";
+import { registerLogLifetime } from "@/data/log-buffer";
 import type { LogLine } from "@/domain/model";
 import { renderWithApp } from "@/test/render";
 import { PatternMode } from "./PatternMode";
@@ -80,4 +82,73 @@ it("reads with the line limit chosen on the lines badge", async () => {
   await drain();
   expect(calls.at(-1)).toMatchObject({ tail: 10_000, maxLines: 10_000 });
   expect(screen.getByRole("button", { name: "5 lines read, limit 10,000 lines" })).toBeDefined();
+});
+it("retains a refreshed result across leaving and reopening Patterns", async () => {
+  const { adapter, calls, drain } = setup();
+  const first = renderWithApp(<PatternMode kind="container" id="example" select={() => {}} />, adapter);
+  await drain();
+  await userEvent.setup().click(screen.getByRole("button", { name: "Read again" })); await drain();
+  expect(calls.length).toBe(2);
+  first.unmount();
+  renderWithApp(<PatternMode kind="container" id="example" select={() => {}} />, adapter); await drain();
+  expect(calls.length).toBe(2);
+});
+
+it.each(["cap-lines", "cap-bytes"] as const)("remembers %s results across unmount", async (reason) => {
+  const { adapter, calls, drain } = setup(reason);
+  const first = renderWithApp(<PatternMode kind="container" id="example" select={() => {}} />, adapter); await drain(); first.unmount();
+  renderWithApp(<PatternMode kind="container" id="example" select={() => {}} />, adapter); await drain();
+  expect(calls.length).toBe(1);
+});
+
+it("refresh leaves the other window cached", async () => {
+  const { adapter, calls, drain } = setup();
+  renderWithApp(<PatternMode kind="container" id="example" select={() => {}} />, adapter); await drain();
+  const user = userEvent.setup();
+  await user.click(radio("7 d")); await drain();
+  await user.click(screen.getByRole("button", { name: "Read again" })); await drain();
+  await user.click(radio("24 h")); await drain();
+  await user.click(radio("7 d")); await drain();
+  expect(calls.length).toBe(3);
+});
+
+it("bounds the cache to eight entries", async () => {
+  const { adapter, calls, drain } = setup();
+  for (let i = 0; i < 9; i++) {
+    const view = renderWithApp(<PatternMode kind="container" id={String(i)} select={() => {}} />, adapter); await drain(); view.unmount();
+  }
+  const hit = renderWithApp(<PatternMode kind="container" id="1" select={() => {}} />, adapter); await drain(); hit.unmount();
+  expect(calls.length).toBe(9);
+  renderWithApp(<PatternMode kind="container" id="0" select={() => {}} />, adapter); await drain();
+  expect(calls.length).toBe(10);
+});
+
+it("a completed read survives StrictMode remount", async () => {
+  const { adapter, calls, drain } = setup();
+  const first = renderWithApp(<StrictMode><PatternMode kind="container" id="example" select={() => {}} /></StrictMode>, adapter); await drain();
+  const initial = calls.length; first.unmount();
+  renderWithApp(<StrictMode><PatternMode kind="container" id="example" select={() => {}} /></StrictMode>, adapter); await drain();
+  expect(calls.length).toBe(initial);
+  expect(calls.every((call) => call.maxBytes === 20 * 1024 * 1024)).toBe(true);
+});
+
+it("opens and selects the line limit using the keyboard", async () => {
+  const { adapter, calls, drain } = setup();
+  renderWithApp(<PatternMode kind="container" id="example" select={() => {}} />, adapter); await drain();
+  const user = userEvent.setup();
+  screen.getByRole("button", { name: "5 lines read, limit 100,000 lines" }).focus();
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("menuitemradio", { name: "At most 100,000 lines" }).getAttribute("aria-checked")).toBe("true");
+  await user.keyboard("{Home}{Enter}"); await drain();
+  expect(calls.at(-1)).toMatchObject({ tail: 10_000, maxLines: 10_000 });
+});
+
+it("invalidates a hit on a production-style log and identity reset", async () => {
+  const { adapter, calls, drain } = setup();
+  let version = 0; const listeners = new Set<() => void>();
+  registerLogLifetime(adapter.subscribeLogs, { version: () => version, listen: (fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; } });
+  registerIdentityLifetime(adapter.subscribeChanges, { version: () => version, active: () => true, listen: () => () => {} });
+  renderWithApp(<PatternMode kind="container" id="example" select={() => {}} />, adapter); await drain();
+  act(() => { version++; listeners.forEach((fn) => fn()); }); await drain();
+  expect(calls.length).toBe(2);
 });

@@ -21,18 +21,20 @@ export const PATTERN_LIMITS = [10_000, 50_000, PATTERN_LINES] as const;
 // identity generations, so a new session or viewer never sees another's result; only folded
 // patterns are kept, never raw lines.
 const CACHE_ENTRIES = 8;
-const caches = new WeakMap<object, Map<string, { retry: number; view: PatternView }>>();
+const caches = new WeakMap<object, Map<string, PatternView>>();
 const cacheOf = (owner: object) => { let cache = caches.get(owner); if (!cache) caches.set(owner, (cache = new Map())); return cache; };
-export function usePatternRead(kind: "stack" | "container", id: string, range: PatternRange, retry: number, limit: number = PATTERN_LINES) {
+/** The view of one window and `refresh`, which forgets that window's remembered result and reads it again. */
+export function usePatternRead(kind: "stack" | "container", id: string, range: PatternRange, limit: number = PATTERN_LINES) {
   const adapter = useAdapter();
   const lifetime = logLifetime(adapter.subscribeLogs);
   const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
   const identity = identityLifetime(adapter).version();
   const windowKey = JSON.stringify([kind, id, range, limit, generation, identity]);
-  const key = JSON.stringify([windowKey, retry]);
-  const cached = cacheOf(adapter.subscribeLogs).get(windowKey);
-  const hit = cached?.retry === retry ? cached.view : undefined;
+  const [reads, setReads] = useState(0);
+  const key = JSON.stringify([windowKey, reads]);
+  const hit = cacheOf(adapter.subscribeLogs).get(windowKey);
   const [state, setState] = useState<{ key: string; adapter: typeof adapter; view: PatternView }>();
+  const refresh = () => { cacheOf(adapter.subscribeLogs).delete(windowKey); setReads((n) => n + 1); };
   useEffect(() => {
     if (hit) return;
     const controller = new AbortController(), queue = new PatternQueue();
@@ -54,7 +56,7 @@ export function usePatternRead(kind: "stack" | "container", id: string, range: P
       // Only complete or capped reads are remembered; an interrupted or failed read is read again.
       if (view.result && (view.result.reason === "end" || view.result.reason === "cap-lines" || view.result.reason === "cap-bytes")) {
         const cache = cacheOf(adapter.subscribeLogs);
-        cache.delete(windowKey); cache.set(windowKey, { retry, view });
+        cache.delete(windowKey); cache.set(windowKey, view);
         for (const old of cache.keys()) if (cache.size > CACHE_ENTRIES) cache.delete(old);
       }
       if (queue.pending) frame = requestAnimationFrame(publish);
@@ -70,7 +72,7 @@ export function usePatternRead(kind: "stack" | "container", id: string, range: P
       result = value; schedule();
     });
     return () => { off(); offIdentity(); clear(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` carries the range, limit and retry by value.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` carries the range, limit and refreshes by value.
   }, [adapter, key, kind, id, lifetime, Boolean(hit)]);
-  return hit ?? (state?.key === key && state.adapter === adapter ? state.view : undefined);
+  return { view: hit ?? (state?.key === key && state.adapter === adapter ? state.view : undefined), refresh };
 }

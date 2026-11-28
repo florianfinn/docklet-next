@@ -42,12 +42,10 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
   const [custom, setCustom] = useState<PatternRange>();
   const [filter, setFilter] = useState("all");
   const [limit, setLimit] = useState<number>(PATTERN_LIMITS.at(-1)!);
-  // "Read again" refreshes only the shown window; other remembered windows keep their result.
-  const [retries, setRetries] = useState<Record<string, number>>({});
   const [slice, setSlice] = useState<{ row: string } & SliceTarget>();
   const range: PatternRange = window === "custom" && custom ? custom : { hours: Number(window === "custom" ? "24" : window) };
-  const shownWindow = JSON.stringify([range, limit]);
-  const view = usePatternRead(kind, id, range, retries[shownWindow] ?? 0, limit);
+  // "Read again" forgets only the shown window; other remembered windows keep their result.
+  const { view, refresh } = usePatternRead(kind, id, range, limit);
   const rows = view?.rows ?? [];
   const count = rows.filter((row) => !row.other).length;
   const visible = rows.filter((row) => filter === "all" || row.level === "error" || row.level === "warn").slice(0, 200);
@@ -63,7 +61,7 @@ export function PatternMode({ kind, id, select }: { kind: "stack" | "container";
     <div className="flex flex-wrap gap-2">
       <SegmentedToggle value={window} onChange={choose} label={t("window")} fit="content" options={[...PRESETS.map((value) => ({ value, label: t(`hours${value}`) })), { value: "custom", label: t("custom") }]} />
       <SegmentedToggle value={filter} onChange={setFilter} label={t("filter")} fit="content" options={[{ value: "all", label: t("all") }, { value: "warnings", label: t("warnings") }]} />
-      <Button variant="outline" size="sm" onClick={() => { setSlice(undefined); setRetries((r) => ({ ...r, [shownWindow]: (r[shownWindow] ?? 0) + 1 })); }}>{t("retry")}</Button>
+      <Button variant="outline" size="sm" onClick={() => { setSlice(undefined); refresh(); }}>{t("retry")}</Button>
     </div>
     {window === "custom" && <div className="flex flex-wrap items-end gap-2">
       <label className="grid gap-1 text-xs">{t("from")}<Input type="datetime-local" value={draft.from} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))} /></label>

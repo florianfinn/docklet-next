@@ -214,10 +214,10 @@ Break map S2:
   - a line limit chosen on the lines badge: 10,000, 50,000 or 100,000 lines (default and maximum
     100,000; K-8). The limit costs browser time, transfer and Docker log reading, but no hub or agent
     memory, because records pass through one at a time;
-  - `tail: 100000`, so Docker returns the newest lines inside the window. For a stack, compose applies
+  - `tail` = the selected limit, so Docker returns the newest lines inside the window. For a stack, compose applies
     `tail` per container, so a stack read shows the time span it actually covered. It does not claim
     to hold the globally newest lines;
-  - `maxLines: 100000` and `maxBytes: 20 MiB`.
+  - `maxLines` = the selected limit and `maxBytes: 20 MiB`.
 
   Leaving the mode or the page aborts the read. A complete or capped result is remembered per
   window and limit while the app runs (at most eight; K-8), so switching back shows it at once and
