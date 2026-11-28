@@ -97,3 +97,29 @@ it("marks a continuation across a page boundary and keeps the current scroll", a
   expect(screen.getByText("at continuation").closest("li")!.hasAttribute("data-match")).toBe(true);
   expect(list.scrollTop).toBe(123);
 });
+it("keeps paging when changing interleavings grow the union beyond the last read", async () => {
+  const f = mount("stack"); await act(settleLogs);
+  const send = (n: number, source: string, count: number, base: number) => {
+    for (let i = 0; i < count; i++) f.sockets[n]!.send({ seq: base + i, timestamp: stamp(0), service: source, message: `INFO ${source} ${i}` });
+  };
+  act(() => { f.sockets[0]!.onopen?.(new Event("open")); send(0, "a", 500, 1); }); await act(settleLogs);
+  await userEvent.setup().click(screen.getByRole("button", { name: "Load more lines" })); await act(settleLogs);
+  act(() => { f.sockets[1]!.onopen?.(new Event("open")); send(1, "b", 1000, 1); }); await act(settleLogs);
+  expect(screen.getAllByRole("listitem")).toHaveLength(1500);
+  await userEvent.setup().click(screen.getByRole("button", { name: "Load more lines" })); await act(settleLogs);
+  act(() => { f.sockets[2]!.onopen?.(new Event("open")); send(2, "a", 500, 1); send(2, "b", 1000, 501); send(2, "c", 1, 1501); f.sockets[2]!.disconnect(); }); await act(settleLogs);
+  // The budget covers every shown line, so the replayed 1,500 lines leave room for the new one.
+  expect(new URL(f.urls[2]!).searchParams.get("since")).toBe(stamp(0));
+  expect([screen.queryByText("INFO c 0") !== null, screen.getAllByRole("listitem").length]).toEqual([true, 1501]);
+});
+
+it("keeps replay budget after an empty interrupted later page", async () => {
+  const f = mount("container"); await act(settleLogs);
+  const prefix = (n: number) => { for (let i=0;i<500;i++) f.sockets[n]!.send({ seq: i+1, timestamp: stamp(0), service: "a", message: `INFO a ${i}` }); };
+  act(() => { f.sockets[0]!.onopen?.(new Event("open")); prefix(0); }); await act(settleLogs);
+  await userEvent.setup().click(screen.getByRole("button", { name: "Load more lines" })); await act(settleLogs);
+  act(() => { f.sockets[1]!.onopen?.(new Event("open")); f.sockets[1]!.disconnect(1006); }); await act(settleLogs);
+  await userEvent.setup().click(screen.getByRole("button", { name: "Load more lines" })); await act(settleLogs);
+  act(() => { f.sockets[2]!.onopen?.(new Event("open")); prefix(2); f.sockets[2]!.send({ seq:501, timestamp:stamp(0), service:"a", message:"INFO final" }); f.sockets[2]!.disconnect(); }); await act(settleLogs);
+  expect(screen.queryByRole("button", { name: "Load more lines" }) !== null || screen.queryByText("INFO final") !== null).toBe(true);
+});

@@ -256,10 +256,11 @@ Break map S2:
     source. Continuation lines before their source's first head in the read stay unmarked.
   - A full page states how many lines are shown and offers "Load more lines". The next page reads
     the bin from its start again, because a stack merges its containers concurrently and no
-    timestamp cursor is safe. Its budget is the previous read's lines and bytes plus one page
-    (500 lines / 1 MiB), and the lines already shown are taken out as a multiset (source, time,
-    text), so each page adds at least one page of new lines or ends the bin. A page that adds no
-    line offers no further page. The list is sorted by time; the sort is stable, so each source
+    timestamp cursor is safe. Its budget is every shown line and byte plus one page (500 lines /
+    1 MiB), and the lines already shown are taken out as a multiset (source, time, text). Replayed
+    lines can use at most the shown share of that budget, so in any interleaving and after any
+    interrupted or empty attempt each page adds a full page of new lines (producer lines stay below
+    64 KiB) or ends the bin. A page that adds no line offers no further page. The list is sorted by time; the sort is stable, so each source
     keeps its own order.
   - Long lines stay on one row; the list and the samples scroll sideways (K-7).
 - **Measurement.** Fold time for 100,000 synthetic lines: desktop Chromium unthrottled, and Chromium

@@ -183,7 +183,8 @@ it("reads the next page from the bin start with one more page of budget, without
   expect(screen.getByText("Showing the first 500 lines; this period has more.")).toBeDefined();
   await userEvent.setup().click(screen.getByRole("button", { name: "Load more lines" }));
   await act(settleLogs);
-  expect(calls[1]).toMatchObject({ since: new Date(start).toISOString(), until: "2026-01-02T03:04:05.999999999Z", maxLines: 1000, maxBytes: 100 + 1024 * 1024 });
+  const shownBytes = first.reduce((sum, l) => sum + new TextEncoder().encode(l.message).length, 0);
+  expect(calls[1]).toMatchObject({ since: new Date(start).toISOString(), until: "2026-01-02T03:04:05.999999999Z", maxLines: 1000, maxBytes: shownBytes + 1024 * 1024 });
   expect([screen.getAllByText("INFO tick a").length, screen.getAllByText("INFO tick c").length, screen.getAllByRole("listitem").length]).toEqual([1, 1, 502]);
   expect(screen.queryByRole("button", { name: "Load more lines" })).toBeNull();
 });
