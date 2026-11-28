@@ -142,13 +142,14 @@ func (s *ContainerService) openLogsInternal(ctx context.Context, containerID str
 	return logs, containerInspect, nil
 }
 
-func (s *ContainerService) StreamLogs(ctx context.Context, containerID string, logsChan chan<- string, follow bool, tail, since string, timestamps bool) error {
+func (s *ContainerService) StreamLogs(ctx context.Context, containerID string, logsChan chan<- string, follow bool, tail, since, until string, timestamps bool) error {
 	logs, containerInspect, err := s.openLogsInternal(ctx, containerID, client.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 		Follow:     follow,
 		Tail:       tail,
 		Since:      since,
+		Until:      until,
 		Timestamps: timestamps,
 	})
 	if err != nil {

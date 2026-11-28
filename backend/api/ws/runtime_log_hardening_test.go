@@ -44,14 +44,14 @@ func TestRuntimeLogsRealWSStructuredStderr(t *testing.T) {
 			frame := hardeningLogFrame(2, "2026-01-02T03:04:05.123456789Z "+message+"\n")
 			route := "containers/example/logs?format=json&follow=false&timestamps=true"
 			if kind == "container" {
-				h.containerLogStreamer = func(ctx context.Context, _ string, out chan<- string, follow bool, _, _ string, _ bool) error {
+				h.containerLogStreamer = func(ctx context.Context, _ string, out chan<- string, follow bool, _, _, _ string, _ bool) error {
 					return docker.StreamContainerLogs(ctx, io.NopCloser(bytes.NewReader(frame)), out, follow, false)
 				}
 			} else {
 				daemon := composeHardeningDaemon(t, frame)
 				t.Setenv("DOCKER_HOST", "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
-				h.projectLogStreamer = func(ctx context.Context, _ string, _ chan<- string, follow bool, tail, since string, timestamps bool) error {
-					return projects.ComposeLogs(ctx, "example", io.Discard, follow, tail, since, timestamps)
+				h.projectLogStreamer = func(ctx context.Context, _ string, _ chan<- string, follow bool, tail, since, until string, timestamps bool) error {
+					return projects.ComposeLogs(ctx, "example", io.Discard, follow, tail, since, until, timestamps)
 				}
 				route = "projects/example/logs?format=json&follow=false&timestamps=true"
 			}
@@ -104,7 +104,7 @@ func TestRuntimeLogsRealWSLateViewerReceivesOnlyFutureLines(t *testing.T) {
 	var starts atomic.Int32
 	next := make(chan string)
 	joined := make(chan struct{})
-	h := &WebSocketHandler{containerLogStreamer: func(ctx context.Context, _ string, _ chan<- string, _ bool, _, _ string, _ bool) error {
+	h := &WebSocketHandler{containerLogStreamer: func(ctx context.Context, _ string, _ chan<- string, _ bool, _, _, _ string, _ bool) error {
 		starts.Add(1)
 		defer close(joined)
 		sink := docker.LogSinkFromContext(ctx)
@@ -193,7 +193,9 @@ func TestRuntimeLogSourceWarningBoundedAndCancellationQuiet(t *testing.T) {
 		h := &WebSocketHandler{logStreams: make(map[string]*wsLogStream)}
 		ls, ctx := newWSLogStreamInternal("example", "json")
 		ls.refs = 1 // Model the viewer that owns this source until forwarding completes.
-		lines := h.startLogSourceInternal(ctx, "example", strings.Repeat("界", 300), "container", logStreamParams{}, func(context.Context, string, chan<- string, bool, string, string, bool) error { return sourceErr }, ls)
+		lines := h.startLogSourceInternal(ctx, "example", strings.Repeat("界", 300), "container", logStreamParams{}, func(context.Context, string, chan<- string, bool, string, string, string, bool) error {
+			return sourceErr
+		}, ls)
 		close(ls.firstSubscriber)
 		var failures int
 		for line := range lines {

@@ -2,7 +2,7 @@
 // Revision: 6365cc5cebd04f199d15fe5f53c006a127d0a669
 // Retrieved: 2026-11-01
 // License: Apache-2.0
-// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations; optional-module foundation (#472). M27 proxy contract foundation (#473/#474); M29 first-run claim and sign-in policy routes. Hub release list refresh. #573 administrator-only tailnet routes. M46 #682 administrator-only combined update routes.
+// Deviations: Retire fleet-upgrade metadata; Original simple-user resource authorization; M16 bind mounts and backup completion; M19 backend contracts and target identity integration. M21 #438: candidate scans and verified manifest binding. M23 #435: active image summaries. M25 latest agent restart read. M26 #394 volume collection routes under _collection; #378 M17/M19/M25 operations; optional-module foundation (#472). M27 proxy contract foundation (#473/#474); M29 first-run claim and sign-in policy routes. Hub release list refresh. #573 administrator-only tailnet routes. M46 #682 administrator-only combined update routes. M47 #693 administrator-only host container lanes.
 
 package access
 
@@ -366,6 +366,7 @@ var Routes = []Route{
 	{"GET", "/environments/{id}/containers/{containerId}/history", "get-container-history"},
 	{"GET", "/environments/{id}/projects/{projectId}/history", "get-project-history"},
 	{"GET", "/environments/{id}/history/host", "get-host-history"},
+	{"GET", "/environments/{id}/history/containers", "get-host-container-history"},
 	{"GET", "/environments/{id}/history/sample", "get-history-sample"},
 	{"GET", "/history/capacity", "get-history-capacity"},
 	{"GET", "/environments/{id}/runtime-conditions", "get-runtime-conditions"},

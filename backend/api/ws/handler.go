@@ -74,8 +74,8 @@ type WebSocketHandler struct {
 	gpuMonitor         *systemlib.GPUMonitor
 
 	diskUsagePathCache   *hot.HotCache[struct{}, string]
-	projectLogStreamer   func(ctx context.Context, projectID string, logsChan chan<- string, follow bool, tail, since string, timestamps bool) error
-	containerLogStreamer func(ctx context.Context, containerID string, logsChan chan<- string, follow bool, tail, since string, timestamps bool) error
+	projectLogStreamer   func(ctx context.Context, projectID string, logsChan chan<- string, follow bool, tail, since, until string, timestamps bool) error
+	containerLogStreamer func(ctx context.Context, containerID string, logsChan chan<- string, follow bool, tail, since, until string, timestamps bool) error
 	systemStatsCollector func(ctx context.Context) systemtypes.SystemStats
 	cpuUsageReader       func(interval time.Duration) (float64, bool)
 }

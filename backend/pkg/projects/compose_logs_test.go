@@ -92,7 +92,7 @@ func TestComposeLogsMarksStderrWithoutChangingComposeOptions(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://"+strings.TrimPrefix(server.URL, "http://"))
 
 	out := &bytes.Buffer{}
-	err := ComposeLogs(t.Context(), composeLogsTestProjectInternal, out, false, "all", "", true)
+	err := ComposeLogs(t.Context(), composeLogsTestProjectInternal, out, false, "all", "", "2024-08-26T11:00:00Z", true)
 	require.NoError(t, err)
 
 	body := out.String()
@@ -108,6 +108,7 @@ func TestComposeLogsMarksStderrWithoutChangingComposeOptions(t *testing.T) {
 	assert.Contains(t, query, "timestamps=1")
 	assert.NotContains(t, query, "follow=")
 	assert.NotContains(t, query, "tail=")
+	assert.Contains(t, query, "until=1724670000", "the window end reaches the Docker logs query")
 	var mu sync.Mutex
 	var records []docker.LogRecord
 	ctx := docker.WithLogSink(t.Context(), func(record docker.LogRecord) error {
@@ -117,7 +118,7 @@ func TestComposeLogsMarksStderrWithoutChangingComposeOptions(t *testing.T) {
 		return nil
 	})
 	out.Reset()
-	require.NoError(t, ComposeLogs(ctx, composeLogsTestProjectInternal, out, false, "all", "", true))
+	require.NoError(t, ComposeLogs(ctx, composeLogsTestProjectInternal, out, false, "all", "", "", true))
 	require.Empty(t, out.String(), "structured sources bypass the text pipe")
 	require.Len(t, records, 3)
 	observed := make(map[string]docker.LogRecord)

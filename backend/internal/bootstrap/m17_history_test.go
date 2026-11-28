@@ -2,7 +2,7 @@
 // Revision: 14e11ba9c022d57c29bd36c8ed24780763327d0c
 // Retrieved: 2026-11-03
 // License: Apache-2.0
-// Deviations: Original hub history access through real Huma and environment middleware.
+// Deviations: Original hub history access through real Huma and environment middleware. M47 #693: host container lanes.
 
 package bootstrap
 
@@ -24,6 +24,7 @@ import (
 	authDTO "github.com/florianfinn/docklet-next/types/auth"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/contract"
+	apiKeyDTO "github.com/florianfinn/docklet-next/types/apikey"
 	dto "github.com/florianfinn/docklet-next/types/history"
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	"github.com/florianfinn/docklet-next/types/version"
@@ -100,7 +101,7 @@ func TestHB14HistoryRightsAndHubServing(t *testing.T) {
 	for _, tc := range []struct {
 		path   string
 		status int
-	}{{"/environments/example/containers/app/history", 200}, {"/environments/other-host/containers/app/history", 404}, {"/environments/example/projects/assigned/history", 200}, {"/environments/example/projects/other/history", 404}, {"/environments/example/history/host", 403}, {"/history/capacity", 403}} {
+	}{{"/environments/example/containers/app/history", 200}, {"/environments/other-host/containers/app/history", 404}, {"/environments/example/projects/assigned/history", 200}, {"/environments/example/projects/other/history", 404}, {"/environments/example/history/host", 403}, {"/environments/example/history/containers", 403}, {"/history/capacity", 403}} {
 		r := read(tc.path, tokens.AccessToken)
 		require.Equal(t, tc.status, r.Code, r.Body.String())
 	}
@@ -111,6 +112,27 @@ func TestHB14HistoryRightsAndHubServing(t *testing.T) {
 	administrator := read("/environments/example/runtime-conditions", f.tokens.AccessToken)
 	require.Equal(t, 200, administrator.Code)
 	require.Contains(t, administrator.Body.String(), `"name":"private"`)
+	// M47 #693: host container lanes stay on the hub for a remote host and are administrator-only.
+	denied := read("/environments/example/history/containers", tokens.AccessToken)
+	require.Contains(t, denied.Body.String(), "access.admin-required")
+	lanes := read("/environments/example/history/containers?range=24h", f.tokens.AccessToken)
+	require.Equal(t, 200, lanes.Code, lanes.Body.String())
+	require.Contains(t, lanes.Body.String(), `"name":"app"`)
+	require.Contains(t, lanes.Body.String(), `"state":"down"`)
+	scoped := func(name, permission string) string {
+		key, err := f.keys.CreateApiKey(t.Context(), f.adminID, authz.SudoPermissionSet(), apiKeyDTO.CreateApiKey{Name: name, Permissions: []apiKeyDTO.PermissionGrant{{Permission: permission, EnvironmentID: new("example")}}})
+		require.NoError(t, err)
+		return key.Key
+	}
+	readByKey := func(key string) int {
+		request := httptest.NewRequest("GET", "/api/environments/example/history/containers", nil)
+		request.Header.Set(middleware.HeaderApiKey, key)
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		return response.Code
+	}
+	require.Equal(t, 200, readByKey(scoped("lanes-read", authz.PermContainersRead)), "containers:read is enough for lanes")
+	require.Equal(t, 403, readByKey(scoped("lanes-logs-only", authz.PermContainersLogs)), "log permission alone does not read lanes")
 	require.EqualValues(t, 0, forwarded.Load())
 	// Removal uses the real service transaction and its ephemeral invalidator.
 	hosts.SetHistoryInvalidator(service.Forget)

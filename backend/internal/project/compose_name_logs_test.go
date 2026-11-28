@@ -78,7 +78,7 @@ func assertComposeLogLabel(t *testing.T, svc *ProjectService, id, want string, t
 		for range lines {
 		}
 	}()
-	err := svc.StreamProjectLogs(ctx, id, lines, false, "100", "", false)
+	err := svc.StreamProjectLogs(ctx, id, lines, false, "100", "", "", false)
 	close(lines)
 	<-drained
 	require.NoError(t, err)

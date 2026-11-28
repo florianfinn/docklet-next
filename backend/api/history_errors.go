@@ -53,14 +53,15 @@ func personalHistoryErrorTransformer(ctx huma.Context, status string, value any)
 // document. Routes are selected by operation id so older routes that share a path
 // word keep their contract; a generic error schema stays a oneOf alternative.
 var typedFailures = map[string][]string{
-	"get-history-sample":     {"502", "503"},
-	"get-container-history":  {"400", "503"},
-	"get-project-history":    {"400", "503"},
-	"get-host-history":       {"400", "503"},
-	"get-runtime-conditions": {"503"},
-	"get-history-capacity":   {"503"},
-	"get-my-ui-preferences":  {"403"},
-	"put-my-ui-preferences":  {"400", "403", "413"},
+	"get-history-sample":         {"502", "503"},
+	"get-container-history":      {"400", "503"},
+	"get-project-history":        {"400", "503"},
+	"get-host-history":           {"400", "503"},
+	"get-host-container-history": {"400", "503"},
+	"get-runtime-conditions":     {"503"},
+	"get-history-capacity":       {"503"},
+	"get-my-ui-preferences":      {"403"},
+	"put-my-ui-preferences":      {"400", "403", "413"},
 }
 
 func registerHistoryErrors(api huma.API) {

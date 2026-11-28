@@ -23,7 +23,7 @@ func TestHB9AgentAndEdgeHistoryAllowlist(t *testing.T) {
 		sample := api.OpenAPI().Paths["/environments/{id}/history/sample"]
 		require.NotNil(t, sample)
 		require.Equal(t, "get-history-sample", sample.Get.OperationID)
-		for _, path := range []string{"/environments/{id}/history/host", "/environments/{id}/runtime-conditions", "/history/capacity", "/auth/me/ui-preferences"} {
+		for _, path := range []string{"/environments/{id}/history/host", "/environments/{id}/history/containers", "/environments/{id}/runtime-conditions", "/history/capacity", "/auth/me/ui-preferences"} {
 			require.Nil(t, api.OpenAPI().Paths[path], path)
 		}
 	}

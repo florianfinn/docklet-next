@@ -246,7 +246,7 @@ func ComposeDown(ctx context.Context, proj *composetypes.Project, removeVolumes 
 // one-shot client for this call is built with the log-parity wrapper so
 // non-TTY containers keep their stderr metadata; deploy, attach, and other
 // compose operations use plain clients.
-func ComposeLogs(ctx context.Context, projectName string, out io.Writer, follow bool, tail, since string, timestamps bool) error {
+func ComposeLogs(ctx context.Context, projectName string, out io.Writer, follow bool, tail, since, until string, timestamps bool) error {
 	c, err := NewClient(ctx, "", nil, nil, streamDemuxedLogsInternal)
 	if err != nil {
 		return err
@@ -257,7 +257,7 @@ func ComposeLogs(ctx context.Context, projectName string, out io.Writer, follow 
 	if docker.LogSinkFromContext(ctx) != nil {
 		out = nil
 	}
-	return c.svc.Logs(ctx, projectName, &writerConsumer{out: out}, api.LogOptions{Follow: follow, Tail: tail, Since: since, Timestamps: timestamps})
+	return c.svc.Logs(ctx, projectName, &writerConsumer{out: out}, api.LogOptions{Follow: follow, Tail: tail, Since: since, Until: until, Timestamps: timestamps})
 }
 
 // ListGlobalComposeContainers lists every container carrying a compose

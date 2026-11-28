@@ -108,6 +108,7 @@ therefore behave the same without a hub-side hook.
 | `GET /environments/{id}/projects/{projectId}/history?range=` | like reading the project |
 | `GET /environments/{id}/runtime-conditions` | administrators: all; users: their assigned projects |
 | `GET /environments/{id}/history/host?range=`, `GET /history/capacity` | administrators |
+| `GET /environments/{id}/history/containers?range=` (M47) | administrators; API keys with `containers:read` on the host |
 
 These paths are served by the hub and never forwarded to an agent. A range returns 96,
 84 or 90 buckets, oldest first, with the open bucket last. A bucket shows the worst
@@ -115,6 +116,11 @@ condition that has minutes in it (down, unhealthy, running, stopped), otherwise 
 Uptime is (running + half of unhealthy) divided by (running + unhealthy + down); stopped
 and missing minutes do not count. A simple user's container history needs the owning
 host online, because membership is read there.
+
+The host container read (M47, `docs/design/log-health-insights.md`) answers in one query:
+- It returns the aligned state buckets of every container name with at least one down or
+  unhealthy minute in the range, without resource metrics, sorted by name.
+- It returns at most 500 containers, the most disrupted ones, and marks the cut with `truncated`.
 
 Capacity growth is the least-squares slope of disk usage over the 2-hour buckets of the
 last seven days that use the current disk path, after at least 24 hours of data. The

@@ -31,7 +31,7 @@ func TestRuntimeLogsRealDirectAndEdgeViewerBridges(t *testing.T) {
 		for _, kind := range []string{"projects", "containers"} {
 			t.Run(mode+"/"+kind, func(t *testing.T) {
 				joined := make(chan struct{})
-				stream := func(ctx context.Context, _ string, out chan<- string, follow bool, tail, since string, timestamps bool) error {
+				stream := func(ctx context.Context, _ string, out chan<- string, follow bool, tail, since, until string, timestamps bool) error {
 					defer close(joined)
 					if !follow || tail != "100" || since != "" || !timestamps {
 						return io.ErrUnexpectedEOF

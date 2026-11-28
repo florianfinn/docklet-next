@@ -41,8 +41,8 @@ type wsLogStream struct {
 	seq             atomic.Uint64
 }
 
-func buildLogStreamKeyInternal(envID, kind, resourceID, format string, batched, follow bool, tail, since string, timestamps bool) string {
-	encoded, _ := json.Marshal([]any{envID, kind, resourceID, format, batched, follow, tail, since, timestamps})
+func buildLogStreamKeyInternal(envID, kind, resourceID, format string, batched, follow bool, tail, since, until string, timestamps bool) string {
+	encoded, _ := json.Marshal([]any{envID, kind, resourceID, format, batched, follow, tail, since, until, timestamps})
 	return string(encoded)
 }
 
@@ -114,6 +114,7 @@ func (h *WebSocketHandler) markLogStreamDoneInternal(key string, stream *wsLogSt
 type logStreamParams struct {
 	tail       string
 	since      string
+	until      string
 	format     string
 	follow     bool
 	timestamps bool
@@ -125,6 +126,7 @@ func parseLogStreamParamsInternal(c *echo.Context) logStreamParams {
 		follow:     cmp.Or(c.QueryParam("follow"), "true") == "true",
 		tail:       cmp.Or(c.QueryParam("tail"), "100"),
 		since:      c.QueryParam("since"),
+		until:      c.QueryParam("until"),
 		timestamps: c.QueryParam("timestamps") == "true",
 		format:     cmp.Or(c.QueryParam("format"), "text"),
 		batched:    c.QueryParam("batched") == "true",
@@ -146,7 +148,7 @@ func (h *WebSocketHandler) serveLogStreamInternal(
 		return
 	}
 
-	streamKey := buildLogStreamKeyInternal(c.Param("id"), kind, resourceID, params.format, params.batched, params.follow, params.tail, params.since, params.timestamps)
+	streamKey := buildLogStreamKeyInternal(c.Param("id"), kind, resourceID, params.format, params.batched, params.follow, params.tail, params.since, params.until, params.timestamps)
 	stream := h.getOrCreateLogStreamInternal(streamKey, func(onEmpty func(*wsLogStream)) *wsLogStream {
 		return hubBuilder(streamKey, onEmpty)
 	})
@@ -179,6 +181,7 @@ func (h *WebSocketHandler) serveLogStreamInternal(
 //	@Param			follow		query	bool	false	"Follow log output"						default(true)
 //	@Param			tail		query	string	false	"Number of lines to show from the end"	default(100)
 //	@Param			since		query	string	false	"Show logs since timestamp"
+//	@Param			until		query	string	false	"Show logs before timestamp"
 //	@Param			timestamps	query	bool	false	"Show timestamps"				default(false)
 //	@Param			format		query	string	false	"Output format (text or json)"	default(text)
 //	@Param			batched		query	bool	false	"Batch log messages"			default(false)
@@ -256,7 +259,7 @@ func normalizeProjectLogTextInternal(line string) string {
 func (h *WebSocketHandler) startLogHubInternal(
 	key, resourceID, label string,
 	params logStreamParams,
-	stream func(context.Context, string, chan<- string, bool, string, string, bool) error,
+	stream func(context.Context, string, chan<- string, bool, string, string, string, bool) error,
 	normalizeJSON func(string) wshub.LogMessage,
 	normalizeText func(string) string,
 	onEmptyHook func(*wsLogStream),
@@ -280,7 +283,7 @@ func (h *WebSocketHandler) startLogSourceInternal(
 	ctx context.Context,
 	key, resourceID, label string,
 	params logStreamParams,
-	stream func(context.Context, string, chan<- string, bool, string, string, bool) error,
+	stream func(context.Context, string, chan<- string, bool, string, string, string, bool) error,
 	ls *wsLogStream,
 ) <-chan sourceLogLine {
 	lines := make(chan sourceLogLine, 256)
@@ -314,7 +317,7 @@ func (h *WebSocketHandler) startLogSourceInternal(
 				return ctx.Err()
 			}
 		})
-		err := stream(sourceCtx, resourceID, legacy, params.follow, params.tail, params.since, params.timestamps)
+		err := stream(sourceCtx, resourceID, legacy, params.follow, params.tail, params.since, params.until, params.timestamps)
 		close(legacy)
 		<-joined
 		if err != nil {
@@ -438,6 +441,7 @@ func mapLogLinesInternal[S, T any](ctx context.Context, lines <-chan S, transfor
 //	@Param			follow		query	bool	false	"Follow log output"						default(true)
 //	@Param			tail		query	string	false	"Number of lines to show from the end"	default(100)
 //	@Param			since		query	string	false	"Show logs since timestamp"
+//	@Param			until		query	string	false	"Show logs before timestamp"
 //	@Param			timestamps	query	bool	false	"Show timestamps"				default(false)
 //	@Param			format		query	string	false	"Output format (text or json)"	default(text)
 //	@Param			batched		query	bool	false	"Batch log messages"			default(false)
