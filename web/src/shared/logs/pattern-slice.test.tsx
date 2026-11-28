@@ -12,7 +12,7 @@ import type { LogReadOptions } from "@/data/api";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import type { LogLine } from "@/domain/model";
 import { renderWithApp } from "@/test/render";
-import { formatLogSpan } from "./log-time";
+import { formatLogSpan, formatLogStamp } from "./log-time";
 import { LogDensity } from "./LogInsights";
 import { PatternMode } from "./PatternMode";
 import { PatternSlice } from "./PatternSlice";
@@ -220,4 +220,10 @@ it("says when a bin read was interrupted and lets it continue", async () => {
   await act(settleLogs);
   expect(screen.getByRole("alert").textContent).toBe("Reading this period was interrupted after the first line.");
   expect(screen.getByRole("button", { name: "Load more lines" })).toBeDefined();
+});
+
+it("shows log times to the second and one instant for a span inside one second", () => {
+  setAppLocale("en-US");
+  const stamp = formatLogStamp(T0 + 123);
+  expect([/\d[.,]\d{3}\b/.test(stamp), formatLogSpan(T0, T0 + 900) === formatLogStamp(T0), formatLogSpan(T0, T0 + 2000).includes(" – ")]).toEqual([false, true, true]);
 });

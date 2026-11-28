@@ -232,7 +232,7 @@ Break map S2:
     30 time bins and up to three samples.
   - Raw lines are not kept.
 - **Chunks.** Frames are queued and folded in slices of at most 8 ms per animation frame. Progress
-  shows lines, size and the local time span covered, with a spinner while reading. Pattern rows do
+  shows lines, size and the local time span covered (to the second; K-8), with a spinner while reading. Pattern rows do
   not repeat the span (K-6).
 - **Caps.** At most 5,000 distinct patterns, plus one "other shapes" row that counts every further
   new shape (count conservation is tested). The queue of frames waiting to be folded is bounded by

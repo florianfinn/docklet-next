@@ -18,9 +18,8 @@ export function RepeatButton({ count, expanded, onClick }: { count?: number; exp
 type Translate = (key: "densityBin" | "densitySpan", values: Record<string, string | number>) => string;
 function densityStrip(lines: readonly LogLine[], t: Translate, onSelect: (id: string) => void): StripBin[] {
   const bins = densityBins(lines);
-  const millis = (bins.at(-1)?.end ?? 0) - (bins[0]?.start ?? 0) < 60_000;
   return bins.map((bin) => {
-    const span = { start: formatLogStamp(bin.start, millis), end: formatLogStamp(bin.end, millis, false) };
+    const span = { start: formatLogStamp(bin.start), end: formatLogStamp(bin.end, false) };
     return bin.errors + bin.warnings > 0
       ? { tone: bin.errors ? "bg-destructive/70" : "bg-warning/70", label: t("densityBin", { errors: bin.errors, warnings: bin.warnings, ...span }), onSelect: () => bin.firstId && onSelect(bin.firstId) }
       : { tone: "bg-muted", label: t("densitySpan", span) };

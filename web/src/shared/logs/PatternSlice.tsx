@@ -84,7 +84,7 @@ export function PatternSlice({ kind, id, pattern, slice, close }: { kind: "stack
     // The list is positioned, so it is the rows' offset parent and offsetTop is already list-relative.
     if (box && row) box.scrollTop = row.offsetTop;
   }, [firstMatch]);
-  const millis = slice.end - slice.start < 60_000, span = formatLogSpan(slice.start, slice.end - 1);
+  const span = formatLogSpan(slice.start, slice.end - 1);
   const capped = current?.result?.reason === "cap-lines" || current?.result?.reason === "cap-bytes";
   const progressed = lines.length > (current?.from ?? 0);
   return <div className="mt-2 grid min-w-0 gap-2 rounded-md border bg-muted/40 p-2" role="region" aria-label={t("sliceTitle", { span })}>
@@ -94,7 +94,7 @@ export function PatternSlice({ kind, id, pattern, slice, close }: { kind: "stack
     </div>
     {current?.result && current.result.reason !== "unavailable" && lines.length === 0 && <p className="text-xs">{t("sliceEmpty")}</p>}
     {lines.length > 0 && <ol ref={list} className="relative max-h-80 overflow-auto overscroll-contain font-mono text-xs">{lines.map((line, i) => <li key={i} data-match={members[i] || undefined} className={`w-max min-w-full whitespace-pre px-1 ${members[i] ? "bg-primary/15 text-foreground" : "text-muted-foreground"}`}>
-      <time className="mr-2 text-primary">{formatLogStamp(Date.parse(line.ts), millis, false)}</time>{line.message}
+      <time className="mr-2 text-primary">{formatLogStamp(Date.parse(line.ts), false)}</time>{line.message}
     </li>)}</ol>}
     {!current?.result && <p className="flex items-center gap-2 text-xs"><Spinner />{t("sliceReading")}</p>}
     {current?.result?.reason === "unavailable" && <p className="text-xs">{t("unavailable")}</p>}
