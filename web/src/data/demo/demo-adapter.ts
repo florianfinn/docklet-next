@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Adapter port cleanup, demo-only options and coded run/event localization after the historical import. See web/PROVENANCE.md. #38 HTTP adapter, live channel, capabilities, run states and fixed history. M7 stack authoring: hub create/save/deploy, docker run conversion and production import boundary. M9 #204: scoped network capabilities and late-response guards Production image/registry UI and validation for #230. M10 #231: production stack updates and lifecycle UI. Candidate #231: Docker reference identity matching. M13 #297 live notification targets and per-host Auto Heal settings. M14 #313–#317: authoritative origins, scoped runtime operations, retained replacement identities and hub stop-mode UI. M14 #318 host maintenance and availability web implementation. Simple-user management, assigned-stack access and mode-aware self-service. M19 #348 #349 #353 #356: live import, bulk actions, Auto Heal cooldown and global search. M20 #360: web hardening step (#359 #24 #175 #177 #383 #421 #271). M21 #437: advisory detail. M21 #438: candidate checks and verified updates. M26 #462: bounded shell counts and raw inventory ownership.; M36 #568: record baseline without pulling images.
 
+import { patternFixture } from "./pattern-fixtures";
 import { demoVulnerabilityCandidates } from "./demo-vulnerability-candidates";
 import { demoVulnerabilityAdvisories } from "./demo-vulnerability-advisory";
 import { createDemoBulkUpdates } from "./demo-bulk-updates";
@@ -63,6 +64,7 @@ const clone = <T>(v: T): T => structuredClone(v);
 /** In-memory adapter: synthetic data, simulated actions, no Docker calls. */
 export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdapter {
   const db = new DemoDb();
+  const logPatterns = options.logPatterns;
   if (options.logHealthInsights) db.stacks = db.stacks.map((stack) => ({ ...stack, services: stack.services.map((svc) => {
     const reason = svc.name === "forgejo" ? "exit" : svc.name === "cache" ? "oom" : svc.name === "broker" ? "restart-loop" : svc.health === "unhealthy" ? "health" : undefined;
     return { ...svc, state: reason === "exit" || reason === "oom" ? "stopped" : reason === "restart-loop" ? "restarting" : svc.state,
@@ -613,6 +615,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       if (signal.aborted) return { reason: "aborted", lines: 0, bytes: 0 };
       const c = ref.kind === "container" ? db.containers().find((x) => x.id === ref.id) : undefined;
       let rows = logs.snapshot(ref.kind === "stack" ? ref.id : c?.stackId ?? `container:${ref.id}`);
+      if (logPatterns) rows = patternFixture(logPatterns === "variable", c?.serviceName ?? "example");
       if (c?.serviceName) rows = rows.filter((l) => l.service === c.serviceName);
       rows = rows.filter((l) => (!options.since || Date.parse(l.ts) >= Date.parse(options.since)) && (!options.until || Date.parse(l.ts) <= Date.parse(options.until)));
       if (logHealthInsights && c && options.until && options.since && options.tail === "all") rows = [...rows, { id: `disruption:${c.id}`, ts: new Date(Math.max(Date.parse(options.since), Math.min(Date.now(), Date.parse(options.until)))).toISOString(), service: c.serviceName ?? c.name, level: "error", message: "ERROR synthetic overlapping disruption" }];

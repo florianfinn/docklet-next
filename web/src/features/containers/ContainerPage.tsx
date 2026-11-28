@@ -1,3 +1,5 @@
+import { LogModeToggle, PatternMode, PatternSamples, PatternFilter } from "@/shared/logs/PatternMode";
+import { patternKey, type LogPattern } from "@/shared/logs/patterns";
 import { useCollapsedLogs } from "@/shared/logs/use-collapsed-logs";
 import { RepeatButton, LogDensity, ErrorJump } from "@/shared/logs/LogInsights";
 import { useLogKeyboard } from "@/features/stacks/logs/use-log-keyboard";
@@ -58,8 +60,10 @@ function revealContainerLogs() {
 function ContainerLogs({ c }: { c: ContainerInfo }) {
   const t = useTranslations("containers.page");
   const [paused, setPaused] = useState(false);
-  const lines = useContainerLogs(c.id, paused);
-  const shown = useMemo(() => lines.slice(-120), [lines]);
+  const [mode, setMode] = useState<"raw" | "patterns">("raw");
+  const [pattern, setPattern] = useState<LogPattern>();
+  const lines = useContainerLogs(c.id, paused || mode === "patterns");
+  const shown = useMemo(() => lines.filter((line) => !pattern || patternKey(line) === pattern.key).slice(-120), [lines, pattern]);
   const [follow, setFollow] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
   const collapsed = useCollapsedLogs(shown);
@@ -69,6 +73,8 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
     <Card className="gap-0 overflow-hidden py-0" data-slot="container-logs">
       <CardHeader className="flex flex-row flex-wrap items-center gap-2 border-b px-4 py-3">
         <CardTitle className="text-sm">{t("logs")}</CardTitle>
+        <LogModeToggle mode={mode} onChange={setMode} />
+        {pattern && <PatternFilter clear={() => setPattern(undefined)} />}
         <SimulationBadge />
         <span className="flex-1" />
         <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("logsResume") : t("logsPause")}>
@@ -81,6 +87,8 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
         )}
       </CardHeader>
       <div className="flex gap-2 p-2"><ErrorJump jump={keyboard.jump} /></div>
+      {mode === "patterns" ? <PatternMode kind="container" id={c.id} select={(row) => { setPattern(row); setMode("raw"); }} /> : <>
+      {pattern && !lines.some((line) => patternKey(line) === pattern.key) && <PatternSamples pattern={pattern} clear={() => setPattern(undefined)} />}
       <LogDensity lines={shown} onSelect={(id) => { collapsed.reveal(id); keyboard.select(id); }} />
       <LogDeliveryNotice lines={lines} paused={paused} />
       <div role="log" aria-live={paused ? "off" : "polite"} className="relative"><p id={keyboard.hintId} className="sr-only">{logs("keyboardHint")}</p>
@@ -95,6 +103,7 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
       </div>
       {shown.length === 0 && <p className="pointer-events-none absolute inset-x-0 top-0 px-4 py-8 text-center text-muted-foreground">{t("logsEmpty")}</p>}
       </div>
+      </>}
     </Card>
   );
 }
