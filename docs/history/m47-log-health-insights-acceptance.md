@@ -56,12 +56,13 @@ to off; K-3 the run ends at a ready closing PR; K-4 phone timing is measured in
 emulation, a real phone is the maintainer's practical check; K-5 agent updates
 are mandatory.
 
-Maintainer decisions after the practical phone checks: K-6 coloured summary
+Later maintainer decisions (K-6, K-8 and K-9 after real-phone checks, K-7
+after delta 3): K-6 coloured summary
 chips, no span per pattern row, a loading spinner, a custom range, a read of a
 selected time bin and short hover hints; K-7 500 lines per bin page with "Load
 more lines" and horizontally scrolling long lines; K-8 times to the second,
 remembered results per window and a line limit of 10,000, 50,000 or 100,000
-lines. Short tooltips on the log toolbar toggles were added before the merge.
+lines; K-9 short tooltips on the log toolbar toggles, then the merge.
 
 Main-thread decisions: AUTO-1 the combined disruption window reads at most
 2,000 lines / 1 MiB per participant; AUTO-2 a one-shot read whose socket opened
@@ -91,12 +92,12 @@ origin at 1440 px and 390 px, and English and German locales.
 | A13 | Appearance switch for the sidebar entry, off by default and synced |
 | K6-1–K6-4 | Bin read with exact bounds, custom range, hover hints, phone layout |
 | K8-1–K8-3 | Remembered windows, line limit on the badge, times to the second |
-| T1–T3, R | Exact main: toolbar tooltips on desktop and phone, short regression |
+| T1–T3, R | Exact main: toolbar tooltips on desktop and with touch emulation at 390 px, short regression |
 
 Exclusion E1 (agreed at kickoff): the runner has no real phone, so A10's verdict
 covers the desktop bound; throttled phone emulation is documented. The
-maintainer checked the package on a real phone three times; K-6, K-8 and the
-tooltips came from those checks.
+maintainer checked the package on a real phone after delta 1, delta 5 and
+delta 7; K-6, K-8 and K-9 came from those checks.
 
 ## Results
 
@@ -126,8 +127,9 @@ corrected its own tooltip pointer and focus driver; product failures: none.
 ## Limits and follow-ups
 
 - On Edge agents, the tunnel's existing 16 MiB overflow and 5-second delivery
-  limits can end a long read early; the web reports it as interrupted. Flow
-  control is in #698.
+  limits can end a long read early. When the socket then closes without the
+  normal close, the web reports the read as interrupted; some upstream errors
+  can still arrive as a normal close. Flow control is in #698.
 - Throttled pattern mode over 100,000 lines takes minutes and has single long
   tasks (#698).
 - #698 tracks the other nonblocking review and acceptance notes.
